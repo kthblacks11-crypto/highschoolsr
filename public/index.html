@@ -1,0 +1,476 @@
+<!-- Re-triggering deployment to verify token -->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2022 개정 수학: 성취기준 매칭 시스템</title>
+    <script>
+        MathJax = {
+            tex: { inlineMath: [['$','$'], ['\\(','\\)']] }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-light: #64748b;
+            --border: #e2e8f0;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+        }
+        header {
+            background-color: var(--primary);
+            color: white;
+            padding: 1.5rem;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        .tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+            justify-content: center;
+        }
+        .tab-btn {
+            background-color: var(--border);
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            color: var(--text-light);
+            transition: 0.2s;
+        }
+        .tab-btn.active {
+            background-color: var(--primary);
+            color: white;
+        }
+        .section { display: none; }
+        .section.active { display: block; }
+        
+        .card {
+            background: var(--card-bg);
+            border-left: 5px solid var(--primary);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .card:hover { transform: translateY(-3px); }
+        .card h3 { margin: 0 0 0.5rem 0; color: var(--primary); font-size: 1.1rem; }
+        .card p { margin: 0; color: var(--text-main); }
+
+        .quiz-container {
+            background: var(--card-bg);
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .question-box {
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            padding: 1rem;
+            background: #f1f5f9;
+            border-radius: 8px;
+        }
+        .options {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .option-btn {
+            padding: 1rem;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: left;
+            font-size: 1rem;
+            width: 100%;
+        }
+        .option-btn:hover:not(:disabled) { background: #e0e7ff; }
+        #level-feedback, #feedback { margin-top: 1rem; font-weight: bold; text-align: center; }
+
+        .check-item {
+            display: flex;
+            align-items: center;
+            background: var(--card-bg);
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .check-item input { margin-right: 1rem; transform: scale(1.5); }
+        .save-btn {
+            display: block;
+            width: 100%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 1rem;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 500px;
+            position: relative;
+        }
+        .close-btn {
+            position: absolute;
+            top: 1rem; right: 1.5rem;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-light);
+        }
+        .level-badge {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            color: white;
+            font-weight: bold;
+            margin-right: 0.5rem;
+            min-width: 20px;
+            text-align: center;
+        }
+        .bg-high { background: #ef4444; }
+        .bg-mid { background: #eab308; }
+        .bg-low { background: #22c55e; }
+        .level-row { margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1 id="main-title">공통수학2: 성취기준 매칭 시스템</h1>
+    <p id="sub-title">집합과 명제 단원 분석 및 학습 대시보드</p>
+</header>
+
+<div class="subject-selector" style="text-align: center; margin: 1rem 0;">
+  <label for="math-subjects">과목 선택 (2022 개정): </label>
+  <select id="math-subjects" onchange="changeSubject()" style="padding: 0.5rem; border-radius: 8px;">
+    <optgroup label="공통 과목">
+      <option value="common1">공통수학1</option>
+      <option value="common2" selected>공통수학2</option>
+    </optgroup>
+    <optgroup label="일반 선택">
+      <option value="algebra">대수</option>
+      <option value="calculus1">미적분Ⅰ</option>
+      <option value="stats">확률과 통계</option>
+    </optgroup>
+    <optgroup label="진로/융합 선택">
+      <option value="calculus2">미적분Ⅱ</option>
+      <option value="geometry">기하</option>
+      <option value="ai-math">인공지능 수학</option>
+    </optgroup>
+  </select>
+</div>
+
+<div class="container">
+    <div class="tabs">
+        <button class="tab-btn active" onclick="showSection('dashboard')">대시보드</button>
+        <button class="tab-btn" onclick="showSection('quiz')">문항 매칭 연습</button>
+        <button class="tab-btn" onclick="showSection('checklist')">나의 체크리스트</button>
+    </div>
+
+    <div id="dashboard" class="section active">
+        <h2>성취기준 목록</h2>
+        <div id="card-container"></div>
+    </div>
+
+    <div id="quiz" class="section">
+        <h2>성취수준 분석기</h2>
+        <div id="quiz-standard-selection">
+            <p style="text-align:center; margin-bottom:1.5rem;">분석할 성취기준을 선택하세요.</p>
+            <div id="quiz-standard-list"></div>
+        </div>
+        <div id="quiz-level-matching" style="display: none;">
+            <button onclick="backToStandardSelection()" style="margin-bottom: 1rem; background:none; border:none; color:var(--primary); cursor:pointer; font-size:1rem;">&larr; 성취기준 다시 선택</button>
+            <div class="quiz-container">
+                <h3 id="selected-standard-info" style="margin-top:0; font-size:1rem; color:var(--text-light);"></h3>
+                <div class="question-box" id="level-question-text">문제를 불러오는 중...</div>
+                <p style="text-align: center; font-weight: bold; margin-top: 2rem;">이 문항의 성취수준을 판정하세요.</p>
+                <div class="options" id="level-options"></div>
+                <div id="level-feedback"></div>
+                <button class="save-btn" onclick="nextLevelQuestion()" style="margin-top:1.5rem;">다음 문항 보기</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="checklist" class="section">
+        <h2>수업 진행 체크리스트</h2>
+        <div id="checklist-container"></div>
+        <button class="save-btn" onclick="saveChecklist()">진행 상황 저장하기</button>
+    </div>
+</div>
+
+<div class="modal" id="level-modal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal()">&times;</span>
+        <h2 id="modal-title">성취수준</h2>
+        <p id="modal-desc" style="color:var(--text-light); margin-bottom: 1.5rem;"></p>
+        <div class="level-row"><span class="level-badge bg-high">A/B</span> <span id="level-high"></span></div>
+        <div class="level-row"><span class="level-badge bg-mid">C</span> <span id="level-mid"></span></div>
+        <div class="level-row"><span class="level-badge bg-low">D/E</span> <span id="level-low"></span></div>
+    </div>
+</div>
+
+<script>
+    const subjectData = {
+        common1: {
+            title: "공통수학1",
+            subtitle: "다항식, 방정식, 행렬 단원 분석",
+            standards: [
+                { code: "[10공수1-01-01]", desc: "다항식의 사칙연산을 할 수 있다.", levels: { high: "복잡한 다항식의 연산을 능숙하게 수행함", mid: "다항식의 사칙연산을 수행함", low: "기초적인 다항식의 합을 구함" }, questions: [] },
+                { code: "[10공수1-04-01]", desc: "행렬의 뜻을 알고, 행렬의 합, 차, 실수배를 할 수 있다.", levels: { high: "행렬의 성질을 활용해 복잡한 식을 계산함", mid: "행렬의 덧셈과 뺄셈을 정확히 수행함", low: "행렬의 원소를 구분하고 기초 연산을 함" }, questions: [] }
+            ]
+        },
+        common2: {
+            title: "공통수학2",
+            subtitle: "집합과 명제, 함수 단원 분석",
+            standards: [
+                { 
+                    code: "[10공수2-01-01]", 
+                    desc: "선분의 내분을 이해하고, 내분점의 좌표를 계산할 수 있다.", 
+                    levels: { high: "선분의 내분점과 외분점의 좌표를 모두 계산하고 그 의미를 설명할 수 있다.", mid: "선분의 내분점의 좌표를 계산할 수 있다.", low: "교사의 안내에 따라 간단한 선분의 내분점의 좌표를 계산할 수 있다." },
+                    questions: [
+                        { q: "수직선 위의 두 점 A(0)과 B(10)의 한가운데 있는 점 M의 좌표는 무엇일까요?", level: "E" },
+                        { q: "수직선 위의 두 점 A(2)와 B(8)을 1:2로 내분하는 점 P의 좌표를 구하시오.", level: "D" },
+                        { q: "두 점 A(-1, 7)과 B(4, -3)을 잇는 선분 AB를 3:2로 내분하는 점 P의 좌표를 구하시오.", level: "C" },
+                        { q: "두 점 A(2, 5)와 B(-1, 2)를 잇는 선분 AB를 2:1로 외분하는 점 Q의 좌표를 구하시오.", level: "B" },
+                        { q: "삼각형 ABC의 두 꼭짓점은 A(1,1), B(5,3)이고 무게중심 G의 좌표는 (3,4)이다. 꼭짓점 C의 좌표를 구하고, 무게중심이 중선을 2:1로 내분하는 성질을 이용했음을 설명하시오.", level: "A" }
+                    ]
+                },
+                { code: "[10공수2-02-01]", desc: "집합의 개념을 이해하고, 집합을 표현할 수 있다.", levels: { high: "집합을 다양한 방법으로 능숙하게 표현함", mid: "집합의 개념을 알고 기호로 표현함", low: "집합인 것과 아닌 것을 구분함" }, questions: [] },
+                { 
+                    code: "[10공수2-02-02]", 
+                    desc: "두 집합 사이의 포함관계를 판단할 수 있다.", 
+                    levels: { high: "포함관계를 논리적으로 설명하고 기호로 표현함", mid: "두 집합 사이의 포함관계를 기호로 표현함", low: "안내에 따라 포함관계를 판단함" },
+                    questions: [
+                         { q: "$A = \\{1, 2, 3\\}, B = \\{1, 2, 3, 4\\}$일 때, 두 집합의 관계는?", level: "C" }
+                    ]
+                }
+            ]
+        },
+        algebra: {
+            title: "대수",
+            subtitle: "지수함수와 로그함수, 수열 단원 분석",
+            standards: [
+                { 
+                    code: "[12대수01-01]", 
+                    desc: "거듭제곱과 거듭제곱근의 뜻을 알고, 그 성질을 이해한다.", 
+                    levels: { high: "거듭제곱근의 성질을 이용해 복잡한 식을 계산함", mid: "거듭제곱근의 뜻을 이해하고 성질을 적용함", low: "기초적인 거듭제곱근 값을 구함" },
+                    questions: [
+                        { q: "$\\sqrt[3]{27}$의 값은?", level: "C" }
+                    ] 
+                }
+            ]
+        }
+    };
+
+    let currentSubject = "common2";
+    let currentStandardCode = null;
+    let currentLevelQ = 0;
+
+    function showSection(id) {
+        document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        event.currentTarget.classList.add('active');
+        if (id === 'quiz') {
+            initLevelQuiz();
+        }
+    }
+
+    function changeSubject() {
+        currentSubject = document.getElementById('math-subjects').value;
+        const data = subjectData[currentSubject];
+        
+        if(!data) {
+            alert("자료 준비 중입니다.");
+            return;
+        }
+
+        document.getElementById('main-title').innerText = data.title + ": 성취기준 매칭 시스템";
+        document.getElementById('sub-title').innerText = data.subtitle;
+        
+        initDashboard();
+        initLevelQuiz();
+        initChecklist();
+    }
+
+    function initDashboard() {
+        const container = document.getElementById('card-container');
+        container.innerHTML = "";
+        subjectData[currentSubject].standards.forEach(std => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `<h3>${std.code}</h3><p>${std.desc}</p>`;
+            card.onclick = () => openModal(std);
+            container.appendChild(card);
+        });
+    }
+
+    function initLevelQuiz() {
+        const container = document.getElementById('quiz-standard-list');
+        container.innerHTML = '';
+        
+        const standardsWithQuestions = subjectData[currentSubject].standards.filter(std => std.questions && std.questions.length > 0);
+
+        if (standardsWithQuestions.length === 0) {
+            container.innerHTML = "<p style='text-align:center;'>이 과목에는 아직 문항 매칭 연습 문제가 없습니다.</p>";
+            return;
+        }
+
+        standardsWithQuestions.forEach(std => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.style.marginBottom = '1rem';
+            btn.innerHTML = `<strong>${std.code}</strong><br>${std.desc}`;
+            btn.onclick = () => startLevelMatching(std.code);
+            container.appendChild(btn);
+        });
+
+        backToStandardSelection();
+    }
+
+    function startLevelMatching(code) {
+        currentStandardCode = code;
+        currentLevelQ = 0;
+        document.getElementById('quiz-standard-selection').style.display = 'none';
+        document.getElementById('quiz-level-matching').style.display = 'block';
+        
+        const standard = subjectData[currentSubject].standards.find(s => s.code === code);
+        document.getElementById('selected-standard-info').innerText = `${standard.code} ${standard.desc}`;
+
+        loadLevelQuestion();
+    }
+
+    function loadLevelQuestion() {
+        const standard = subjectData[currentSubject].standards.find(s => s.code === currentStandardCode);
+        const qBox = document.getElementById('level-question-text');
+        const optionsBox = document.getElementById('level-options');
+        const feedbackBox = document.getElementById('level-feedback');
+
+        const question = standard.questions[currentLevelQ];
+        qBox.innerHTML = `<strong>[문항 ${currentLevelQ + 1}/${standard.questions.length}]</strong><br><br>${question.q}`;
+        optionsBox.innerHTML = '';
+        feedbackBox.innerText = '';
+
+        const levels = ['A', 'B', 'C', 'D', 'E'];
+        const levelDesc = {'A': '상', 'B': '상', 'C': '중', 'D': '하', 'E': '하'};
+        levels.forEach(level => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.innerText = `Level ${level} (${levelDesc[level]})`;
+            btn.onclick = () => checkLevelAnswer(level, btn);
+            optionsBox.appendChild(btn);
+        });
+
+        if (window.MathJax) MathJax.typesetPromise([qBox]);
+    }
+
+    function checkLevelAnswer(selectedLevel, btn) {
+        const standard = subjectData[currentSubject].standards.find(s => s.code === currentStandardCode);
+        const question = standard.questions[currentLevelQ];
+        const correctLevel = question.level;
+        const fb = document.getElementById('level-feedback');
+
+        document.querySelectorAll('#level-options .option-btn').forEach(b => {
+            b.disabled = true;
+            b.style.backgroundColor = '';
+        });
+
+        if (selectedLevel === correctLevel) {
+            fb.innerText = `🎉 정답입니다!`;
+            fb.style.color = "green";
+            btn.style.backgroundColor = '#dcfce7';
+        } else {
+            fb.innerText = `❌ 오답입니다. 이 문항은 '${correctLevel}' 수준에 더 가깝습니다.`;
+            fb.style.color = "red";
+            btn.style.backgroundColor = '#fee2e2';
+        }
+    }
+
+    function nextLevelQuestion() {
+        const standard = subjectData[currentSubject].standards.find(s => s.code === currentStandardCode);
+        if (!standard || standard.questions.length === 0) return;
+        currentLevelQ = (currentLevelQ + 1) % standard.questions.length;
+        loadLevelQuestion();
+    }
+    
+    function backToStandardSelection() {
+        currentStandardCode = null;
+        document.getElementById('quiz-standard-selection').style.display = 'block';
+        document.getElementById('quiz-level-matching').style.display = 'none';
+    }
+
+    function initChecklist() {
+        const container = document.getElementById('checklist-container');
+        container.innerHTML = "";
+        const saved = JSON.parse(localStorage.getItem('check_' + currentSubject)) || {};
+        subjectData[currentSubject].standards.forEach(std => {
+            const div = document.createElement('div');
+            div.className = 'check-item';
+            div.innerHTML = `<input type="checkbox" id="c-${std.code}" ${saved[std.code]?'checked':''}>
+                             <label for="c-${std.code}"><strong>${std.code}</strong> ${std.desc}</label>`;
+            container.appendChild(div);
+        });
+    }
+
+    function saveChecklist() {
+        const checks = {};
+        document.querySelectorAll('#checklist-container input').forEach(input => {
+            checks[input.id.replace('c-', '')] = input.checked;
+        });
+        localStorage.setItem('check_' + currentSubject, JSON.stringify(checks));
+        alert("저장되었습니다.");
+    }
+
+    function openModal(std) {
+        document.getElementById('modal-title').innerText = std.code;
+        document.getElementById('modal-desc').innerText = std.desc;
+        document.getElementById('level-high').innerText = std.levels.high;
+        document.getElementById('level-mid').innerText = std.levels.mid;
+        document.getElementById('level-low').innerText = std.levels.low;
+        document.getElementById('level-modal').style.display = 'flex';
+    }
+
+    function closeModal() { document.getElementById('level-modal').style.display = 'none'; }
+
+    window.onload = () => { initDashboard(); initLevelQuiz(); initChecklist(); };
+</script>
+</body>
+</html>
