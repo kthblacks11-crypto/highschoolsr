@@ -1,4 +1,4 @@
-<!-- Last Updated: 2026-04-21 10:25:00 (KST) - Triggering Auto-Deploy -->
+<!-- Last Updated: 2026-04-21 10:35:00 (KST) - Enhanced Quiz Data & Level E Guidance -->
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -88,13 +88,14 @@
         .question-box {
             font-size: 1.1rem;
             margin-bottom: 2rem;
-            padding: 1rem;
+            padding: 1.5rem;
             background: #f1f5f9;
             border-radius: 8px;
+            line-height: 1.8;
         }
         .options {
-            display: flex;
-            flex-direction: column;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             gap: 0.5rem;
         }
         .option-btn {
@@ -103,12 +104,12 @@
             border: 1px solid var(--border);
             border-radius: 8px;
             cursor: pointer;
-            text-align: left;
+            text-align: center;
             font-size: 1rem;
-            width: 100%;
+            transition: 0.2s;
         }
         .option-btn:hover:not(:disabled) { background: #e0e7ff; }
-        #level-feedback, #feedback { margin-top: 1rem; font-weight: bold; text-align: center; padding: 1rem; border-radius: 8px; }
+        #level-feedback, #feedback { margin-top: 1rem; font-weight: bold; text-align: center; padding: 1.5rem; border-radius: 8px; }
 
         .check-item {
             display: flex;
@@ -140,14 +141,17 @@
             background: rgba(0,0,0,0.5);
             align-items: center;
             justify-content: center;
+            z-index: 1000;
         }
         .modal-content {
             background: white;
             padding: 2rem;
             border-radius: 12px;
             width: 90%;
-            max-width: 500px;
+            max-width: 600px;
             position: relative;
+            max-height: 80vh;
+            overflow-y: auto;
         }
         .close-btn {
             position: absolute;
@@ -169,7 +173,7 @@
         .bg-high { background: #ef4444; }
         .bg-mid { background: #eab308; }
         .bg-low { background: #22c55e; }
-        .level-row { margin-bottom: 1rem; }
+        .level-row { margin-bottom: 1rem; padding: 0.5rem; border-bottom: 1px solid #f1f5f9; }
         
         #achievement-levels {
             background: #f1f5f9;
@@ -186,16 +190,17 @@
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 1rem;
-            text-align: center;
        }
        .level-desc-item {
             background: white;
             padding: 0.75rem;
             border-radius: 6px;
+            font-size: 0.9rem;
        }
        .level-desc-item strong {
             display: block;
             margin-bottom: 0.5rem;
+            color: var(--primary);
        }
     </style>
 </head>
@@ -215,13 +220,6 @@
     </optgroup>
     <optgroup label="일반 선택">
       <option value="algebra">대수</option>
-      <option value="calculus1">미적분Ⅰ</option>
-      <option value="stats">확률과 통계</option>
-    </optgroup>
-    <optgroup label="진로/융합 선택">
-      <option value="calculus2">미적분Ⅱ</option>
-      <option value="geometry">기하</option>
-      <option value="ai-math">인공지능 수학</option>
     </optgroup>
   </select>
 </div>
@@ -245,7 +243,7 @@
             <div id="quiz-standard-list"></div>
         </div>
         <div id="quiz-level-matching" style="display: none;">
-            <button class="save-btn" onclick="backToStandardSelection()" style="margin-bottom: 1rem; background:none; border:none; color:var(--primary); cursor:pointer; font-size:1rem; width: auto; padding: 0;">&larr; 성취기준 다시 선택</button>
+            <button class="save-btn" onclick="backToStandardSelection()" style="margin-bottom: 1rem; background:none; border:none; color:var(--primary); cursor:pointer; font-size:1rem; width: auto; padding: 0; font-weight: bold;">&larr; 성취기준 다시 선택</button>
             <div class="quiz-container">
                 <h3 id="selected-standard-info" style="margin-top:0; font-size:1.1rem; color:var(--text-light); text-align:center; margin-bottom: 1.5rem;"></h3>
                 
@@ -255,7 +253,7 @@
                 <p style="text-align: center; font-weight: bold; margin-top: 2rem;">이 문항의 성취수준을 판정하세요.</p>
                 <div class="options" id="level-options"></div>
                 <div id="level-feedback"></div>
-                <button class="save-btn" onclick="nextLevelQuestion()" style="margin-top:1.5rem;">다음 문항 보기</button>
+                <button class="save-btn" id="next-q-btn" onclick="nextLevelQuestion()" style="margin-top:1.5rem; display: none;">다음 문항 보기</button>
             </div>
         </div>
     </div>
@@ -271,10 +269,12 @@
     <div class="modal-content">
         <span class="close-btn" onclick="closeModal()">&times;</span>
         <h2 id="modal-title">성취수준</h2>
-        <p id="modal-desc" style="color:var(--text-light); margin-bottom: 1.5rem;"></p>
-        <div class="level-row"><span class="level-badge bg-high">상 (A)</span> <span id="level-high"></span></div>
-        <div class="level-row"><span class="level-badge bg-mid">중 (C)</span> <span id="level-mid"></span></div>
-        <div class="level-row"><span class="level-badge bg-low">하 (E)</span> <span id="level-low"></span></div>
+        <p id="modal-desc" style="color:var(--text-light); margin-bottom: 1.5rem; font-weight: bold;"></p>
+        <div class="level-row"><span class="level-badge bg-high">A</span> <span id="level-high"></span></div>
+        <div class="level-row"><span class="level-badge bg-high" style="background:#f87171">B</span> <span>(A수준과 C수준의 중간 정도)</span></div>
+        <div class="level-row"><span class="level-badge bg-mid">C</span> <span id="level-mid"></span></div>
+        <div class="level-row"><span class="level-badge bg-low" style="background:#4ade80">D</span> <span>(C수준과 E수준의 중간 정도)</span></div>
+        <div class="level-row"><span class="level-badge bg-low">E</span> <span id="level-low"></span></div>
     </div>
 </div>
 
@@ -284,56 +284,84 @@
             title: "공통수학1",
             subtitle: "다항식, 방정식과 부등식, 경우의 수, 행렬",
             standards: [
-                { code: "[10공수1-01-01]", desc: "다항식의 사칙연산의 원리를 설명하고, 그 계산을 할 수 있다.", levels: { high: "다항식의 사칙연산의 원리를 이해하여 설명할 수 있으며, 그 계산을 수학적 절차에 따라 체계적으로 수행할 수 있다.", mid: "다항식의 사칙연산의 원리를 알고, 그 계산을 할 수 있다.", low: "안내된 절차에 따라 간단한 다항식의 사칙연산을 할 수 있다." }, questions: [] },
-                { code: "[10공수1-01-02]", desc: "항등식의 성질과 나머지정리를 이해하고, 이를 활용하여 문제를 해결할 수 있다.", levels: { high: "항등식의 성질, 나머지정리와 인수정리, 조립제법을 설명할 수 있으며 이를 활용하여 다양한 문제를 해결할 수 있다.", mid: "항등식의 성질, 나머지정리와 인수정리를 알고, 이를 활용하여 문제를 해결할 수 있다.", low: "항등식의 성질과 나머지정리를 안다." }, questions: [] },
-                { code: "[10공수1-01-03]", desc: "다항식의 인수분해를 할 수 있다.", levels: { high: "다양한 방법으로 다항식의 인수분해를 할 수 있다.", mid: "인수분해 공식을 이용하여 다항식의 인수분해를 할 수 있다.", low: "안내된 절차에 따라 간단한 다항식의 인수분해를 할 수 있다." }, questions: [] },
-                { code: "[10공수1-02-01]", desc: "복소수의 뜻과 성질을 설명하고, 복소수의 사칙연산을 수행할 수 있다.", levels: { high: "복소수의 뜻과 성질을 이해하여 설명할 수 있으며, 복소수의 성질을 이용하여 사칙연산을 수학적 절차에 따라 체계적으로 수행할 수 있다.", mid: "복소수의 뜻과 성질을 이해하고, 사칙연산을 수행할 수 있다.", low: "복소수의 뜻을 알고, 안내된 절차에 따라 간단한 사칙연산을 수행할 수 있다." }, questions: [] },
-                { code: "[10공수1-02-02]", desc: "이차방정식의 실근과 허근의 뜻을 이해하고, 판별식을 이용하여 이차방정식의 근을 판별할 수 있다.", levels: { high: "이차방정식의 실근과 허근의 의미를 설명하고, 판별식을 이용하여 근을 판별할 수 있다.", mid: "이차방정식의 실근과 허근을 알고, 판별식을 이용하여 근을 판별할 수 있다.", low: "안내된 절차에 따라 이차방정식의 판별식의 값을 구할 수 있다." }, questions: [] },
-                { code: "[10공수1-02-03]", desc: "이차방정식의 근과 계수의 관계를 설명할 수 있다.", levels: { high: "이차방정식의 근과 계수의 관계를 이해하여 설명할 수 있다.", mid: "이차방정식의 근과 계수의 관계를 이해한다.", low: "이차방정식의 근과 계수의 관계를 안다." }, questions: [] },
-                { code: "[10공수1-02-04]", desc: "이차방정식과 이차함수의 관계를 이해하고 설명할 수 있다.", levels: { high: "이차방정식의 근과 이차함수의 그래프를 연결하고 그 관계를 이해하여 설명할 수 있다.", mid: "판별식을 이용하여 이차함수의 그래프와 x축의 교점의 개수를 구할 수 있다.", low: "주어진 이차함수의 그래프를 보고 이차방정식의 실근의 개수를 구할 수 있다." }, questions: [] },
-                { code: "[10공수1-02-06]", desc: "이차함수의 최대, 최소를 탐구하고, 이를 실생활과 연결하여 유용성을 인식할 수 있다.", levels: { high: "이차함수의 최대, 최소를 탐구하고 이를 설명할 수 있으며, 이를 실생활에서 활용되는 구체적인 예시와 연결하여 그 유용성을 인식할 수 있다.", mid: "이차함수의 최대, 최소를 구하고, 이를 실생활에서 활용되는 간단한 상황을 찾는 활동과 연결하여 그 유용성을 인식할 수 있다.", low: "안내된 절차에 따라 간단한 이차함수의 최댓값 또는 최솟값을 구할 수 있다." }, questions: [] },
-                { code: "[10공수1-02-11]", desc: "이차부등식과 이차함수를 연결하여 그 관계를 설명하고, 이차부등식과 연립이차부등식을 풀 수 있다.", levels: { high: "이차부등식과 이차함수를 연결하여 그 관계를 설명하고, 이차부등식과 연립이차부등식을 수학적 절차에 따라 체계적으로 풀 수 있다.", mid: "이차함수의 그래프를 이용하여 이차부등식과 연립이차부등식을 풀 수 있다.", low: "간단한 이차부등식을 풀 수 있다." }, questions: [] },
-                { code: "[10공수1-03-01]", desc: "합의 법칙과 곱의 법칙을 이해하고, 이를 활용하여 경우의 수를 구할 수 있다.", levels: { high: "합의 법칙과 곱의 법칙을 이해하여 설명할 수 있으며, 적절한 전략을 사용하여 경우의 수와 관련된 다양한 문제를 해결할 수 있다.", mid: "합의 법칙과 곱의 법칙을 이해하고, 적절한 전략을 사용하여 경우의 수와 관련된 문제를 해결할 수 있다.", low: "합의 법칙과 곱의 법칙을 안다." }, questions: [] },
-                { code: "[10공수1-03-02]", desc: "순열의 개념을 이해하고, 순열의 수를 구할 수 있다.", levels: { high: "순열의 개념을 이해하여 설명할 수 있으며, 순열의 수를 구하는 방법을 논리적으로 설명할 수 있다.", mid: "순열의 개념을 이해하고, 순열의 수를 구할 수 있으며 그 방법을 설명할 수 있다.", low: "순열의 수를 $_nP_r$로 나타내고 그 값을 구할 수 있다." }, questions: [] },
-                { code: "[10공수1-03-03]", desc: "조합의 개념을 이해하고, 조합의 수를 구할 수 있다.", levels: { high: "조합의 개념을 이해하여 설명할 수 있으며, 조합의 수를 구하는 방법을 논리적으로 설명할 수 있다.", mid: "조합의 개념을 이해하고, 조합의 수를 구할 수 있으며 그 방법을 설명할 수 있다.", low: "조합의 수를 $_nC_r$로 나타내고 그 값을 구할 수 있다." }, questions: [] },
-                { code: "[10공수1-04-01]", desc: "행렬의 뜻을 알고, 실생활 상황을 행렬로 표현할 수 있다.", levels: { high: "행렬의 뜻을 설명하고, 실생활 상황을 행렬로 표현할 수 있다.", mid: "행렬의 뜻을 이해하고, 간단한 실생활 상황을 행렬로 표현할 수 있다.", low: "행렬의 뜻을 안다." }, questions: [] },
-                { code: "[10공수1-04-02]", desc: "행렬의 연산을 수행하고, 관련된 문제를 해결할 수 있다.", levels: { high: "행렬의 연산을 수행하고, 관련된 다양한 문제를 해결할 수 있다.", mid: "행렬의 연산을 수행하고, 관련된 간단한 문제를 해결할 수 있다.", low: "안내된 절차에 따라 행렬의 연산을 수행할 수 있다." }, questions: [] }
+                { 
+                    code: "[10공수1-01-01]", 
+                    desc: "다항식의 사칙연산의 원리를 설명하고, 그 계산을 할 수 있다.", 
+                    levels: { 
+                        high: "다항식의 사칙연산의 원리를 이해하여 설명할 수 있으며, 그 계산을 수학적 절차에 따라 체계적으로 수행할 수 있다.", 
+                        mid: "다항식의 사칙연산의 원리를 알고, 그 계산을 할 수 있다.", 
+                        low: "안내된 절차에 따라 간단한 다항식의 사칙연산을 할 수 있다." 
+                    },
+                    questions: [
+                        { q: "두 다항식 $A = x+1, B = 2x-3$일 때, 다음 순서에 따라 $A+B$를 구하시오.<br>1단계: 동류항끼리 모은다.<br>2단계: 계수를 더해 결과를 쓴다.", level: "E", reason: "문제에서 풀이 단계를 명시하여 '안내된 절차'를 제공하므로 E수준에 적합합니다." },
+                        { q: "두 다항식 $A = 2x^2 - 3x + 1, B = x^2 + 2x - 5$일 때, $2A - 3B$를 계산하여 그 결과를 단항식의 합으로 나타내시오.", level: "C", reason: "기본적인 다항식의 사칙연산을 수행할 수 있는지를 평가하는 전형적인 중 수준 문제입니다." },
+                        { q: "다항식의 덧셈에 대한 결합법칙 $(A+B)+C = A+(B+C)$가 성립함을 구체적인 세 다항식을 예로 들어 증명하고, 이 원리가 복잡한 식의 계산에서 어떻게 효율적으로 사용되는지 설명하시오.", level: "A", reason: "연산의 원리를 이해하고 이를 논리적으로 설명하는 능력을 요구하므로 상 수준입니다." }
+                    ]
+                },
+                {
+                    code: "[10공수1-04-02]",
+                    desc: "행렬의 연산을 수행하고, 관련된 문제를 해결할 수 있다.",
+                    levels: {
+                        high: "행렬의 연산을 수행하고, 관련된 다양한 문제를 해결할 수 있다.",
+                        mid: "행렬의 연산을 수행하고, 관련된 간단한 문제를 해결할 수 있다.",
+                        low: "안내된 절차에 따라 행렬의 연산을 수행할 수 있다."
+                    },
+                    questions: [
+                        { q: "행렬 $A = \\begin{pmatrix} 1 & 2 \\\\ 3 & 4 \\end{pmatrix}, B = \\begin{pmatrix} 0 & 1 \\\\ -1 & 2 \\end{pmatrix}$일 때, 행렬의 덧셈 공식 $\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix} + \\begin{pmatrix} e & f \\\\ g & h \\end{pmatrix} = \\begin{pmatrix} a+e & b+f \\\\ c+g & d+h \\end{pmatrix}$을 참고하여 $A+B$를 구하시오.", level: "E", reason: "공식과 계산 절차를 직접 제공하여 수행을 돕고 있으므로 E수준입니다." },
+                        { q: "두 행렬 $A, B$에 대하여 $2(A+X) = 3A-B$를 만족하는 행렬 $X$를 구하시오.", level: "C", reason: "행렬의 연산 성질을 이용하여 일차방정식 형태의 문제를 해결하는 기본 문항입니다." },
+                        { q: "행렬의 곱셈에서 교환법칙이 성립하지 않음을 보여주는 반례를 제시하고, 실생활 문제 상황에서 이 성질이 가지는 의미를 해석하여 발표하시오.", level: "A", reason: "반례 제시와 실생활 의미 해석 등 높은 수준의 수학적 사고와 설명 능력을 요구합니다." }
+                    ]
+                }
             ]
         },
         common2: {
             title: "공통수학2",
             subtitle: "도형의 방정식, 집합과 명제, 함수와 그래프",
             standards: [
-                { code: "[10공수2-01-01]", desc: "선분의 내분을 이해하고, 내분점의 좌표를 계산할 수 있다.", levels: { high: "선분의 내분을 설명하고, 좌표평면 위에서 내분점의 좌표를 구하는 방법을 이해하여 계산할 수 있다.", mid: "선분의 내분을 알고, 좌표평면 위에서 내분점의 좌표를 계산할 수 있다.", low: "안내된 절차에 따라 수직선 위에서 내분점의 좌표를 계산할 수 있다." }, questions: [
-                    { q: "수직선 위의 두 점 A(0)과 B(10)의 한가운데 있는 점 M의 좌표는 무엇일까요?", level: "E", reason: "중점을 찾는 가장 기본적인 개념 문제입니다." },
-                    { q: "두 점 A(-1, 7)과 B(4, -3)을 잇는 선분 AB를 3:2로 내분하는 점 P의 좌표를 구하시오.", level: "C", reason: "좌표평면 위에서 내분점 공식을 적용해야 하므로 중 수준에 해당합니다." }
-                ] },
-                { code: "[10공수2-01-04]", desc: "원의 방정식을 구하고, 그래프를 그릴 수 있다.", levels: { high: "원의 정의를 이용하여 원의 방정식을 유도할 수 있으며, 원의 방정식을 구하고 그래프를 그릴 수 있다.", mid: "원의 방정식을 구하고 그래프를 그릴 수 있다.", low: "안내된 절차에 따라 원의 방정식을 구할 수 있다." }, questions: [] },
-                { code: "[10공수2-01-06]", desc: "평행이동을 탐구하고, 실생활과 연결하여 문제를 해결할 수 있다.", levels: { high: "도형의 평행이동을 탐구하고 평행이동한 도형의 방정식을 구할 수 있으며, 이를 실생활과 연결하여 문제를 해결할 수 있다.", mid: "도형의 평행이동을 이해하고 평행이동한 도형의 방정식을 구할 수 있으며, 실생활과 연결할 수 있다.", low: "평행이동한 점의 좌표를 구할 수 있다." }, questions: [] },
-                { code: "[10공수2-01-07]", desc: "원점, x축, y축, 직선 $y=x$에 대한 대칭이동을 탐구하고, 실생활과 연결하여 문제를 해결할 수 있다.", levels: { high: "원점, x축, y축, 직선 $y=x$에 대한 대칭이동을 탐구하고 대칭이동한 도형의 방정식을 구할 수 있으며, 이를 실생활과 연결하여 문제를 해결할 수 있다.", mid: "원점, x축, y축, 직선 $y=x$에 대한 대칭이동을 이해하고 대칭이동한 도형의 방정식을 구할 수 있으며, 실생활과 연결할 수 있다.", low: "안내된 절차에 따라 대칭이동한 점의 좌표를 구할 수 있다." }, questions: [] },
-                { code: "[10공수2-02-01]", desc: "집합의 개념을 이해하고, 집합을 표현할 수 있다.", levels: { high: "집합의 개념을 설명하고, 집합을 다양한 방법으로 표현할 수 있다.", mid: "집합의 개념을 알고, 집합을 표현할 수 있다.", low: "집합인 것과 집합이 아닌 것으로 구분하고, 집합을 표현할 수 있다." }, questions: [] },
-                { code: "[10공수2-02-02]", desc: "두 집합 사이의 포함관계를 판단할 수 있다.", levels: { high: "두 집합 사이의 포함관계를 판단하여 기호로 표현하고, 그 이유를 설명할 수 있다.", mid: "두 집합 사이의 포함관계를 판단하여 기호로 표현할 수 있다.", low: "안내된 절차에 따라 간단한 두 집합 사이의 포함관계를 판단할 수 있다." }, questions: [] },
-                { code: "[10공수2-02-03]", desc: "집합의 연산을 수행하고, 벤 다이어그램을 사용하여 나타낼 수 있다.", levels: { high: "집합의 연산을 체계적으로 수행하고 벤 다이어그램으로 나타낼 수 있으며, 집합의 연산에 관한 법칙을 벤 다이어그램으로 확인할 수 있다.", mid: "집합의 연산을 수행하고 벤 다이어그램으로 나타낼 수 있으며, 집합의 연산에 관한 법칙을 안다.", low: "집합의 연산을 수행하고, 벤 다이어그램으로 나타낼 수 있다." }, questions: [] },
-                { code: "[10공수2-02-04]", desc: "명제와 조건의 뜻을 알고, '모든', '어떤'을 포함한 명제를 이해하고 설명할 수 있다.", levels: { high: "명제와 조건의 뜻을 알고 이를 설명할 수 있으며, '모든', '어떤'을 포함한 명제의 참, 거짓을 판별하고 그 이유를 설명할 수 있다.", mid: "명제와 조건의 뜻을 알고 이를 설명할 수 있으며, '모든', '어떤'을 포함한 명제의 참, 거짓을 판별할 수 있다.", low: "간단한 명제의 참, 거짓을 판별할 수 있다." }, questions: [] },
-                { code: "[10공수2-02-06]", desc: "충분조건과 필요조건을 이해하고 판단할 수 있다.", levels: { high: "충분조건과 필요조건을 진리집합의 포함관계와 연결하여 이해하고 판단할 수 있다.", mid: "충분조건과 필요조건을 알고 판단할 수 있다.", low: "간단한 예를 통해 충분조건과 필요조건을 구분할 수 있다." }, questions: [] },
-                { code: "[10공수2-02-08]", desc: "절대부등식의 뜻을 알고, 간단한 절대부등식을 증명할 수 있다.", levels: { high: "절대부등식의 뜻을 설명하고, 간단한 절대부등식을 증명할 수 있다.", mid: "절대부등식의 뜻을 알고, 안내된 절차에 따라 간단한 절대부등식을 증명할 수 있다.", low: "절대부등식의 뜻을 안다." }, questions: [] },
-                { code: "[10공수2-03-01]", desc: "함수의 개념을 설명하고, 그 그래프를 이해한다.", levels: { high: "함수의 개념을 설명하고, 그 그래프를 이해하며 두 집합 사이의 대응 관계에서 함수인 것을 찾고 그 이유를 찾을 수 있다.", mid: "함수의 개념과 그래프를 이해하며, 두 집합 사이의 대응 관계에서 함수인 것을 찾을 수 있다.", low: "안내된 절차에 따라 간단한 두 집합 사이의 대응 관계에서 함수인 것을 찾을 수 있다." }, questions: [] },
-                { code: "[10공수2-03-02]", desc: "함수의 합성을 설명하고, 합성함수를 구할 수 있다.", levels: { high: "함수의 합성을 설명하고, 두 함수의 합성이 가능한지 판단하며 합성함수를 구할 수 있다.", mid: "함수의 합성을 이해하고, 두 함수의 합성이 가능한지 판단하며 합성함수를 구할 수 있다.", low: "안내된 절차에 따라 간단한 합성함수를 구할 수 있다." }, questions: [] },
-                { code: "[10공수2-03-03]", desc: "역함수의 개념을 설명하고, 역함수를 구할 수 있다.", levels: { high: "역함수의 개념과 존재 조건을 설명하고, 역함수를 구할 수 있다.", mid: "역함수의 개념을 이해하고, 역함수를 구할 수 있다.", low: "안내된 절차에 따라 간단한 함수의 역함수를 구할 수 있다." }, questions: [] },
-                { code: "[10공수2-03-04]", desc: "유리함수 $y = \\frac{ax+b}{cx+d}$의 그래프를 그릴 수 있고, 그 그래프의 성질을 탐구하여 설명할 수 있다.", levels: { high: "유리함수의 그래프를 그릴 수 있고, 그 그래프의 성질을 탐구하여 설명할 수 있다.", mid: "유리함수의 그래프를 그릴 수 있고, 그 그래프의 성질을 이해한다.", low: "안내된 절차에 따라 유리함수의 그래프를 그릴 수 있다." }, questions: [] },
-                { code: "[10공수2-03-05]", desc: "무리함수 $y = \\sqrt{ax+b}+c$의 그래프를 그릴 수 있고, 그 그래프의 성질을 탐구하여 설명할 수 있다.", levels: { high: "무리함수의 그래프를 그릴 수 있고, 그 그래프의 성질을 탐구하여 설명할 수 있다.", mid: "무리함수의 그래프를 그릴 수 있고, 그 그래프의 성질을 이해한다.", low: "안내된 절차에 따라 무리함수의 그래프를 그릴 수 있다." }, questions: [] }
+                { 
+                    code: "[10공수2-01-01]", 
+                    desc: "선분의 내분을 이해하고, 내분점의 좌표를 계산할 수 있다.", 
+                    levels: { 
+                        high: "선분의 내분을 설명하고, 좌표평면 위에서 내분점의 좌표를 구하는 방법을 이해하여 계산할 수 있다.", 
+                        mid: "선분의 내분을 알고, 좌표평면 위에서 내분점의 좌표를 계산할 수 있다.", 
+                        low: "안내된 절차에 따라 수직선 위에서 내분점의 좌표를 계산할 수 있다." 
+                    },
+                    questions: [
+                        { q: "수직선 위의 두 점 $A(2), B(8)$을 $1:2$로 내분하는 점 $P$를 구하려고 합니다. 다음 순서로 답하세요.<br>1단계: 내분 공식 $\\frac{mx_2+nx_1}{m+n}$에서 $m=1, n=2, x_1=2, x_2=8$임을 확인한다.<br>2단계: 공식에 대입하여 계산한다.", level: "E", reason: "공식의 변수 매칭과 대입 절차를 안내하고 있으므로 E수준입니다." },
+                        { q: "두 점 $A(-1, 7), B(4, -3)$을 잇는 선분 $AB$를 $3:2$로 내분하는 점 $P$의 좌표를 구하시오.", level: "C", reason: "좌표평면 위에서 공식을 직접 적용하여 계산하는 중간 수준 문항입니다." },
+                        { q: "삼각형 $ABC$의 세 꼭짓점의 좌표가 주어졌을 때, 무게중심 $G$가 중선을 $2:1$로 내분한다는 성질을 이용하여 무게중심의 좌표 공식을 유도하는 과정을 설명하시오.", level: "A", reason: "기하학적 성질과 연계하여 공식을 논리적으로 유도해야 하므로 상 수준입니다." }
+                    ]
+                },
+                {
+                    code: "[10공수2-02-02]",
+                    desc: "두 집합 사이의 포함관계를 판단할 수 있다.",
+                    levels: {
+                        high: "두 집합 사이의 포함관계를 판단하여 기호로 표현하고, 그 이유를 설명할 수 있다.",
+                        mid: "두 집합 사이의 포함관계를 판단하여 기호로 표현할 수 있다.",
+                        low: "안내된 절차에 따라 간단한 두 집합 사이의 포함관계를 판단할 수 있다."
+                    },
+                    questions: [
+                        { q: "집합 $A = \\{1, 2\\}, B = \\{1, 2, 3\\}$일 때, 다음 안내에 따라 포함관계를 확인하세요.<br>1단계: $A$의 모든 원소가 $B$에 들어있는지 확인한다.<br>2단계: 들어있다면 $A \\subset B$라고 쓴다.", level: "E", reason: "판단 기준과 기호 사용법을 단계별로 안내하므로 E수준입니다." },
+                        { q: "두 집합 $A = \\{x | x \\text{는 } 6\\text{의 약수}\\}, B = \\{x | x \\text{는 } 12\\text{의 약수}\\}$ 사이의 포함관계를 기호를 사용하여 나타내시오.", level: "C", reason: "조건제시법을 해석하여 포함관계를 판단하고 기호로 나타내는 표준적인 문제입니다." },
+                        { q: "세 집합 $A, B, C$에 대하여 $A \\subset B$이고 $B \\subset C$이면 $A \\subset C$가 성립함을 벤 다이어그램을 이용하여 증명하고, 이를 집합의 정의를 사용하여 논리적으로 서술하시오.", level: "A", reason: "포함관계의 추이성을 논리적으로 증명하고 서술하는 능력을 평가하므로 상 수준입니다." }
+                    ]
+                }
             ]
         },
         algebra: {
             title: "대수",
-            subtitle: "지수함수와 로그함수, 수열 단원 분석",
+            subtitle: "지수함수와 로그함수, 수열",
             standards: [
                 { 
                     code: "[12대수01-01]", 
                     desc: "거듭제곱과 거듭제곱근의 뜻을 알고, 그 성질을 이해한다.", 
-                    levels: { high: "거듭제곱근의 성질을 이용해 복잡한 식을 계산함", mid: "거듭제곱근의 뜻을 이해하고 성질을 적용함", low: "기초적인 거듭제곱근 값을 구함" },
+                    levels: { 
+                        high: "거듭제곱근의 성질을 이용해 복잡한 식을 계산함", 
+                        mid: "거듭제곱근의 뜻을 이해하고 성질을 적용함", 
+                        low: "안내된 절차에 따라 기초적인 거듭제곱근 값을 구함" 
+                    },
                     questions: [
-                        { q: "$\\sqrt[3]{27}$의 값은?", level: "C", reason: "세제곱하여 27이 되는 실수를 찾는 문제로, 거듭제곱근의 정의를 이해하고 있는지 확인하는 기본적인 문제입니다. '중' 수준에 해당합니다." }
+                        { q: "$\\sqrt[3]{8}$의 값을 구하기 위해 다음 단계를 밟으세요.<br>1단계: $8$을 거듭제곱 형태($2^n$)로 바꾼다.<br>2단계: $\\sqrt[n]{a^n} = a$ 성질을 이용해 답을 낸다.", level: "E", reason: "기초 개념 계산을 위한 절차를 안내하므로 E수준입니다." }
                     ] 
                 }
             ]
@@ -348,7 +376,7 @@
         document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
         document.getElementById(id).classList.add('active');
-        event.currentTarget.classList.add('active');
+        if (event) event.currentTarget.classList.add('active');
         if (id === 'quiz') {
             initLevelQuiz();
         }
@@ -418,7 +446,7 @@
         
         const levelsContainer = document.getElementById('achievement-levels');
         levelsContainer.innerHTML = `
-            <h4>성취수준</h4>
+            <h4>성취수준 가이드</h4>
             <div class="level-desc-grid">
                 <div class="level-desc-item"><strong>상 (A)</strong> ${standard.levels.high}</div>
                 <div class="level-desc-item"><strong>중 (C)</strong> ${standard.levels.mid}</div>
@@ -427,7 +455,6 @@
         `;
 
         loadLevelQuestion();
-        if (window.MathJax) MathJax.typesetPromise([document.getElementById('quiz-level-matching')]);
     }
 
     function loadLevelQuestion() {
@@ -435,19 +462,21 @@
         const qBox = document.getElementById('level-question-text');
         const optionsBox = document.getElementById('level-options');
         const feedbackBox = document.getElementById('level-feedback');
+        const nextBtn = document.getElementById('next-q-btn');
 
         const question = standard.questions[currentLevelQ];
         qBox.innerHTML = `<strong>[문항 ${currentLevelQ + 1}/${standard.questions.length}]</strong><br><br>${question.q}`;
         optionsBox.innerHTML = '';
         feedbackBox.innerHTML = '';
         feedbackBox.style.display = 'none';
+        nextBtn.style.display = 'none';
 
         const levels = ['A', 'B', 'C', 'D', 'E'];
-        const levelDesc = {'A': '상', 'B': '상', 'C': '중', 'D': '하', 'E': '하'};
+        const levelDesc = {'A': '상', 'B': '상/중', 'C': '중', 'D': '중/하', 'E': '하'};
         levels.forEach(level => {
             const btn = document.createElement('button');
             btn.className = 'option-btn';
-            btn.innerText = `Level ${level} (${levelDesc[level]})`;
+            btn.innerText = `${level} (${levelDesc[level]})`;
             btn.onclick = () => checkLevelAnswer(level, btn);
             optionsBox.appendChild(btn);
         });
@@ -460,34 +489,38 @@
         const question = standard.questions[currentLevelQ];
         const correctLevel = question.level;
         const fb = document.getElementById('level-feedback');
+        const nextBtn = document.getElementById('next-q-btn');
 
         document.querySelectorAll('#level-options .option-btn').forEach(b => {
             b.disabled = true;
-            b.style.backgroundColor = '';
-            b.style.border = '1px solid var(--border)';
+            b.style.opacity = '0.6';
         });
         
         fb.style.display = 'block';
 
         if (selectedLevel === correctLevel) {
-            fb.innerHTML = `🎉 <strong>정답입니다!</strong>`;
+            fb.innerHTML = `🎉 <strong>정답입니다!</strong> 정확한 판정입니다.`;
             fb.style.color = "#166534";
             fb.style.backgroundColor = '#dcfce7';
-            btn.style.border = '2px solid #166534';
+            btn.style.border = '3px solid #166534';
+            btn.style.opacity = '1';
         } else {
-            fb.innerHTML = `❌ <strong>오답입니다.</strong> 이 문항은 <strong>'${correctLevel}'(${ {'A':'상','B':'상','C':'중','D':'하','E':'하'}[correctLevel] })</strong> 수준입니다.<br><br><strong>[이유]</strong> ${question.reason}`;
+            fb.innerHTML = `❌ <strong>오답입니다.</strong> 이 문항은 <strong>'${correctLevel}'</strong> 수준입니다.<br><br><strong>[이유]</strong> ${question.reason}`;
             fb.style.color = "#991b1b";
             fb.style.backgroundColor = '#fee2e2';
-            btn.style.border = '2px solid #991b1b';
+            btn.style.border = '3px solid #ef4444';
+            btn.style.opacity = '1';
 
             // 정답 버튼 하이라이트
             document.querySelectorAll('#level-options .option-btn').forEach(b => {
-                if (b.innerText.startsWith(`Level ${correctLevel}`)) {
+                if (b.innerText.startsWith(correctLevel)) {
                     b.style.backgroundColor = '#dcfce7';
-                     b.style.border = '2px solid #166534';
+                    b.style.border = '3px solid #166534';
+                    b.style.opacity = '1';
                 }
             });
         }
+        nextBtn.style.display = 'block';
         if (window.MathJax) MathJax.typesetPromise([fb]);
     }
 
@@ -539,7 +572,9 @@
 
     function closeModal() { document.getElementById('level-modal').style.display = 'none'; }
 
-    window.onload = () => { initDashboard(); initLevelQuiz(); initChecklist(); };
+    window.onload = () => { 
+        changeSubject(); // 초기 로드 시 선택된 과목 데이터 반영
+    };
 </script>
 </body>
 </html>
