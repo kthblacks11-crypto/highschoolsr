@@ -1,4 +1,4 @@
-<!-- Re-triggering deployment to verify token (v2) -->
+<!-- Last Updated: 2026-04-21 10:25:00 (KST) - Triggering Auto-Deploy -->
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -7,7 +7,8 @@
     <title>2022 개정 수학: 성취기준 매칭 시스템</title>
     <script>
         MathJax = {
-            tex: { inlineMath: [['$','$'], ['\\(','\\)']] }
+            tex: { inlineMath: [['$','$'], ['\\(','\\)']] },
+            svg: { fontCache: 'global' }
         };
     </script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
@@ -293,8 +294,8 @@
                 { code: "[10공수1-02-06]", desc: "이차함수의 최대, 최소를 탐구하고, 이를 실생활과 연결하여 유용성을 인식할 수 있다.", levels: { high: "이차함수의 최대, 최소를 탐구하고 이를 설명할 수 있으며, 이를 실생활에서 활용되는 구체적인 예시와 연결하여 그 유용성을 인식할 수 있다.", mid: "이차함수의 최대, 최소를 구하고, 이를 실생활에서 활용되는 간단한 상황을 찾는 활동과 연결하여 그 유용성을 인식할 수 있다.", low: "안내된 절차에 따라 간단한 이차함수의 최댓값 또는 최솟값을 구할 수 있다." }, questions: [] },
                 { code: "[10공수1-02-11]", desc: "이차부등식과 이차함수를 연결하여 그 관계를 설명하고, 이차부등식과 연립이차부등식을 풀 수 있다.", levels: { high: "이차부등식과 이차함수를 연결하여 그 관계를 설명하고, 이차부등식과 연립이차부등식을 수학적 절차에 따라 체계적으로 풀 수 있다.", mid: "이차함수의 그래프를 이용하여 이차부등식과 연립이차부등식을 풀 수 있다.", low: "간단한 이차부등식을 풀 수 있다." }, questions: [] },
                 { code: "[10공수1-03-01]", desc: "합의 법칙과 곱의 법칙을 이해하고, 이를 활용하여 경우의 수를 구할 수 있다.", levels: { high: "합의 법칙과 곱의 법칙을 이해하여 설명할 수 있으며, 적절한 전략을 사용하여 경우의 수와 관련된 다양한 문제를 해결할 수 있다.", mid: "합의 법칙과 곱의 법칙을 이해하고, 적절한 전략을 사용하여 경우의 수와 관련된 문제를 해결할 수 있다.", low: "합의 법칙과 곱의 법칙을 안다." }, questions: [] },
-                { code: "[10공수1-03-02]", desc: "순열의 개념을 이해하고, 순열의 수를 구할 수 있다.", levels: { high: "순열의 개념을 이해하여 설명할 수 있으며, 순열의 수를 구하는 방법을 논리적으로 설명할 수 있다.", mid: "순열의 개념을 이해하고, 순열의 수를 구할 수 있으며 그 방법을 설명할 수 있다.", low: "순열의 수를 _nP_r로 나타내고 그 값을 구할 수 있다." }, questions: [] },
-                { code: "[10공수1-03-03]", desc: "조합의 개념을 이해하고, 조합의 수를 구할 수 있다.", levels: { high: "조합의 개념을 이해하여 설명할 수 있으며, 조합의 수를 구하는 방법을 논리적으로 설명할 수 있다.", mid: "조합의 개념을 이해하고, 조합의 수를 구할 수 있으며 그 방법을 설명할 수 있다.", low: "조합의 수를 _nC_r로 나타내고 그 값을 구할 수 있다." }, questions: [] },
+                { code: "[10공수1-03-02]", desc: "순열의 개념을 이해하고, 순열의 수를 구할 수 있다.", levels: { high: "순열의 개념을 이해하여 설명할 수 있으며, 순열의 수를 구하는 방법을 논리적으로 설명할 수 있다.", mid: "순열의 개념을 이해하고, 순열의 수를 구할 수 있으며 그 방법을 설명할 수 있다.", low: "순열의 수를 $_nP_r$로 나타내고 그 값을 구할 수 있다." }, questions: [] },
+                { code: "[10공수1-03-03]", desc: "조합의 개념을 이해하고, 조합의 수를 구할 수 있다.", levels: { high: "조합의 개념을 이해하여 설명할 수 있으며, 조합의 수를 구하는 방법을 논리적으로 설명할 수 있다.", mid: "조합의 개념을 이해하고, 조합의 수를 구할 수 있으며 그 방법을 설명할 수 있다.", low: "조합의 수를 $_nC_r$로 나타내고 그 값을 구할 수 있다." }, questions: [] },
                 { code: "[10공수1-04-01]", desc: "행렬의 뜻을 알고, 실생활 상황을 행렬로 표현할 수 있다.", levels: { high: "행렬의 뜻을 설명하고, 실생활 상황을 행렬로 표현할 수 있다.", mid: "행렬의 뜻을 이해하고, 간단한 실생활 상황을 행렬로 표현할 수 있다.", low: "행렬의 뜻을 안다." }, questions: [] },
                 { code: "[10공수1-04-02]", desc: "행렬의 연산을 수행하고, 관련된 문제를 해결할 수 있다.", levels: { high: "행렬의 연산을 수행하고, 관련된 다양한 문제를 해결할 수 있다.", mid: "행렬의 연산을 수행하고, 관련된 간단한 문제를 해결할 수 있다.", low: "안내된 절차에 따라 행렬의 연산을 수행할 수 있다." }, questions: [] }
             ]
@@ -309,7 +310,7 @@
                 ] },
                 { code: "[10공수2-01-04]", desc: "원의 방정식을 구하고, 그래프를 그릴 수 있다.", levels: { high: "원의 정의를 이용하여 원의 방정식을 유도할 수 있으며, 원의 방정식을 구하고 그래프를 그릴 수 있다.", mid: "원의 방정식을 구하고 그래프를 그릴 수 있다.", low: "안내된 절차에 따라 원의 방정식을 구할 수 있다." }, questions: [] },
                 { code: "[10공수2-01-06]", desc: "평행이동을 탐구하고, 실생활과 연결하여 문제를 해결할 수 있다.", levels: { high: "도형의 평행이동을 탐구하고 평행이동한 도형의 방정식을 구할 수 있으며, 이를 실생활과 연결하여 문제를 해결할 수 있다.", mid: "도형의 평행이동을 이해하고 평행이동한 도형의 방정식을 구할 수 있으며, 실생활과 연결할 수 있다.", low: "평행이동한 점의 좌표를 구할 수 있다." }, questions: [] },
-                { code: "[10공수2-01-07]", desc: "원점, x축, y축, 직선 y=x에 대한 대칭이동을 탐구하고, 실생활과 연결하여 문제를 해결할 수 있다.", levels: { high: "원점, x축, y축, 직선 y=x에 대한 대칭이동을 탐구하고 대칭이동한 도형의 방정식을 구할 수 있으며, 이를 실생활과 연결하여 문제를 해결할 수 있다.", mid: "원점, x축, y축, 직선 y=x에 대한 대칭이동을 이해하고 대칭이동한 도형의 방정식을 구할 수 있으며, 실생활과 연결할 수 있다.", low: "안내된 절차에 따라 대칭이동한 점의 좌표를 구할 수 있다." }, questions: [] },
+                { code: "[10공수2-01-07]", desc: "원점, x축, y축, 직선 $y=x$에 대한 대칭이동을 탐구하고, 실생활과 연결하여 문제를 해결할 수 있다.", levels: { high: "원점, x축, y축, 직선 $y=x$에 대한 대칭이동을 탐구하고 대칭이동한 도형의 방정식을 구할 수 있으며, 이를 실생활과 연결하여 문제를 해결할 수 있다.", mid: "원점, x축, y축, 직선 $y=x$에 대한 대칭이동을 이해하고 대칭이동한 도형의 방정식을 구할 수 있으며, 실생활과 연결할 수 있다.", low: "안내된 절차에 따라 대칭이동한 점의 좌표를 구할 수 있다." }, questions: [] },
                 { code: "[10공수2-02-01]", desc: "집합의 개념을 이해하고, 집합을 표현할 수 있다.", levels: { high: "집합의 개념을 설명하고, 집합을 다양한 방법으로 표현할 수 있다.", mid: "집합의 개념을 알고, 집합을 표현할 수 있다.", low: "집합인 것과 집합이 아닌 것으로 구분하고, 집합을 표현할 수 있다." }, questions: [] },
                 { code: "[10공수2-02-02]", desc: "두 집합 사이의 포함관계를 판단할 수 있다.", levels: { high: "두 집합 사이의 포함관계를 판단하여 기호로 표현하고, 그 이유를 설명할 수 있다.", mid: "두 집합 사이의 포함관계를 판단하여 기호로 표현할 수 있다.", low: "안내된 절차에 따라 간단한 두 집합 사이의 포함관계를 판단할 수 있다." }, questions: [] },
                 { code: "[10공수2-02-03]", desc: "집합의 연산을 수행하고, 벤 다이어그램을 사용하여 나타낼 수 있다.", levels: { high: "집합의 연산을 체계적으로 수행하고 벤 다이어그램으로 나타낼 수 있으며, 집합의 연산에 관한 법칙을 벤 다이어그램으로 확인할 수 있다.", mid: "집합의 연산을 수행하고 벤 다이어그램으로 나타낼 수 있으며, 집합의 연산에 관한 법칙을 안다.", low: "집합의 연산을 수행하고, 벤 다이어그램으로 나타낼 수 있다." }, questions: [] },
@@ -380,6 +381,7 @@
             card.onclick = () => openModal(std);
             container.appendChild(card);
         });
+        if (window.MathJax) MathJax.typesetPromise([container]);
     }
 
     function initLevelQuiz() {
@@ -402,6 +404,7 @@
         }
 
         backToStandardSelection();
+        if (window.MathJax) MathJax.typesetPromise([container]);
     }
 
     function startLevelMatching(code) {
@@ -424,6 +427,7 @@
         `;
 
         loadLevelQuestion();
+        if (window.MathJax) MathJax.typesetPromise([document.getElementById('quiz-level-matching')]);
     }
 
     function loadLevelQuestion() {
@@ -484,6 +488,7 @@
                 }
             });
         }
+        if (window.MathJax) MathJax.typesetPromise([fb]);
     }
 
     function nextLevelQuestion() {
@@ -510,6 +515,7 @@
                              <label for="c-${std.code}"><strong>${std.code}</strong> ${std.desc}</label>`;
             container.appendChild(div);
         });
+        if (window.MathJax) MathJax.typesetPromise([container]);
     }
 
     function saveChecklist() {
@@ -528,6 +534,7 @@
         document.getElementById('level-mid').innerText = std.levels.mid;
         document.getElementById('level-low').innerText = std.levels.low;
         document.getElementById('level-modal').style.display = 'flex';
+        if (window.MathJax) MathJax.typesetPromise([document.getElementById('level-modal')]);
     }
 
     function closeModal() { document.getElementById('level-modal').style.display = 'none'; }
