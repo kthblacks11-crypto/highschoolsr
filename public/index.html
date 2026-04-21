@@ -1,4 +1,4 @@
-<!-- Last Updated: 2026-04-21 10:45:00 (KST) - Unified & Recovered Data -->
+<!-- Last Updated: 2026-04-21 10:55:00 (KST) - Corrected Feedback & Full Dropdown -->
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -220,6 +220,13 @@
     </optgroup>
     <optgroup label="일반 선택">
       <option value="algebra">대수</option>
+      <option value="calculus1">미적분Ⅰ</option>
+      <option value="stats">확률과 통계</option>
+    </optgroup>
+    <optgroup label="진로/융합 선택">
+      <option value="calculus2">미적분Ⅱ</option>
+      <option value="geometry">기하</option>
+      <option value="ai-math">인공지능 수학</option>
     </optgroup>
   </select>
 </div>
@@ -495,7 +502,12 @@
                     ] 
                 }
             ]
-        }
+        },
+        calculus1: { title: "미적분Ⅰ", subtitle: "수열의 극한, 미분법, 적분법", standards: [] },
+        stats: { title: "확률과 통계", subtitle: "순열과 조합, 확률, 통계", standards: [] },
+        calculus2: { title: "미적분Ⅱ", subtitle: "여러 가지 함수의 미적분", standards: [] },
+        geometry: { title: "기하", subtitle: "이차곡선, 평면벡터, 공간도형과 공간좌표", standards: [] },
+        "ai-math": { title: "인공지능 수학", subtitle: "데이터와 행렬, 최적화", standards: [] }
     };
 
     let currentSubject = "common2";
@@ -631,7 +643,7 @@
         fb.style.display = 'block';
 
         if (selectedLevel === correctLevel) {
-            fb.innerHTML = `🎉 <strong>정답입니다!</strong> 정확한 판정입니다.`;
+            fb.innerHTML = `🎉 <strong>정답입니다!</strong><br><br><strong>[이유]</strong> ${question.reason}`;
             fb.style.color = "#166534";
             fb.style.backgroundColor = '#dcfce7';
             btn.style.border = '3px solid #166534';
