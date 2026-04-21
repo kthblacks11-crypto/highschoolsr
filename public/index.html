@@ -107,7 +107,7 @@
             width: 100%;
         }
         .option-btn:hover:not(:disabled) { background: #e0e7ff; }
-        #level-feedback, #feedback { margin-top: 1rem; font-weight: bold; text-align: center; }
+        #level-feedback, #feedback { margin-top: 1rem; font-weight: bold; text-align: center; padding: 1rem; border-radius: 8px; }
 
         .check-item {
             display: flex;
@@ -169,6 +169,33 @@
         .bg-mid { background: #eab308; }
         .bg-low { background: #22c55e; }
         .level-row { margin-bottom: 1rem; }
+        
+        #achievement-levels {
+            background: #f1f5f9;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+        #achievement-levels h4 {
+            margin-top: 0;
+            text-align: center;
+            color: var(--primary);
+        }
+       .level-desc-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            text-align: center;
+       }
+       .level-desc-item {
+            background: white;
+            padding: 0.75rem;
+            border-radius: 6px;
+       }
+       .level-desc-item strong {
+            display: block;
+            margin-bottom: 0.5rem;
+       }
     </style>
 </head>
 <body>
@@ -219,7 +246,10 @@
         <div id="quiz-level-matching" style="display: none;">
             <button onclick="backToStandardSelection()" style="margin-bottom: 1rem; background:none; border:none; color:var(--primary); cursor:pointer; font-size:1rem;">&larr; 성취기준 다시 선택</button>
             <div class="quiz-container">
-                <h3 id="selected-standard-info" style="margin-top:0; font-size:1rem; color:var(--text-light);"></h3>
+                <h3 id="selected-standard-info" style="margin-top:0; font-size:1.1rem; color:var(--text-light); text-align:center; margin-bottom: 1.5rem;"></h3>
+                
+                <div id="achievement-levels"></div>
+
                 <div class="question-box" id="level-question-text">문제를 불러오는 중...</div>
                 <p style="text-align: center; font-weight: bold; margin-top: 2rem;">이 문항의 성취수준을 판정하세요.</p>
                 <div class="options" id="level-options"></div>
@@ -266,11 +296,11 @@
                     desc: "선분의 내분을 이해하고, 내분점의 좌표를 계산할 수 있다.", 
                     levels: { high: "선분의 내분점과 외분점의 좌표를 모두 계산하고 그 의미를 설명할 수 있다.", mid: "선분의 내분점의 좌표를 계산할 수 있다.", low: "교사의 안내에 따라 간단한 선분의 내분점의 좌표를 계산할 수 있다." },
                     questions: [
-                        { q: "수직선 위의 두 점 A(0)과 B(10)의 한가운데 있는 점 M의 좌표는 무엇일까요?", level: "E" },
-                        { q: "수직선 위의 두 점 A(2)와 B(8)을 1:2로 내분하는 점 P의 좌표를 구하시오.", level: "D" },
-                        { q: "두 점 A(-1, 7)과 B(4, -3)을 잇는 선분 AB를 3:2로 내분하는 점 P의 좌표를 구하시오.", level: "C" },
-                        { q: "두 점 A(2, 5)와 B(-1, 2)를 잇는 선분 AB를 2:1로 외분하는 점 Q의 좌표를 구하시오.", level: "B" },
-                        { q: "삼각형 ABC의 두 꼭짓점은 A(1,1), B(5,3)이고 무게중심 G의 좌표는 (3,4)이다. 꼭짓점 C의 좌표를 구하고, 무게중심이 중선을 2:1로 내분하는 성질을 이용했음을 설명하시오.", level: "A" }
+                        { q: "수직선 위의 두 점 A(0)과 B(10)의 한가운데 있는 점 M의 좌표는 무엇일까요?", level: "E", reason: "이 문항은 두 점의 중점을 찾는 가장 기본적인 개념 확인 문제입니다. 수직선 위의 두 점의 평균을 구하는 것으로, 내분 공식을 사용하지 않고도 직관적으로 풀 수 있어 '하' 수준에 해당합니다." },
+                        { q: "수직선 위의 두 점 A(2)와 B(8)을 1:2로 내분하는 점 P의 좌표를 구하시오.", level: "D", reason: "이 문항은 수직선 위에서 내분점 공식을 직접 적용하여 좌표를 계산하는 문제입니다. 공식을 알고 적용하는 능력을 평가하므로 '하' 수준에 해당합니다." },
+                        { q: "두 점 A(-1, 7)과 B(4, -3)을 잇는 선분 AB를 3:2로 내분하는 점 P의 좌표를 구하시오.", level: "C", reason: "이 문항은 좌표평면 위에서 내분점 공식을 적용해야 합니다. x좌표와 y좌표에 각각 공식을 적용해야 하므로 수직선보다 한 단계 복잡합니다. 따라서 '중' 수준에 해당합니다." },
+                        { q: "두 점 A(2, 5)와 B(-1, 2)를 잇는 선분 AB를 2:1로 외분하는 점 Q의 좌표를 구하시오.", level: "B", reason: "이 문항은 내분점이 아닌 외분점의 좌표를 구하는 문제입니다. 외분점은 내분점보다 개념적으로 혼동하기 쉽고 계산 과정에서 실수가 잦으므로 '상' 수준에 해당합니다." },
+                        { q: "삼각형 ABC의 두 꼭짓점은 A(1,1), B(5,3)이고 무게중심 G의 좌표는 (3,4)이다. 꼭짓점 C의 좌표를 구하고, 무게중심이 중선을 2:1로 내분하는 성질을 이용했음을 설명하시오.", level: "A", reason: "이 문항은 내분점 공식을 직접 사용하는 것을 넘어, 삼각형의 무게중심이 중선을 2:1로 내분한다는 기하학적 성질과 연결하여 문제를 해결해야 합니다. 또한, 해결 과정을 설명해야 하므로 종합적인 사고력과 설명 능력을 평가하는 '상' 수준 문제입니다." }
                     ]
                 },
                 { code: "[10공수2-02-01]", desc: "집합의 개념을 이해하고, 집합을 표현할 수 있다.", levels: { high: "집합을 다양한 방법으로 능숙하게 표현함", mid: "집합의 개념을 알고 기호로 표현함", low: "집합인 것과 아닌 것을 구분함" }, questions: [] },
@@ -279,7 +309,7 @@
                     desc: "두 집합 사이의 포함관계를 판단할 수 있다.", 
                     levels: { high: "포함관계를 논리적으로 설명하고 기호로 표현함", mid: "두 집합 사이의 포함관계를 기호로 표현함", low: "안내에 따라 포함관계를 판단함" },
                     questions: [
-                         { q: "$A = \\{1, 2, 3\\}, B = \\{1, 2, 3, 4\\}$일 때, 두 집합의 관계는?", level: "C" }
+                         { q: "$A = \\{1, 2, 3\\}, B = \\{1, 2, 3, 4\\}$일 때, 두 집합의 관계는?", level: "C", reason: "두 집합의 원소를 비교하여 부분집합 관계인지 판단하는 기본적인 문제입니다. '중' 수준의 핵심 개념을 확인합니다." }
                     ]
                 }
             ]
@@ -293,7 +323,7 @@
                     desc: "거듭제곱과 거듭제곱근의 뜻을 알고, 그 성질을 이해한다.", 
                     levels: { high: "거듭제곱근의 성질을 이용해 복잡한 식을 계산함", mid: "거듭제곱근의 뜻을 이해하고 성질을 적용함", low: "기초적인 거듭제곱근 값을 구함" },
                     questions: [
-                        { q: "$\\sqrt[3]{27}$의 값은?", level: "C" }
+                        { q: "$\\sqrt[3]{27}$의 값은?", level: "C", reason: "세제곱하여 27이 되는 실수를 찾는 문제로, 거듭제곱근의 정의를 이해하고 있는지 확인하는 기본적인 문제입니다. '중' 수준에 해당합니다." }
                     ] 
                 }
             ]
@@ -374,6 +404,16 @@
         
         const standard = subjectData[currentSubject].standards.find(s => s.code === code);
         document.getElementById('selected-standard-info').innerText = `${standard.code} ${standard.desc}`;
+        
+        const levelsContainer = document.getElementById('achievement-levels');
+        levelsContainer.innerHTML = `
+            <h4>성취수준</h4>
+            <div class="level-desc-grid">
+                <div class="level-desc-item"><strong>상 (A/B)</strong> ${standard.levels.high}</div>
+                <div class="level-desc-item"><strong>중 (C)</strong> ${standard.levels.mid}</div>
+                <div class="level-desc-item"><strong>하 (D/E)</strong> ${standard.levels.low}</div>
+            </div>
+        `;
 
         loadLevelQuestion();
     }
@@ -387,7 +427,8 @@
         const question = standard.questions[currentLevelQ];
         qBox.innerHTML = `<strong>[문항 ${currentLevelQ + 1}/${standard.questions.length}]</strong><br><br>${question.q}`;
         optionsBox.innerHTML = '';
-        feedbackBox.innerText = '';
+        feedbackBox.innerHTML = '';
+        feedbackBox.style.display = 'none';
 
         const levels = ['A', 'B', 'C', 'D', 'E'];
         const levelDesc = {'A': '상', 'B': '상', 'C': '중', 'D': '하', 'E': '하'};
@@ -411,16 +452,29 @@
         document.querySelectorAll('#level-options .option-btn').forEach(b => {
             b.disabled = true;
             b.style.backgroundColor = '';
+            b.style.border = '1px solid var(--border)';
         });
+        
+        fb.style.display = 'block';
 
         if (selectedLevel === correctLevel) {
-            fb.innerText = `🎉 정답입니다!`;
-            fb.style.color = "green";
-            btn.style.backgroundColor = '#dcfce7';
+            fb.innerHTML = `🎉 <strong>정답입니다!</strong>`;
+            fb.style.color = "#166534";
+            fb.style.backgroundColor = '#dcfce7';
+            btn.style.border = '2px solid #166534';
         } else {
-            fb.innerText = `❌ 오답입니다. 이 문항은 '${correctLevel}' 수준에 더 가깝습니다.`;
-            fb.style.color = "red";
-            btn.style.backgroundColor = '#fee2e2';
+            fb.innerHTML = `❌ <strong>오답입니다.</strong> 이 문항은 <strong>'${correctLevel}'(${ {'A':'상','B':'상','C':'중','D':'하','E':'하'}[correctLevel] })</strong> 수준입니다.<br><br><strong>[이유]</strong> ${question.reason}`;
+            fb.style.color = "#991b1b";
+            fb.style.backgroundColor = '#fee2e2';
+            btn.style.border = '2px solid #991b1b';
+
+            // 정답 버튼 하이라이트
+            document.querySelectorAll('#level-options .option-btn').forEach(b => {
+                if (b.innerText.startsWith(`Level ${correctLevel}`)) {
+                    b.style.backgroundColor = '#dcfce7';
+                     b.style.border = '2px solid #166534';
+                }
+            });
         }
     }
 
