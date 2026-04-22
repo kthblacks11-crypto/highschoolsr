@@ -98,17 +98,26 @@
             gap: 0.4rem;
             justify-content: space-between;
         }
-        .option-btn {
+        /* 퀴즈 정답 선택 버튼 (한 줄 정렬용) */
+        .options .option-btn {
             flex: 1;
             padding: 0.6rem 0.2rem;
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+        /* 일반적인 옵션 버튼 스타일 */
+        .option-btn {
+            display: block;
+            width: 100%;
+            padding: 1rem;
             background: white;
             border: 1px solid var(--border);
             border-radius: 6px;
             cursor: pointer;
             text-align: center;
-            font-size: 0.85rem;
+            font-size: 1rem;
             transition: 0.2s;
-            white-space: nowrap;
+            margin-bottom: 0.5rem;
         }
         .option-btn:hover:not(:disabled) { background: #e0e7ff; }
         #level-feedback, #feedback { margin-top: 1rem; font-weight: bold; text-align: center; padding: 1.2rem; border-radius: 8px; font-size: 0.9rem; }
@@ -213,7 +222,7 @@
             .quiz-layout { flex-direction: column; }
             .guide-side { flex: none; width: 100%; position: static; max-height: none; }
             .options { flex-wrap: wrap; }
-            .option-btn { flex: 0 0 48%; }
+            .options .option-btn { flex: 0 0 48%; }
         }
     </style>
 </head>
@@ -465,6 +474,30 @@
                         { q: "중심이 원점이고 반지름의 길이가 $2$인 원의 방정식을 고르시오.", level: "E", reason: "가장 단순한 원의 방정식 형태를 확인하는 수준입니다." }
                     ]
                 },
+                { 
+                    code: "[10공수2-02-01]", 
+                    desc: "집합의 개념을 이해하고, 집합을 표현할 수 있다.", 
+                    levels: { 
+                        high: "집합의 개념을 설명하고, 집합을 다양한 방법으로 표현할 수 있다.", 
+                        b: "집합의 개념을 설명하고, 원소나열법과 조건제시법으로 집합을 표현할 수 있다.",
+                        mid: "집합의 개념을 알고, 집합을 표현할 수 있다.", 
+                        d: "집합의 뜻을 이해하고, 간단한 집합을 표현할 수 있다.",
+                        low: "집합인 것과 집합이 아닌 것으로 구분하고, 집합을 표현할 수 있다." 
+                    },
+                    questions: []
+                },
+                {
+                    code: "[10공수2-02-02]",
+                    desc: "두 집합 사이의 포함관계를 판단할 수 있다.",
+                    levels: {
+                        high: "두 집합 사이의 포함관계를 판단하여 기호로 표현하고, 그 이유를 설명할 수 있다.",
+                        b: "두 집합 사이의 포함관계를 정확하게 판단하여 기호로 표현할 수 있다.",
+                        mid: "두 집합 사이의 포함관계를 판단하여 기호로 표현할 수 있다.",
+                        d: "간단한 두 집합 사이의 포함관계를 판단할 수 있다.",
+                        low: "안내된 절차에 따라 간단한 두 집합 사이의 포함관계를 판단할 수 있다."
+                    },
+                    questions: []
+                },
                 {
                     code: "[10공수2-02-03]",
                     desc: "집합의 연산을 수행하고, 벤 다이어그램을 사용하여 나타낼 수 있다.",
@@ -484,6 +517,30 @@
                     ]
                 },
                 {
+                    code: "[10공수2-02-04]",
+                    desc: "명제와 조건의 뜻을 알고, '모든', '어떤'을 포함한 명제를 이해하고 설명할 수 있다.",
+                    levels: {
+                        high: "명제와 조건의 뜻을 알고 이를 설명할 수 있으며, '모든', '어떤'을 포함한 명제의 참, 거짓을 판별하고 그 이유를 설명할 수 있다.",
+                        b: "명제와 조건의 뜻을 설명할 수 있으며, '모든', '어떤'을 포함한 명제의 참, 거짓을 정확하게 판별할 수 있다.",
+                        mid: "명제와 조건의 뜻을 알고 이를 설명할 수 있으며, '모든', '어떤'을 포함한 명제의 참, 거짓을 판별할 수 있다.",
+                        d: "명제와 조건의 뜻을 알고, 간단한 명제의 참, 거짓을 판별할 수 있다.",
+                        low: "간단한 명제의 참, 거짓을 판별할 수 있다."
+                    },
+                    questions: []
+                },
+                {
+                    code: "[10공수2-03-01]",
+                    desc: "함수의 개념을 설명하고, 그 그래프를 이해한다.",
+                    levels: {
+                        high: "함수의 개념을 설명하고, 그 그래프를 이해하며 두 집합 사이의 대응 관계에서 함수인 것을 찾고 그 이유를 찾을 수 있다.",
+                        b: "함수의 개념을 설명하고, 대응 관계에서 함수인 것을 정확하게 찾을 수 있다.",
+                        mid: "함수의 개념과 그래프를 이해하며, 두 집합 사이의 대응 관계에서 함수인 것을 찾을 수 있다.",
+                        d: "함수의 뜻을 이해하고, 간단한 대응 관계를 확인할 수 있다.",
+                        low: "안내된 절차에 따라 간단한 두 집합 사이의 대응 관계에서 함수인 것을 찾을 수 있다."
+                    },
+                    questions: []
+                },
+                {
                     code: "[10공수2-03-04]",
                     desc: "유리함수 $y = \\frac{ax+b}{cx+d}$의 그래프를 그릴 수 있고, 그 그래프의 성질을 탐구하여 설명할 수 있다.",
                     levels: {
@@ -500,6 +557,18 @@
                         { q: "유리함수 $y = \\frac{1}{x}$의 그래프를 $x$축 방향으로 $2$만큼, $y$축 방향으로 $1$만큼 평행이동한 식을 쓰시오.", level: "D", reason: "평행이동의 기본 규칙을 식에 적용하는 수준입니다." },
                         { q: "함수 $y = \\frac{1}{x}$의 그래프가 제 몇 사분면을 지나는지 고르시오.", level: "E", reason: "가장 기본적인 유리함수의 형태적 특징을 묻는 수준입니다." }
                     ]
+                },
+                {
+                    code: "[10공수2-03-05]",
+                    desc: "무리함수 $y = \\sqrt{ax+b}+c$의 그래프를 그릴 수 있고, 그 그래프의 성질을 탐구하여 설명할 수 있다.",
+                    levels: {
+                        high: "무리함수의 그래프를 그릴 수 있고, 그 그래프의 성질을 탐구하여 설명할 수 있다.",
+                        b: "무리함수의 그래프를 정확하게 그릴 수 있고, 그 성질을 설명할 수 있다.",
+                        mid: "무리함수의 그래프를 그릴 수 있고, 그 그래프의 성질을 이해한다.",
+                        d: "기본적인 무리함수의 그래프를 그릴 수 있다.",
+                        low: "안내된 절차에 따라 무리함수의 그래프를 그릴 수 있다."
+                    },
+                    questions: []
                 }
             ]
         },
@@ -598,7 +667,7 @@
             standardsWithQuestions.forEach(std => {
                 const btn = document.createElement('button');
                 btn.className = 'option-btn';
-                btn.style.marginBottom = '1rem';
+                btn.style.width = '100%';
                 btn.innerHTML = `<strong>${std.code}</strong><br>${std.desc}`;
                 btn.onclick = () => startLevelMatching(std.code);
                 container.appendChild(btn);
@@ -694,7 +763,7 @@
                                    <div style="background: white; padding: 0.8rem; border-radius: 6px; border-left: 4px solid #f87171; margin-bottom: 0.5rem; font-size: 0.85rem;">
                                        ${wrongLevelExample.q}
                                    </div>
-                                   <em>* 현재 제시된 문항은 '${correctLevel}' 수준의 특징을 더 강하게 가지고 있습니다.</em>
+                                   <em>* 현재 제시된 문항은 '${correctLevel}' 수준의 특징(${question.reason.split('.')[0]})을 더 강하게 가지고 있습니다.</em>
                                    </div>`;
             }
 
