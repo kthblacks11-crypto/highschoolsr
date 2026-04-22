@@ -208,7 +208,7 @@
 
 <header>
     <h1 id="main-title">2022 개정 수학: 성취기준 매칭 시스템</h1>
-    <p id="sub-title">성취기준 분석 및 학습 대시보드</p>
+    <p id="sub-title">성취기준 분석 및 학습 가이드</p>
 </header>
 
 <div class="subject-selector" style="text-align: center; margin: 1rem 0;">
@@ -233,7 +233,7 @@
 
 <div class="container">
     <div class="tabs">
-        <button class="tab-btn active" onclick="showSection('dashboard')">대시보드</button>
+        <button class="tab-btn active" onclick="showSection('dashboard')">성취기준과 성취수준</button>
         <button class="tab-btn" onclick="showSection('quiz')">문항 매칭 연습</button>
         <button class="tab-btn" onclick="showSection('checklist')">나의 체크리스트</button>
     </div>
@@ -278,9 +278,9 @@
         <h2 id="modal-title">성취수준</h2>
         <p id="modal-desc" style="color:var(--text-light); margin-bottom: 1.5rem; font-weight: bold;"></p>
         <div class="level-row"><span class="level-badge bg-high">A</span> <span id="level-high"></span></div>
-        <div class="level-row"><span class="level-badge bg-high" style="background:#f87171">B</span> <span>(A수준과 C수준의 중간 정도)</span></div>
+        <div class="level-row"><span class="level-badge bg-high" style="background:#f87171">B</span> <span id="level-b"></span></div>
         <div class="level-row"><span class="level-badge bg-mid">C</span> <span id="level-mid"></span></div>
-        <div class="level-row"><span class="level-badge bg-low" style="background:#4ade80">D</span> <span>(C수준과 E수준의 중간 정도)</span></div>
+        <div class="level-row"><span class="level-badge bg-low" style="background:#4ade80">D</span> <span id="level-d"></span></div>
         <div class="level-row"><span class="level-badge bg-low">E</span> <span id="level-low"></span></div>
     </div>
 </div>
@@ -296,7 +296,9 @@
                     desc: "다항식의 사칙연산의 원리를 설명하고, 그 계산을 할 수 있다.", 
                     levels: { 
                         high: "다항식의 사칙연산의 원리를 이해하여 설명할 수 있으며, 그 계산을 수학적 절차에 따라 체계적으로 수행할 수 있다.", 
+                        b: "다항식의 사칙연산의 원리를 설명할 수 있고, 그 계산을 수학적 절차에 따라 정확하게 수행할 수 있다.",
                         mid: "다항식의 사칙연산의 원리를 알고, 그 계산을 할 수 있다.", 
+                        d: "다항식의 사칙연산의 원리를 알고, 간단한 다항식의 사칙연산을 수행할 수 있다.",
                         low: "안내된 절차에 따라 간단한 다항식의 사칙연산을 할 수 있다." 
                     },
                     questions: [
@@ -310,7 +312,9 @@
                     desc: "항등식의 성질과 나머지정리를 이해하고, 이를 활용하여 문제를 해결할 수 있다.", 
                     levels: { 
                         high: "항등식의 성질, 나머지정리와 인수정리, 조립제법을 설명할 수 있으며 이를 활용하여 다양한 문제를 해결할 수 있다.", 
+                        b: "항등식의 성질, 나머지정리와 인수정리를 설명할 수 있으며 이를 활용하여 일반적인 문제를 해결할 수 있다.",
                         mid: "항등식의 성질, 나머지정리와 인수정리를 알고, 이를 활용하여 문제를 해결할 수 있다.", 
+                        d: "항등식의 성질과 나머지정리를 알고, 기초적인 문제를 해결할 수 있다.",
                         low: "항등식의 성질과 나머지정리를 안다." 
                     },
                     questions: []
@@ -320,7 +324,9 @@
                     desc: "다항식의 인수분해를 할 수 있다.", 
                     levels: { 
                         high: "다양한 방법으로 다항식의 인수분해를 할 수 있다.", 
+                        b: "여러 가지 공식과 성질을 이용하여 다항식의 인수분해를 할 수 있다.",
                         mid: "인수분해 공식을 이용하여 다항식의 인수분해를 할 수 있다.", 
+                        d: "기본적인 인수분해 공식을 적용하여 간단한 다항식의 인수분해를 할 수 있다.",
                         low: "안내된 절차에 따라 간단한 다항식의 인수분해를 할 수 있다." 
                     },
                     questions: []
@@ -330,7 +336,9 @@
                     desc: "복소수의 뜻과 성질을 설명하고, 복소수의 사칙연산을 수행할 수 있다.", 
                     levels: { 
                         high: "복소수의 뜻과 성질을 이해하여 설명할 수 있으며, 복소수의 성질을 이용하여 사칙연산을 수학적 절차에 따라 체계적으로 수행할 수 있다.", 
+                        b: "복소수의 뜻과 성질을 설명할 수 있으며, 복소수의 사칙연산을 정확하게 수행할 수 있다.",
                         mid: "복소수의 뜻과 성질을 이해하고, 사칙연산을 수행할 수 있다.", 
+                        d: "복소수의 뜻을 알고, 간단한 복소수의 사칙연산을 수행할 수 있다.",
                         low: "복소수의 뜻을 알고, 안내된 절차에 따라 간단한 사칙연산을 수행할 수 있다." 
                     },
                     questions: []
@@ -340,7 +348,9 @@
                     desc: "이차방정식의 실근과 허근의 뜻을 이해하고, 판별식을 이용하여 이차방정식의 근을 판별할 수 있다.", 
                     levels: { 
                         high: "이차방정식의 실근과 허근의 의미를 설명하고, 판별식을 이용하여 근을 판별할 수 있다.", 
+                        b: "이차방정식의 실근과 허근의 뜻을 알고, 판별식을 사용하여 근을 정확하게 판별할 수 있다.",
                         mid: "이차방정식의 실근과 허근을 알고, 판별식을 이용하여 근을 판별할 수 있다.", 
+                        d: "이차방정식의 판별식을 알고, 간단한 이차방정식의 근을 판별할 수 있다.",
                         low: "안내된 절차에 따라 이차방정식의 판별식의 값을 구할 수 있다." 
                     },
                     questions: []
@@ -349,9 +359,11 @@
                     code: "[10공수1-02-03]", 
                     desc: "이차방정식의 근과 계수의 관계를 설명할 수 있다.", 
                     levels: { 
-                        high: "이차방정식의 근과 계수의 관계를 이해하여 설명할 수 있다.", 
+                        high: "이차방정식의 근과 계수의 관계를 이해하여 설명하고 이를 활용하여 다양한 문제를 해결할 수 있다.", 
+                        b: "이차방정식의 근과 계수의 관계를 설명하고 이를 활용할 수 있다.",
                         mid: "이차방정식의 근과 계수의 관계를 이해한다.", 
-                        low: "이차방정식의 근과 계수의 관계를 안다." 
+                        d: "이차방정식의 근과 계수의 관계를 안다.",
+                        low: "이차방정식의 근과 계수의 관계를 확인한다." 
                     },
                     questions: []
                 },
@@ -360,7 +372,9 @@
                     desc: "이차방정식과 이차함수의 관계를 이해하고 설명할 수 있다.", 
                     levels: { 
                         high: "이차방정식의 근과 이차함수의 그래프를 연결하고 그 관계를 이해하여 설명할 수 있다.", 
+                        b: "이차방정식의 실근과 이차함수의 그래프의 x축 교점 사이의 관계를 설명할 수 있다.",
                         mid: "판별식을 이용하여 이차함수의 그래프와 x축의 교점의 개수를 구할 수 있다.", 
+                        d: "주어진 이차함수의 그래프를 보고 x축과의 교점의 위치를 찾을 수 있다.",
                         low: "주어진 이차함수의 그래프를 보고 이차방정식의 실근의 개수를 구할 수 있다." 
                     },
                     questions: []
@@ -369,8 +383,10 @@
                     code: "[10공수1-04-01]",
                     desc: "행렬의 뜻을 알고, 실생활 상황을 행렬로 표현할 수 있다.",
                     levels: {
-                        high: "행렬의 뜻을 설명하고, 실생활 상황을 행렬로 표현할 수 있다.",
+                        high: "행렬의 뜻을 설명하고, 복합적인 실생활 상황을 행렬로 표현할 수 있다.",
+                        b: "행렬의 뜻을 설명하고, 다양한 실생활 상황을 행렬로 표현할 수 있다.",
                         mid: "행렬의 뜻을 이해하고, 간단한 실생활 상황을 행렬로 표현할 수 있다.",
+                        d: "행렬의 뜻을 이해하고, 주어진 상황을 행렬로 나타낼 수 있다.",
                         low: "행렬의 뜻을 안다."
                     },
                     questions: []
@@ -380,7 +396,9 @@
                     desc: "행렬의 연산을 수행하고, 관련된 문제를 해결할 수 있다.",
                     levels: {
                         high: "행렬의 연산을 수행하고, 관련된 다양한 문제를 해결할 수 있다.",
+                        b: "행렬의 연산을 정확하게 수행하고, 일반적인 문제를 해결할 수 있다.",
                         mid: "행렬의 연산을 수행하고, 관련된 간단한 문제를 해결할 수 있다.",
+                        d: "기본적인 행렬의 연산을 수행하고, 기초적인 문제를 해결할 수 있다.",
                         low: "안내된 절차에 따라 행렬의 연산을 수행할 수 있다."
                     },
                     questions: [
@@ -400,7 +418,9 @@
                     desc: "선분의 내분을 이해하고, 내분점의 좌표를 계산할 수 있다.", 
                     levels: { 
                         high: "선분의 내분을 설명하고, 좌표평면 위에서 내분점의 좌표를 구하는 방법을 이해하여 계산할 수 있다.", 
+                        b: "선분의 내분을 설명하고, 좌표평면 위에서 내분점의 좌표를 정확하게 계산할 수 있다.",
                         mid: "선분의 내분을 알고, 좌표평면 위에서 내분점의 좌표를 계산할 수 있다.", 
+                        d: "수직선 위에서 선분의 내분을 알고, 내분점의 좌표를 계산할 수 있다.",
                         low: "안내된 절차에 따라 수직선 위에서 내분점의 좌표를 계산할 수 있다." 
                     },
                     questions: [
@@ -414,7 +434,9 @@
                     desc: "집합의 개념을 이해하고, 집합을 표현할 수 있다.", 
                     levels: { 
                         high: "집합의 개념을 설명하고, 집합을 다양한 방법으로 표현할 수 있다.", 
+                        b: "집합의 개념을 설명하고, 원소나열법과 조건제시법으로 집합을 표현할 수 있다.",
                         mid: "집합의 개념을 알고, 집합을 표현할 수 있다.", 
+                        d: "집합의 뜻을 이해하고, 간단한 집합을 표현할 수 있다.",
                         low: "집합인 것과 집합이 아닌 것으로 구분하고, 집합을 표현할 수 있다." 
                     },
                     questions: []
@@ -424,7 +446,9 @@
                     desc: "두 집합 사이의 포함관계를 판단할 수 있다.",
                     levels: {
                         high: "두 집합 사이의 포함관계를 판단하여 기호로 표현하고, 그 이유를 설명할 수 있다.",
+                        b: "두 집합 사이의 포함관계를 정확하게 판단하여 기호로 표현할 수 있다.",
                         mid: "두 집합 사이의 포함관계를 판단하여 기호로 표현할 수 있다.",
+                        d: "간단한 두 집합 사이의 포함관계를 판단할 수 있다.",
                         low: "안내된 절차에 따라 간단한 두 집합 사이의 포함관계를 판단할 수 있다."
                     },
                     questions: [
@@ -438,7 +462,9 @@
                     desc: "집합의 연산을 수행하고, 벤 다이어그램을 사용하여 나타낼 수 있다.",
                     levels: {
                         high: "집합의 연산을 체계적으로 수행하고 벤 다이어그램으로 나타낼 수 있으며, 집합의 연산에 관한 법칙을 벤 다이어그램으로 확인할 수 있다.",
+                        b: "집합의 연산을 정확하게 수행하고 벤 다이어그램으로 나타낼 수 있다.",
                         mid: "집합의 연산을 수행하고 벤 다이어그램으로 나타낼 수 있으며, 집합의 연산에 관한 법칙을 안다.",
+                        d: "기초적인 집합의 연산을 수행하고, 벤 다이어그램으로 나타낼 수 있다.",
                         low: "집합의 연산을 수행하고, 벤 다이어그램으로 나타낼 수 있다."
                     },
                     questions: []
@@ -448,7 +474,9 @@
                     desc: "명제와 조건의 뜻을 알고, '모든', '어떤'을 포함한 명제를 이해하고 설명할 수 있다.",
                     levels: {
                         high: "명제와 조건의 뜻을 알고 이를 설명할 수 있으며, '모든', '어떤'을 포함한 명제의 참, 거짓을 판별하고 그 이유를 설명할 수 있다.",
+                        b: "명제와 조건의 뜻을 설명할 수 있으며, '모든', '어떤'을 포함한 명제의 참, 거짓을 정확하게 판별할 수 있다.",
                         mid: "명제와 조건의 뜻을 알고 이를 설명할 수 있으며, '모든', '어떤'을 포함한 명제의 참, 거짓을 판별할 수 있다.",
+                        d: "명제와 조건의 뜻을 알고, 간단한 명제의 참, 거짓을 판별할 수 있다.",
                         low: "간단한 명제의 참, 거짓을 판별할 수 있다."
                     },
                     questions: []
@@ -458,7 +486,9 @@
                     desc: "함수의 개념을 설명하고, 그 그래프를 이해한다.",
                     levels: {
                         high: "함수의 개념을 설명하고, 그 그래프를 이해하며 두 집합 사이의 대응 관계에서 함수인 것을 찾고 그 이유를 찾을 수 있다.",
+                        b: "함수의 개념을 설명하고, 대응 관계에서 함수인 것을 정확하게 찾을 수 있다.",
                         mid: "함수의 개념과 그래프를 이해하며, 두 집합 사이의 대응 관계에서 함수인 것을 찾을 수 있다.",
+                        d: "함수의 뜻을 이해하고, 간단한 대응 관계를 확인할 수 있다.",
                         low: "안내된 절차에 따라 간단한 두 집합 사이의 대응 관계에서 함수인 것을 찾을 수 있다."
                     },
                     questions: []
@@ -468,7 +498,9 @@
                     desc: "유리함수 $y = \\frac{ax+b}{cx+d}$의 그래프를 그릴 수 있고, 그 그래프의 성질을 탐구하여 설명할 수 있다.",
                     levels: {
                         high: "유리함수의 그래프를 그릴 수 있고, 그 그래프의 성질을 탐구하여 설명할 수 있다.",
+                        b: "유리함수의 그래프를 정확하게 그릴 수 있고, 그 성질을 설명할 수 있다.",
                         mid: "유리함수의 그래프를 그릴 수 있고, 그 그래프의 성질을 이해한다.",
+                        d: "기본적인 유리함수의 그래프를 그릴 수 있다.",
                         low: "안내된 절차에 따라 유리함수의 그래프를 그릴 수 있다."
                     },
                     questions: []
@@ -478,7 +510,9 @@
                     desc: "무리함수 $y = \\sqrt{ax+b}+c$의 그래프를 그릴 수 있고, 그 그래프의 성질을 탐구하여 설명할 수 있다.",
                     levels: {
                         high: "무리함수의 그래프를 그릴 수 있고, 그 그래프의 성질을 탐구하여 설명할 수 있다.",
+                        b: "무리함수의 그래프를 정확하게 그릴 수 있고, 그 성질을 설명할 수 있다.",
                         mid: "무리함수의 그래프를 그릴 수 있고, 그 그래프의 성질을 이해한다.",
+                        d: "기본적인 무리함수의 그래프를 그릴 수 있다.",
                         low: "안내된 절차에 따라 무리함수의 그래프를 그릴 수 있다."
                     },
                     questions: []
@@ -493,9 +527,11 @@
                     code: "[12대수01-01]", 
                     desc: "거듭제곱과 거듭제곱근의 뜻을 알고, 그 성질을 이해한다.", 
                     levels: { 
-                        high: "거듭제곱근의 성질을 이용해 복잡한 식을 계산함", 
-                        mid: "거듭제곱근의 뜻을 이해하고 성질을 적용함", 
-                        low: "안내된 절차에 따라 기초적인 거듭제곱근 값을 구함" 
+                        high: "거듭제곱근의 성질을 이해하고, 이를 이용하여 복잡한 식을 계산할 수 있다.", 
+                        b: "거듭제곱근의 성질을 이해하고, 이를 이용하여 다양한 식을 계산할 수 있다.",
+                        mid: "거듭제곱근의 뜻을 알고, 그 성질을 적용하여 식을 계산할 수 있다.", 
+                        d: "거듭제곱근의 뜻을 알고, 간단한 거듭제곱근의 계산을 할 수 있다.",
+                        low: "안내된 절차에 따라 기초적인 거듭제곱근의 값을 구할 수 있다." 
                     },
                     questions: [
                         { q: "$\\sqrt[3]{8}$의 값을 구하기 위해 다음 단계를 밟으세요.<br>1단계: $8$을 거듭제곱 형태($2^n$)로 바꾼다.<br>2단계: $\\sqrt[n]{a^n} = a$ 성질을 이용해 답을 낸다.", level: "E", reason: "기초 개념 계산을 위한 절차를 안내하므로 E수준입니다." }
@@ -592,9 +628,11 @@
         levelsContainer.innerHTML = `
             <h4>성취수준 가이드</h4>
             <div class="level-desc-grid">
-                <div class="level-desc-item"><strong>상 (A)</strong> ${standard.levels.high}</div>
-                <div class="level-desc-item"><strong>중 (C)</strong> ${standard.levels.mid}</div>
-                <div class="level-desc-item"><strong>하 (E)</strong> ${standard.levels.low}</div>
+                <div class="level-desc-item"><strong>A (상)</strong> ${standard.levels.high}</div>
+                <div class="level-desc-item"><strong>B (우수)</strong> ${standard.levels.b || standard.levels.high.replace("이해하여 설명할 수 있으며", "설명할 수 있고").replace("체계적으로 수행", "정확하게 수행")}</div>
+                <div class="level-desc-item"><strong>C (중)</strong> ${standard.levels.mid}</div>
+                <div class="level-desc-item"><strong>D (미흡)</strong> ${standard.levels.d || standard.levels.mid.replace("이해하고", "알고").replace("계산을 할 수 있다", "간단한 계산을 할 수 있다")}</div>
+                <div class="level-desc-item"><strong>E (하)</strong> ${standard.levels.low}</div>
             </div>
         `;
 
@@ -616,7 +654,7 @@
         nextBtn.style.display = 'none';
 
         const levels = ['A', 'B', 'C', 'D', 'E'];
-        const levelDesc = {'A': '상', 'B': '상/중', 'C': '중', 'D': '중/하', 'E': '하'};
+        const levelDesc = {'A': '매우 우수', 'B': '우수', 'C': '보통', 'D': '미흡', 'E': '기초'};
         levels.forEach(level => {
             const btn = document.createElement('button');
             btn.className = 'option-btn';
@@ -707,9 +745,14 @@
     function openModal(std) {
         document.getElementById('modal-title').innerText = std.code;
         document.getElementById('modal-desc').innerText = std.desc;
-        document.getElementById('level-high').innerText = std.levels.high;
-        document.getElementById('level-mid').innerText = std.levels.mid;
-        document.getElementById('level-low').innerText = std.levels.low;
+        
+        const levels = std.levels;
+        document.getElementById('level-high').innerText = levels.high;
+        document.getElementById('level-b').innerText = levels.b || levels.high.replace("이해하여 설명할 수 있으며", "설명할 수 있고").replace("체계적으로 수행", "정확하게 수행");
+        document.getElementById('level-mid').innerText = levels.mid;
+        document.getElementById('level-d').innerText = levels.d || levels.mid.replace("이해하고", "알고").replace("계산을 할 수 있다", "간단한 계산을 할 수 있다");
+        document.getElementById('level-low').innerText = levels.low;
+        
         document.getElementById('level-modal').style.display = 'flex';
         if (window.MathJax) MathJax.typesetPromise([document.getElementById('level-modal')]);
     }
