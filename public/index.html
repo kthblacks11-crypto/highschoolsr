@@ -786,7 +786,7 @@
         document.getElementById('loading-status').innerText = "AI가 수학 문제를 분석 중입니다...";
 
         try {
-            // 1. Gemini API 호출 (최우선 수행)
+            // 1. Gemini API 호출 (데이터베이스 업로드보다 먼저 수행)
             const base64Image = document.getElementById('image-preview').src.split(',')[1];
             const prompt = `수학 문제 사진입니다. 2022 개정 교육과정 성취기준에 따라 다음 양식으로 분석해주세요.
             1. 단원명
@@ -809,15 +809,23 @@
                 })
             });
 
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error ? errData.error.message : "API 호출 실패");
+            }
+
             const result = await response.json();
-            if (result.error) throw new Error("Gemini API 오류: " + result.error.message);
+            if (!result.candidates || result.candidates.length === 0) {
+                throw new Error("AI 분석 결과가 없습니다. 이미지 내용을 확인해주세요.");
+            }
 
             const analysisText = result.candidates[0].content.parts[0].text;
 
-            // 분석 결과 먼저 출력
+            // 분석 결과 즉시 출력
             document.getElementById('res-data').innerText = analysisText;
             document.getElementById('analysis-loading').style.display = 'none';
             document.getElementById('analysis-result').style.display = 'block';
+            
             if (window.MathJax) MathJax.typesetPromise();
 
             // 2. Firebase 데이터 저장 (실패해도 분석 결과는 유지되도록 비동기 처리)
@@ -831,8 +839,8 @@
             });
 
         } catch (error) {
-            console.error(error);
-            alert("⚠️ 분석 실패: " + error.message + "\n\n1. API 키가 정확한지 확인해주세요.\n2. 인터넷 연결을 확인해주세요.");
+            console.error("분석 상세 오류:", error);
+            alert("⚠️ 분석 실패: " + error.message + "\n\n1. API 키가 정확한지 확인해주세요.\n2. 이미지 크기가 너무 크지 않은지 확인해주세요.\n3. 잠시 후 다시 시도해주세요.");
             document.getElementById('analysis-loading').style.display = 'none';
             document.getElementById('analyze-btn').style.display = 'block';
         }
