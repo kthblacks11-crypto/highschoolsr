@@ -37,7 +37,7 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .container {
-            max-width: 800px;
+            max-width: 1000px;
             margin: 2rem auto;
             padding: 0 1rem;
         }
@@ -81,35 +81,37 @@
 
         .quiz-container {
             background: var(--card-bg);
-            padding: 2rem;
+            padding: 1.5rem;
             border-radius: 8px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
         .question-box {
-            font-size: 1.1rem;
-            margin-bottom: 2rem;
-            padding: 1.5rem;
+            font-size: 1rem;
+            margin-bottom: 1.5rem;
+            padding: 1.2rem;
             background: #f1f5f9;
             border-radius: 8px;
-            line-height: 1.8;
+            line-height: 1.6;
         }
         .options {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 0.5rem;
+            display: flex;
+            gap: 0.4rem;
+            justify-content: space-between;
         }
         .option-btn {
-            padding: 1rem;
+            flex: 1;
+            padding: 0.6rem 0.2rem;
             background: white;
             border: 1px solid var(--border);
-            border-radius: 8px;
+            border-radius: 6px;
             cursor: pointer;
             text-align: center;
-            font-size: 1rem;
+            font-size: 0.85rem;
             transition: 0.2s;
+            white-space: nowrap;
         }
         .option-btn:hover:not(:disabled) { background: #e0e7ff; }
-        #level-feedback, #feedback { margin-top: 1rem; font-weight: bold; text-align: center; padding: 1.5rem; border-radius: 8px; }
+        #level-feedback, #feedback { margin-top: 1rem; font-weight: bold; text-align: center; padding: 1.2rem; border-radius: 8px; font-size: 0.9rem; }
 
         .check-item {
             display: flex;
@@ -127,9 +129,9 @@
             background: var(--primary);
             color: white;
             border: none;
-            padding: 1rem;
+            padding: 0.8rem;
             border-radius: 8px;
-            font-size: 1.1rem;
+            font-size: 1rem;
             cursor: pointer;
             margin-top: 1rem;
         }
@@ -175,33 +177,44 @@
         .bg-low { background: #22c55e; }
         .level-row { margin-bottom: 1rem; padding: 0.5rem; border-bottom: 1px solid #f1f5f9; }
         
-        #achievement-levels {
+        /* 퀴즈 레이아웃 개선 */
+        .quiz-layout {
+            display: flex;
+            gap: 1.5rem;
+            align-items: flex-start;
+            margin-top: 1rem;
+        }
+        .guide-side {
+            flex: 0 0 280px;
             background: #f1f5f9;
             padding: 1rem;
             border-radius: 8px;
-            margin-bottom: 2rem;
+            position: sticky;
+            top: 1rem;
+            max-height: 85vh;
+            overflow-y: auto;
         }
-        #achievement-levels h4 {
-            margin-top: 0;
-            text-align: center;
-            color: var(--primary);
+        .quiz-side {
+            flex: 1;
+            min-width: 0;
         }
-       .level-desc-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-       }
-       .level-desc-item {
+        .guide-side h4 { margin-top: 0; color: var(--primary); text-align: center; font-size: 1rem; }
+        .guide-item {
             background: white;
-            padding: 0.75rem;
+            padding: 0.6rem;
             border-radius: 6px;
-            font-size: 0.9rem;
-       }
-       .level-desc-item strong {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: var(--primary);
-       }
+            font-size: 0.85rem;
+            margin-bottom: 0.6rem;
+            border-left: 3px solid var(--primary);
+        }
+        .guide-item strong { display: block; margin-bottom: 0.2rem; color: var(--primary); font-size: 0.8rem; }
+
+        @media (max-width: 850px) {
+            .quiz-layout { flex-direction: column; }
+            .guide-side { flex: none; width: 100%; position: static; max-height: none; }
+            .options { flex-wrap: wrap; }
+            .option-btn { flex: 0 0 48%; }
+        }
     </style>
 </head>
 <body>
@@ -251,16 +264,19 @@
         </div>
         <div id="quiz-level-matching" style="display: none;">
             <button class="save-btn" onclick="backToStandardSelection()" style="margin-bottom: 1rem; background:none; border:none; color:var(--primary); cursor:pointer; font-size:1rem; width: auto; padding: 0; font-weight: bold;">&larr; 성취기준 다시 선택</button>
-            <div class="quiz-container">
-                <h3 id="selected-standard-info" style="margin-top:0; font-size:1.1rem; color:var(--text-light); text-align:center; margin-bottom: 1.5rem;"></h3>
-                
-                <div id="achievement-levels"></div>
-
-                <div class="question-box" id="level-question-text">문제를 불러오는 중...</div>
-                <p style="text-align: center; font-weight: bold; margin-top: 2rem;">이 문항의 성취수준을 판정하세요.</p>
-                <div class="options" id="level-options"></div>
-                <div id="level-feedback"></div>
-                <button class="save-btn" id="next-q-btn" onclick="nextLevelQuestion()" style="margin-top:1.5rem; display: none;">다음 문항 보기</button>
+            
+            <div class="quiz-layout">
+                <div class="guide-side" id="achievement-levels-side"></div>
+                <div class="quiz-side">
+                    <div class="quiz-container">
+                        <h3 id="selected-standard-info" style="margin-top:0; font-size:0.95rem; color:var(--text-light); text-align:center; margin-bottom: 1rem;"></h3>
+                        <div class="question-box" id="level-question-text">문제를 불러오는 중...</div>
+                        <p style="text-align: center; font-weight: bold; margin-bottom: 1rem; font-size: 0.95rem;">이 문항의 성취수준을 판정하세요.</p>
+                        <div class="options" id="level-options"></div>
+                        <div id="level-feedback"></div>
+                        <button class="save-btn" id="next-q-btn" onclick="nextLevelQuestion()" style="margin-top:1rem; display: none;">다음 문항 보기</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -333,7 +349,7 @@
                 },
                 { 
                     code: "[10공수1-02-01]", 
-                    desc: "복소수의 뜻과 성질을 설명하고, 복소수의 사칙연산을 수행할 수 있다.", 
+                    desc: "복소수의 뜻과 성질을 설명하고,복소수의 사칙연산을 수행할 수 있다.", 
                     levels: { 
                         high: "복소수의 뜻과 성질을 이해하여 설명할 수 있으며, 복소수의 성질을 이용하여 사칙연산을 수학적 절차에 따라 체계적으로 수행할 수 있다.", 
                         b: "복소수의 뜻과 성질을 설명할 수 있으며, 복소수의 사칙연산을 정확하게 수행할 수 있다.",
@@ -605,16 +621,14 @@
         document.getElementById('quiz-level-matching').style.display = 'block';
         document.getElementById('selected-standard-info').innerText = `${standard.code} ${standard.desc}`;
         
-        const levelsContainer = document.getElementById('achievement-levels');
+        const levelsContainer = document.getElementById('achievement-levels-side');
         levelsContainer.innerHTML = `
             <h4>성취수준 가이드</h4>
-            <div class="level-desc-grid">
-                <div class="level-desc-item"><strong>A (상)</strong> ${standard.levels.high}</div>
-                <div class="level-desc-item"><strong>B (우수)</strong> ${standard.levels.b || standard.levels.high.replace("이해하여 설명할 수 있으며", "설명할 수 있고").replace("체계적으로 수행", "정확하게 수행")}</div>
-                <div class="level-desc-item"><strong>C (중)</strong> ${standard.levels.mid}</div>
-                <div class="level-desc-item"><strong>D (미흡)</strong> ${standard.levels.d || standard.levels.mid.replace("이해하고", "알고").replace("계산을 할 수 있다", "간단한 계산을 할 수 있다")}</div>
-                <div class="level-desc-item"><strong>E (하)</strong> ${standard.levels.low}</div>
-            </div>
+            <div class="guide-item"><strong>A (상)</strong> ${standard.levels.high}</div>
+            <div class="guide-item"><strong>B (우수)</strong> ${standard.levels.b || standard.levels.high.replace("이해하여 설명할 수 있으며", "설명할 수 있고").replace("체계적으로 수행", "정확하게 수행")}</div>
+            <div class="guide-item"><strong>C (중)</strong> ${standard.levels.mid}</div>
+            <div class="guide-item"><strong>D (미흡)</strong> ${standard.levels.d || standard.levels.mid.replace("이해하고", "알고").replace("계산을 할 수 있다", "간단한 계산을 할 수 있다")}</div>
+            <div class="guide-item"><strong>E (하)</strong> ${standard.levels.low}</div>
         `;
 
         loadLevelQuestion();
@@ -637,11 +651,10 @@
         nextBtn.style.display = 'none';
 
         const levels = ['A', 'B', 'C', 'D', 'E'];
-        const levelDesc = {'A': '매우 우수', 'B': '우수', 'C': '보통', 'D': '미흡', 'E': '기초'};
         levels.forEach(level => {
             const btn = document.createElement('button');
             btn.className = 'option-btn';
-            btn.innerText = `${level} (${levelDesc[level]})`;
+            btn.innerText = level;
             btn.onclick = () => checkLevelAnswer(level, btn);
             optionsBox.appendChild(btn);
         });
@@ -675,13 +688,13 @@
             let comparativeText = "";
             if (wrongLevelExample) {
                 comparativeText = `<hr style="margin: 1rem 0; border: 0; border-top: 1px solid #fca5a5;">
-                                   <div style="text-align: left; font-size: 0.95rem;">
+                                   <div style="text-align: left; font-size: 0.9rem;">
                                    <strong>💡 비교해 보세요:</strong><br>
                                    선택하신 <strong>'${selectedLevel}'</strong> 수준은 보통 아래와 같은 문항입니다.<br><br>
-                                   <div style="background: white; padding: 1rem; border-radius: 6px; border-left: 4px solid #f87171; margin-bottom: 0.5rem;">
+                                   <div style="background: white; padding: 0.8rem; border-radius: 6px; border-left: 4px solid #f87171; margin-bottom: 0.5rem; font-size: 0.85rem;">
                                        ${wrongLevelExample.q}
                                    </div>
-                                   <em>* 현재 제시된 문항은 '${correctLevel}' 수준의 특징(${question.reason.split('.')[0]})을 더 강하게 가지고 있습니다.</em>
+                                   <em>* 현재 제시된 문항은 '${correctLevel}' 수준의 특징을 더 강하게 가지고 있습니다.</em>
                                    </div>`;
             }
 
@@ -695,7 +708,7 @@
 
             // 정답 버튼 하이라이트
             document.querySelectorAll('#level-options .option-btn').forEach(b => {
-                if (b.innerText.startsWith(correctLevel)) {
+                if (b.innerText === correctLevel) {
                     b.style.backgroundColor = '#dcfce7';
                     b.style.border = '3px solid #166534';
                     b.style.opacity = '1';
