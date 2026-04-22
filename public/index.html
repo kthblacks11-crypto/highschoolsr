@@ -518,6 +518,15 @@
     let currentSubject = "common2";
     let currentStandardCode = null;
     let currentLevelQ = 0;
+    let currentQuestions = []; // 현재 무작위로 섞인 문항들
+
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
 
     function showSection(id) {
         document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
@@ -587,10 +596,13 @@
     function startLevelMatching(code) {
         currentStandardCode = code;
         currentLevelQ = 0;
-        document.getElementById('quiz-standard-selection').style.display = 'none';
-        document.getElementById('quiz-level-matching').style.display = 'block';
         
         const standard = subjectData[currentSubject].standards.find(s => s.code === code);
+        // 문항 복사 후 랜덤 셔플
+        currentQuestions = shuffleArray([...standard.questions]);
+        
+        document.getElementById('quiz-standard-selection').style.display = 'none';
+        document.getElementById('quiz-level-matching').style.display = 'block';
         document.getElementById('selected-standard-info').innerText = `${standard.code} ${standard.desc}`;
         
         const levelsContainer = document.getElementById('achievement-levels');
@@ -615,8 +627,10 @@
         const feedbackBox = document.getElementById('level-feedback');
         const nextBtn = document.getElementById('next-q-btn');
 
-        const question = standard.questions[currentLevelQ];
-        qBox.innerHTML = `<strong>[문항 ${currentLevelQ + 1}/${standard.questions.length}]</strong><br><br>${question.q}`;
+        if (currentQuestions.length === 0) return;
+        const question = currentQuestions[currentLevelQ];
+        
+        qBox.innerHTML = `<strong>[문항 ${currentLevelQ + 1}/${currentQuestions.length}]</strong><br><br>${question.q}`;
         optionsBox.innerHTML = '';
         feedbackBox.innerHTML = '';
         feedbackBox.style.display = 'none';
@@ -637,7 +651,7 @@
 
     function checkLevelAnswer(selectedLevel, btn) {
         const standard = subjectData[currentSubject].standards.find(s => s.code === currentStandardCode);
-        const question = standard.questions[currentLevelQ];
+        const question = currentQuestions[currentLevelQ];
         const correctLevel = question.level;
         const fb = document.getElementById('level-feedback');
         const nextBtn = document.getElementById('next-q-btn');
@@ -656,7 +670,24 @@
             btn.style.border = '3px solid #166534';
             btn.style.opacity = '1';
         } else {
-            fb.innerHTML = `❌ <strong>오답입니다.</strong> 이 문항은 <strong>'${correctLevel}'</strong> 수준입니다.<br><br><strong>[이유]</strong> ${question.reason}`;
+            // 사용자가 선택한 틀린 수준의 예시 문항 찾기
+            const wrongLevelExample = standard.questions.find(q => q.level === selectedLevel);
+            let comparativeText = "";
+            if (wrongLevelExample) {
+                comparativeText = `<hr style="margin: 1rem 0; border: 0; border-top: 1px solid #fca5a5;">
+                                   <div style="text-align: left; font-size: 0.95rem;">
+                                   <strong>💡 비교해 보세요:</strong><br>
+                                   선택하신 <strong>'${selectedLevel}'</strong> 수준은 보통 아래와 같은 문항입니다.<br><br>
+                                   <div style="background: white; padding: 1rem; border-radius: 6px; border-left: 4px solid #f87171; margin-bottom: 0.5rem;">
+                                       ${wrongLevelExample.q}
+                                   </div>
+                                   <em>* 현재 제시된 문항은 '${correctLevel}' 수준의 특징(${question.reason.split('.')[0]})을 더 강하게 가지고 있습니다.</em>
+                                   </div>`;
+            }
+
+            fb.innerHTML = `❌ <strong>오답입니다.</strong> 이 문항은 <strong>'${correctLevel}'</strong> 수준입니다.<br><br>
+                            <strong>[이유]</strong> ${question.reason}
+                            ${comparativeText}`;
             fb.style.color = "#991b1b";
             fb.style.backgroundColor = '#fee2e2';
             btn.style.border = '3px solid #ef4444';
@@ -676,14 +707,14 @@
     }
 
     function nextLevelQuestion() {
-        const standard = subjectData[currentSubject].standards.find(s => s.code === currentStandardCode);
-        if (!standard || standard.questions.length === 0) return;
-        currentLevelQ = (currentLevelQ + 1) % standard.questions.length;
+        if (currentQuestions.length === 0) return;
+        currentLevelQ = (currentLevelQ + 1) % currentQuestions.length;
         loadLevelQuestion();
     }
     
     function backToStandardSelection() {
         currentStandardCode = null;
+        currentQuestions = [];
         document.getElementById('quiz-standard-selection').style.display = 'block';
         document.getElementById('quiz-level-matching').style.display = 'none';
     }
