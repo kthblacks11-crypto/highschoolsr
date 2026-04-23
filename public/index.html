@@ -964,14 +964,44 @@
         if (window.MathJax) MathJax.typesetPromise([container]);
     }
 
-    function startLevelMatching(code) {
+    async function startLevelMatching(code) { // async 키워드 추가
         currentStandardCode = code;
         currentLevelQ = 0;
+        
+        // 1. 기본 내장 문항 가져오기
         const standard = subjectData[currentSubject].standards.find(s => s.code === code);
-        currentQuestions = shuffleArray([...standard.questions]);
+        let combinedQuestions = [...standard.questions];
+
+        // 2. 파이어베이스 DB에서 다른 사용자가 올린 '변형 문항' 불러와서 합치기
+        try {
+            const snapshot = await db.collection('transformed_bank')
+                                     .where('standard_code', '==', code)
+                                     .get();
+            
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                // AI 분석 결과에서 성취수준(A~E) 추출 시도
+                let extractedLevel = data.original_analysis?.match(/\[예상 성취수준.*?\]:\s*([A-E])/)?.[1] || "C"; 
+
+                combinedQuestions.push({
+                    q: `<div style="background-color: #f0fdf4; padding: 10px; border-left: 4px solid #22c55e; margin-bottom: 10px; border-radius: 4px;">
+                            <span style="font-size: 0.8rem; color: #166534; font-weight: bold;">💡 AI 변형 추가 문항</span>
+                        </div>` + data.question,
+                    level: extractedLevel,
+                    reason: "사용자 업로드 문항을 AI가 분석하고 저작권 보호를 위해 변형한 문항입니다."
+                });
+            });
+        } catch (error) {
+            console.warn("DB에서 추가 문항을 불러오는데 실패했습니다:", error);
+        }
+
+        // 3. 문항 순서 섞기
+        currentQuestions = shuffleArray(combinedQuestions);
+        
         document.getElementById('quiz-standard-selection').style.display = 'none';
         document.getElementById('quiz-level-matching').style.display = 'block';
         document.getElementById('selected-standard-info').innerText = `${standard.code} ${standard.desc}`;
+        
         const levelsContainer = document.getElementById('achievement-levels-side');
         levelsContainer.innerHTML = `
             <h4>성취수준 가이드</h4>
