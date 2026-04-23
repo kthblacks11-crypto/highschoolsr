@@ -793,13 +793,23 @@
         try {
             const base64Image = document.getElementById('image-preview').src.split(',')[1];
             
-            // 4단계 구조를 강력하게 강제하는 프롬프트
+            // [정확도 향상]: 현재 선택된 과목의 성취기준 목록을 문자열로 만들어 AI에게 참고자료로 줍니다.
+            let standardsInfo = "참고할 성취기준 목록이 없습니다.";
+            if (subjectData[currentSubject] && subjectData[currentSubject].standards) {
+                standardsInfo = subjectData[currentSubject].standards.map(s => `${s.code} ${s.desc}`).join('\n');
+            }
+            
             const prompt = `당신은 대한민국 최고의 수학 교사입니다. 인사말 없이 반드시 다음 4가지 대괄호 태그와 콜론(:) 형식을 '토씨 하나 틀리지 말고' 사용하여 답변하세요.
 
-            [교과 및 단원]: 해당 문제의 교과명(예: 공통수학1)과 단원명을 명시하세요.
-            [성취기준 및 수준]: 2022 개정 교육과정 성취기준 코드([10공수1-XX-XX])와 예상 성취수준(A~E), 그리고 그렇게 판정한 구체적인 이유를 서술하세요.
+            [교과 및 단원]: 해당 문제의 교과명과 단원명을 명시하세요.
+            [성취기준 및 수준]: 
+            아래 제공된 <과목별 성취기준 목록> 중에서 가장 적합한 것을 골라 **성취기준 코드([10공수X-XX-XX])**를 정확히 적고, 예상 성취수준(A~E)과 그렇게 판정한 구체적인 이유를 서술하세요.
+            <과목별 성취기준 목록>
+            ${standardsInfo}
+            </과목별 성취기준 목록>
+
             [핵심 개념]: 반드시 글머리 기호(•)를 사용하여 핵심 공식이나 정의만 1~2줄로 극도로 짧게 요약하세요.
-            [상세 풀이]: 가독성 좋은 단계별 풀이를 작성하세요. 일차함수, 이차함수, 원의 방정식 등 '그래프'가 필요한 문제라면 풀이 하단에 반드시 HTML5 <svg> 태그를 사용하여 좌표축과 그래프가 포함된 시각적 코드를 작성하세요.
+            [상세 풀이]: 가독성 좋은 단계별 풀이를 작성하세요. 그래프 시각화가 필요한 경우 반드시 HTML5 <svg> 태그를 사용하여 코드를 작성하세요.
 
             모든 수식은 $ 기호를 사용한 LaTeX 문법을 준수하세요.`;
 
@@ -848,7 +858,6 @@
         const container = document.getElementById('res-container');
         container.innerHTML = "";
 
-        // 4단계 구조로 업데이트된 컨피그
         const configs = [
             { key: "[교과 및 단원]:", title: "1. 교과명 및 단원명", icon: "📚", bg: "#f3f4f6", border: "#64748b" },
             { key: "[성취기준 및 수준]:", title: "2. 성취기준과 성취수준", icon: "📍", bg: "#eff6ff", border: "#3b82f6" },
@@ -856,8 +865,29 @@
             { key: "[상세 풀이]:", title: "4. 문제 풀이 제공", icon: "✍️", bg: "#f0fdf4", border: "#10b981" }
         ];
 
-        configs.forEach(conf => {
-            const content = text.split(conf.key)[1]?.split("[")[0] || "데이터를 분석 중이거나 형식이 일치하지 않습니다.";
+        configs.forEach((conf, index) => {
+            // [버그 수정]: '[' 기호로 무조건 자르지 않고, 다음 '키워드 태그'가 나올 때까지만 영리하게 자릅니다.
+            let content = "";
+            const startIndex = text.indexOf(conf.key);
+            
+            if (startIndex !== -1) {
+                const contentStart = startIndex + conf.key.length;
+                let nextKeyIndex = text.length; 
+                
+                configs.forEach((otherConf, otherIndex) => {
+                    if (index !== otherIndex) {
+                        const idx = text.indexOf(otherConf.key, contentStart);
+                        if (idx !== -1 && idx < nextKeyIndex) {
+                            nextKeyIndex = idx;
+                        }
+                    }
+                });
+                
+                content = text.substring(contentStart, nextKeyIndex).trim();
+            }
+
+            if (!content) content = "데이터를 분석 중이거나 형식이 일치하지 않습니다.";
+
             const card = document.createElement('div');
             card.style.cssText = `background: ${conf.bg}; border: 1px solid ${conf.border}44; border-left: 6px solid ${conf.border}; padding: 1.2rem; border-radius: 12px; margin-bottom: 1.2rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);`;
             
@@ -866,7 +896,7 @@
                     <span style="font-size:1.2rem;">${conf.icon}</span>
                     <strong style="font-size:1.1rem; color:#1e293b;">${conf.title}</strong>
                 </div>
-                <div class="analysis-content" style="white-space: pre-line; color:#334155; line-height:1.7; font-size:0.95rem;">${content.trim()}</div>
+                <div class="analysis-content" style="white-space: pre-line; color:#334155; line-height:1.7; font-size:0.95rem;">${content}</div>
             `;
             
             const contentDiv = card.querySelector('.analysis-content');
