@@ -788,21 +788,30 @@
 
         document.getElementById('analyze-btn').style.display = 'none';
         document.getElementById('analysis-loading').style.display = 'block';
-        document.getElementById('loading-status').innerText = "AI 교사가 문제를 정밀 분석 중입니다...";
+        document.getElementById('loading-status').innerText = "AI 교사가 문제를 정밀 분석 및 시각화 중입니다...";
 
         try {
             const base64Image = document.getElementById('image-preview').src.split(',')[1];
             
-            // 프롬프트: 인사말 배제 및 시각적 구조 요청
-            const prompt = `당신은 고등학교 수학 교사입니다. 인사말 없이 바로 분석 결과를 다음 구조로만 답변하세요.
-            
-            1. [성취기준 및 수준]: 2022 개정 성취기준 코드([10공수1-XX-XX])와 해당 문제의 성취수준(A~E) 판정 근거.
-            2. [핵심 개념]: 문제를 해결하기 위한 수학적 핵심 정의와 개념.
-            3. [상세 풀이]: 수험생이 이해하기 쉬운 단계별 논리적 풀이 과정.
-            
-            수식은 반드시 $ 기호를 사용한 LaTeX 문법을 사용하고 줄바꿈을 많이 활용하세요.`;
+            // 강력하고 엄격한 프롬프트 설정
+            const prompt = `당신은 대한민국 최고의 수학 교사이자 데이터 분석가입니다. 다음 지시사항을 '엄격히' 준수하여 답변하세요. 인사말은 절대 금지합니다.
 
-            // 모델명은 현재 가장 안정적인 최신 무료 모델인 gemini-3-flash-preview를 사용합니다.
+            1. [출력 태그 엄수]: 반드시 답변의 각 섹션 시작점에 [성취기준 및 수준], [핵심 개념], [상세 풀이] 라는 태그를 토씨 하나 틀리지 말고 대괄호까지 포함하여 명시하세요. 이 태그는 파싱의 기준이 됩니다.
+
+            2. [성취기준 및 수준]: 2022 개정 교육과정 성취기준 코드([10공수1-XX-XX] 형태)를 명시하고, 이 문항이 A~E 중 어느 수준인지 판정 근거와 함께 짧게 서술하세요.
+
+            3. [핵심 개념]: 
+               - 반드시 글머리 기호(•)를 사용하세요.
+               - 핵심 공식이나 정의만 1~2줄로 극도로 짧게 요약하세요.
+               - 장황한 설명은 배제하세요.
+
+            4. [상세 풀이]:
+               - '1단계: ..., 2단계: ...' 와 같이 명확한 단락 구분을 사용하세요.
+               - 가독성을 최우선으로 하세요.
+               - 중요: 일차함수, 이차함수, 원의 방정식, 도형 등 '시각적 그래프'가 필요한 문제라면, 풀이 하단에 반드시 HTML5 <svg> 태그를 사용하여 좌표축($x$, $y$축), 그래프 선, 주요 교점이 표현된 깔끔한 시각적 그래프 코드를 작성하세요. (width="300" height="200" 권장, 배경은 투명하거나 흰색).
+
+            모든 수식은 반드시 $ 기호를 사용한 LaTeX 문법을 사용하세요.`;
+
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -813,30 +822,27 @@
                             { inline_data: { mime_type: selectedFile.type, data: base64Image } }
                         ]
                     }],
-                    generationConfig: { temperature: 0.1, topP: 0.95, maxOutputTokens: 2048 }
+                    generationConfig: { temperature: 0.1, topP: 0.9, maxOutputTokens: 3072 }
                 })
             });
 
             if (!response.ok) {
                 const errData = await response.json();
                 if (errData.error?.status === "RESOURCE_EXHAUSTED") {
-                    throw new Error("오늘의 무료 할당량을 모두 사용했습니다. 설정(⚙️) 안내에 따라 새 프로젝트 키를 발급받아 입력해주세요!");
+                    throw new Error("할당량 초과! 설정(⚙️) 안내에 따라 새 프로젝트 키를 입력해주세요.");
                 }
-                throw new Error(errData.error?.message || "API 통신 오류");
+                throw new Error(errData.error?.message || "API 오류");
             }
 
             const result = await response.json();
             const analysisText = result.candidates[0].content.parts[0].text;
 
-            // 시인성 높은 결과 렌더링
             renderSophisticatedResult(analysisText);
 
             document.getElementById('analysis-loading').style.display = 'none';
             document.getElementById('analysis-result').style.display = 'block';
             
             if (window.MathJax) MathJax.typesetPromise();
-
-            // 백그라운드 저장 (변형 문항 생성 및 DB 저장)
             processAndSaveBackground(analysisText, apiKey);
 
         } catch (error) {
@@ -861,13 +867,22 @@
             const content = text.split(conf.key)[1]?.split("[")[0] || "정보를 불러오지 못했습니다.";
             const card = document.createElement('div');
             card.style.cssText = `background: ${conf.bg}; border: 1px solid ${conf.border}44; border-left: 6px solid ${conf.border}; padding: 1.2rem; border-radius: 12px; margin-bottom: 1.2rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);`;
+            
+            // innerHTML을 사용하여 SVG와 HTML 태그가 렌더링되도록 함
             card.innerHTML = `
                 <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.8rem;">
                     <span style="font-size:1.2rem;">${conf.icon}</span>
                     <strong style="font-size:1.1rem; color:#1e293b;">${conf.title}</strong>
                 </div>
-                <div style="white-space: pre-line; color:#334155; line-height:1.7; font-size:0.95rem;">${content.trim()}</div>
+                <div class="analysis-content" style="white-space: pre-line; color:#334155; line-height:1.7; font-size:0.95rem;">${content.trim()}</div>
             `;
+            
+            // SVG 코드가 포함된 경우 white-space: pre-line 때문에 깨지는 것 방지
+            const contentDiv = card.querySelector('.analysis-content');
+            if (content.includes('<svg')) {
+                contentDiv.style.whiteSpace = 'normal'; 
+            }
+            
             container.appendChild(card);
         });
     }
