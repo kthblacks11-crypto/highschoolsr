@@ -66,7 +66,7 @@ const subjectData = {
                     b: "복소수의 뜻과 성질을 설명할 수 있으며, 복소수의 사칙연산을 정확하게 수행할 수 있다.",
                     mid: "복소수의 뜻과 성질을 이해하고, 사칙연산을 수행할 수 있다.", 
                     d: "복소수의 뜻을 알고, 간단한 복소수의 사칙연산을 수행할 수 있다.",
-                    low: "복소수의 뜻을 알고, 안내된 절차에 따라 간단한 사칙연산을 수행할 수 있다." 
+                    low: "복소수의 뜻을 알고, 안내된 절차에 따라 간단 사칙연산을 수행할 수 있다." 
                 },
                 questions: [
                     { q: "음수의 제곱근의 성질 $\\sqrt{a}\\sqrt{b} = -\\sqrt{ab}$ ($a<0, b<0$)가 성립함을 허수단위 $i$를 사용하여 증명하고, 이를 활용하여 복잡한 무리식의 계산을 수행하시오.", level: "A", reason: "복소수의 성질 증명과 원리 이해를 바탕으로한 계산 능력을 평가합니다." },
@@ -215,7 +215,7 @@ const subjectData = {
                 desc: "직선의 방정식을 구할 수 있고, 두 직선의 위치 관계를 이해한다.",
                 levels: {
                     high: "직선의 방정식과 두 직선의 위치 관계를 이해하여 복합적인 문제를 해결할 수 있다.",
-                    b: "두 직선의 평행, 수직 조건을 활용하여 직선의 방정식을 구할 수 있다.",
+                    b: "두 직선의 평행, 수직 조건을 활용하여 직선의 방정식을 구할 수 단할 수 있다.",
                     mid: "주어진 조건에 맞는 직선의 방정식을 구할 수 있고, 평행과 수직 조건을 안다.",
                     d: "한 점과 기울기가 주어졌을 때 직선의 방정식을 구할 수 있다.",
                     low: "직선의 방정식의 기본 형태를 안다."
@@ -404,17 +404,66 @@ function shuffleArray(array) {
     return array;
 }
 
+// 모달 제어 함수들
 function openSettings() { 
     document.getElementById('api-key-input').value = localStorage.getItem('gemini_api_key') || "";
     document.getElementById('settings-modal').style.display = 'flex'; 
 }
 function closeSettings() { document.getElementById('settings-modal').style.display = 'none'; }
+function openFeedback() { document.getElementById('feedback-modal').style.display = 'flex'; }
+function closeFeedback() { document.getElementById('feedback-modal').style.display = 'none'; }
+function closeModal() { document.getElementById('level-modal').style.display = 'none'; }
+function closeAdminFeedback() { document.getElementById('admin-feedback-modal').style.display = 'none'; }
+
 function saveApiKey() {
     const key = document.getElementById('api-key-input').value.trim();
     if (key) {
         localStorage.setItem('gemini_api_key', key);
         alert("키가 저장되었습니다. 이제 분석 기능을 무료로 사용할 수 있습니다!");
         closeSettings();
+    }
+}
+
+// 💡 개발자에게 의견 보내기 (Firebase 연동)
+async function submitFeedback() {
+    const text = document.getElementById('feedback-text').value.trim();
+    if(!text) { alert("의견을 입력해주세요!"); return; }
+    try {
+        await db.collection('developer_feedback').add({
+            text: text,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        alert("소중한 의견이 성공적으로 전송되었습니다! 감사합니다.");
+        document.getElementById('feedback-text').value = "";
+        closeFeedback();
+    } catch(e) {
+        alert("전송 중 오류가 발생했습니다.");
+    }
+}
+
+// 📥 관리자용 의견 확인 (Firebase 읽기)
+async function openAdminFeedback() {
+    document.getElementById('admin-feedback-modal').style.display = 'flex';
+    const listEl = document.getElementById('admin-feedback-list');
+    listEl.innerHTML = "<p style='text-align:center; padding: 2rem;'>의견을 불러오는 중입니다...</p>";
+    try {
+        const snapshot = await db.collection('developer_feedback').orderBy('timestamp', 'desc').get();
+        if(snapshot.empty) {
+            listEl.innerHTML = "<p style='text-align:center; color:#64748b;'>아직 접수된 사용자 의견이 없습니다.</p>";
+            return;
+        }
+        let html = "";
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            const date = data.timestamp ? data.timestamp.toDate().toLocaleString() : "방금 전";
+            html += `<div style="background: white; padding: 1.2rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                        <p style="margin:0 0 0.5rem 0; font-size:0.8rem; color:var(--text-light); font-weight:bold;">🕒 ${date}</p>
+                        <p style="margin:0; font-size:0.95rem; white-space:pre-wrap; line-height:1.5;">${data.text}</p>
+                     </div>`;
+        });
+        listEl.innerHTML = html;
+    } catch(e) {
+        listEl.innerHTML = "<p style='color:red;'>의견을 불러오는데 실패했습니다.</p>";
     }
 }
 
@@ -491,11 +540,11 @@ async function analyzeProblem() {
 ${standardsInfo}
 </과목별 성취기준 목록>
 
-[핵심 개념]: 반드시 글머리 기호(•)를 사용하여 핵심 공식이나 정의만 1~2줄로 극도로 짧게 요약하세요.
+[핵심 개념]: 문제 해결에 필요한 핵심 공식, 정리, 또는 수학적 원리를 글머리 기호(•)를 사용하여 2~3가지로 명확하고 깊이 있게 제시하세요.
 
-[상세 풀이]: 가독성 좋은 단계별 풀이를 작성하세요. 반드시 '1단계:', '2단계:', '3단계:' 와 같이 '숫자+단계:' 형식으로 문단을 시작하세요. 그래프 시각화가 필요한 경우 반드시 HTML5 <svg> 태그를 사용하여 코드를 작성하세요.
+[상세 풀이]: 가독성 좋은 단계별 풀이를 작성하세요. 반드시 '1단계:', '2단계:', '3단계:' 와 같이 '숫자+단계:' 형식으로 문단을 시작하세요. 그래프 시각화가 필요한 경우 반드시 HTML5 <svg> 태그를 사용하여 코드를 작성하세요. 절대 '[상세 풀이]:' 라는 태그 이름을 변경하지 마세요.
 
-[중요 지침]: 모든 수학 기호, 변수, 숫자, 수식은 반드시 앞뒤로 $ 기호를 감싸서 LaTeX 문법으로 작성하세요. 부등호를 쓸 때는 반드시 \\lt, \\gt 로 쓰세요 (예: $x \\gt 0$).`;
+[중요 지침]: 모든 수학 기호, 변수, 숫자, 수식은 반드시 앞뒤로 $ 기호를 감싸서 LaTeX 문법으로 작성하세요. 수식 작성 시 일반 유니코드 특수문자(예: ×, ÷, ≤, ≥, ≠)를 절대 사용하지 말고, 반드시 LaTeX 명령어(예: \\times, \\div, \\le, \\ge, \\neq)를 사용하세요. 한글 텍스트와 수식 기호($) 사이에는 띄어쓰기를 하세요.`;
 
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
             method: 'POST',
@@ -548,9 +597,12 @@ function renderSophisticatedResult(rawText) {
     const container = document.getElementById('res-container');
     container.innerHTML = "";
 
-    let text = rawText.replace(/\*\*/g, '');
-    text = text.replace(/\[\s+/g, '[').replace(/\s+\]/g, ']');
-    
+    let text = rawText.replace(/\*\*/g, ''); 
+    text = text.replace(/\[\s+/g, '[').replace(/\s+\]/g, ']'); 
+    text = text.replace(/\[상세풀이\]:/g, '[상세 풀이]:'); 
+    text = text.replace(/\[문제 풀이 제공\]:/g, '[상세 풀이]:'); 
+    text = text.replace(/\[문제 풀이\]:/g, '[상세 풀이]:'); 
+
     const configs = [
         { key: "[교과 및 단원]:", title: "1. 교과명 및 단원명", icon: "📚", bg: "#f3f4f6", border: "#64748b" },
         { key: "[성취기준 및 수준]:", title: "2. 성취기준과 성취수준", icon: "📍", bg: "#eff6ff", border: "#3b82f6" },
@@ -723,7 +775,8 @@ async function startLevelMatching(code) {
         
         snapshot.forEach(doc => {
             const data = doc.data();
-            let extractedLevel = data.original_analysis?.match(/\[예상 성취수준.*?\]:\s*([A-E])/)?.[1] || "C"; 
+            // ✨ [버그 수정] 정규식을 최신 양식에 맞게 완벽하게 수정하여 A~E가 유지되도록 함
+            let extractedLevel = data.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1] || "C"; 
 
             combinedQuestions.push({
                 q: `<div style="background-color: #f0fdf4; padding: 10px; border-left: 4px solid #22c55e; margin-bottom: 10px; border-radius: 4px;">
@@ -890,8 +943,6 @@ function openModal(std) {
     }
 }
 
-function closeModal() { document.getElementById('level-modal').style.display = 'none'; }
-
 function resetAnalysis() {
     document.getElementById('problem-image').value = "";
     document.getElementById('preview-container').style.display = 'none';
@@ -922,7 +973,13 @@ async function reAnalyzeWithChat() {
     document.getElementById('loading-status').innerText = "대화 내용을 바탕으로 최적화된 결과를 도출 중입니다...";
 
     try {
-        let standardsInfo = subjectData[currentSubject].standards.map(s => `${s.code} ${s.desc}`).join('\n');
+        let standardsInfo = "";
+        for (const key in subjectData) {
+            if (subjectData[key].standards && subjectData[key].standards.length > 0) {
+                standardsInfo += `\n--- ${subjectData[key].title} ---\n`;
+                standardsInfo += subjectData[key].standards.map(s => `${s.code} ${s.desc}`).join('\n');
+            }
+        }
 
         const prompt = `당신은 대한민국 최고의 수학 교사입니다. 
         처음 분석했던 내용: ${currentChatContext}
@@ -933,16 +990,16 @@ async function reAnalyzeWithChat() {
         위의 대화 내역을 깊이 분석하여 '최종 최적화 분석 결과'를 도출하세요. 
         [중요 지침]: 무조건 교사의 의견을 따르지 마세요. 대화 내역 중 수학적으로, 그리고 교육과정상 '타당한 피드백'만 선별하여 객관적으로 반영하세요.
         
-        반드시 다음 4가지 대괄호 태그 형식을 유지하여 답변하세요:
+        반드시 다음 4가지 대괄호 태그 형식을 유지하여 답변하세요. 마크다운 볼드체(**)를 태그 이름에 절대 사용하지 마세요.
         [교과 및 단원]: 해당 문제의 교과명과 단원명
         [성취기준 및 수준]: 
         성취기준: [코드] 내용
         성취수준: A~E 중 택 1
         판정 이유: 최종적으로 확정된 판정 이유
-        [핵심 개념]: 요점 정리
-        [상세 풀이]: 최종적으로 확정된 논리적 풀이 및 그래프(SVG)
+        [핵심 개념]: 문제 해결에 필요한 핵심 공식, 정리, 또는 수학적 원리를 글머리 기호(•)를 사용하여 2~3가지로 명확하고 깊이 있게 제시하세요.
+        [상세 풀이]: 가독성 좋은 단계별 풀이를 작성하세요. 반드시 '1단계:', '2단계:' 처럼 시작하세요. 그래프(SVG) 필요시 추가. 절대 '[상세 풀이]:' 라는 태그 이름을 변경하지 마세요.
 
-        모든 수학 기호, 변수, 숫자, 수식은 반드시 앞뒤로 $ 기호를 감싸서 LaTeX 문법으로 작성하세요. 부등호를 쓸 때는 반드시 \\lt, \\gt 로 쓰세요 (예: $x \\gt 0$).`;
+        [중요 지침]: 모든 수학 기호, 변수, 숫자, 수식은 반드시 앞뒤로 $ 기호를 감싸서 LaTeX 문법으로 작성하세요. 수식 작성 시 유니코드 기호(≤, ≥, ≠ 등)는 절대 쓰지 말고 반드시 LaTeX 명령어(\\le, \\ge, \\neq)를 사용하세요. 한글과 수식($) 사이는 띄어쓰기를 하세요.`;
 
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
             method: 'POST',
@@ -967,7 +1024,6 @@ async function reAnalyzeWithChat() {
             MathJax.typesetClear();
             MathJax.typesetPromise([document.getElementById('analysis-result')]).catch(err => console.log(err));
         }
-        alert("대화 내용이 반영된 최적화 분석 결과가 출력되었습니다.");
 
     } catch (error) {
         alert("재분석 중 오류가 발생했습니다: " + error.message);
@@ -982,7 +1038,7 @@ async function sendChatMessage() {
     if(!message) return;
     
     const historyEl = document.getElementById('chat-history');
-    historyEl.innerHTML += `<div style="text-align: right; margin-bottom: 12px;"><span style="background: #e0e7ff; color: #1e40af; padding: 10px 14px; border-radius: 16px 16px 0 16px; display: inline-block; text-align: left; max-width: 80%">${message}</span></div>`;
+    historyEl.innerHTML += `<div style="text-align: right; margin-bottom: 12px;"><span style="background: #e0e7ff; color: #1e40af; padding: 10px 14px; border-radius: 16px 16px 0 16px; display: inline-block; text-align: left; max-width: 80%;">${message}</span></div>`;
     inputEl.value = '';
     historyEl.scrollTop = historyEl.scrollHeight;
 
@@ -995,7 +1051,7 @@ async function sendChatMessage() {
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         }).catch(e => console.warn("피드백 DB 저장 실패:", e));
 
-        const prompt = `당신은 수학 교사의 훌륭한 동료이자 수학 교육 전문가입니다. 앞서 당신은 수학 문제를 다음과 같이 분석했습니다:\n\n${currentChatContext}\n\n이에 대해 교사가 다음과 같은 의견/질문을 보냈습니다: "${message}"\n\n[중요 지침]: 교사의 의견이라고 해서 무조건 수용하지 마세요. 당신의 최초 분석이나 풀이가 수학적으로, 그리고 2022 개정 교육과정상 타당하다면 그 전문적인 근거를 정중히 설명하며 당신의 논리를 방어하세요. 반면, 교사의 지적이 수학적으로 더 엄밀하거나 타당하다면 실수를 인정하고 적극적으로 수정안을 논의하세요. 수식은 $ 기호를 사용한 LaTeX 문법으로 작성하세요. 부등호를 쓸 때는 반드시 \\lt, \\gt 로 쓰세요 (예: $x \\gt 0$).`;
+        const prompt = `당신은 수학 교사의 훌륭한 동료이자 수학 교육 전문가입니다. 앞서 당신은 수학 문제를 다음과 같이 분석했습니다:\n\n${currentChatContext}\n\n이에 대해 교사가 다음과 같은 의견/질문을 보냈습니다: "${message}"\n\n[중요 지침]: 답변은 가독성을 위해 적절한 단락 나누기, 글머리 기호(•), 굵은 글씨(**텍스트**)를 적극적으로 활용하여 시각적으로 깔끔하게 구성하세요. 교사의 의견이라고 해서 무조건 수용하지 마세요. 당신의 최초 분석이나 풀이가 수학적으로, 그리고 2022 개정 교육과정상 타당하다면 그 전문적인 근거를 정중히 설명하며 당신의 논리를 방어하세요. 반면, 교사의 지적이 수학적으로 더 엄밀하거나 타당하다면 실수를 인정하고 적극적으로 수정안을 논의하세요. 수식은 $ 기호를 사용한 LaTeX 문법으로 작성하세요. 부등호를 쓸 때는 반드시 \\lt, \\gt 로 쓰세요 (예: $x \\gt 0$).`;
         
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
             method: 'POST',
@@ -1006,7 +1062,12 @@ async function sendChatMessage() {
         const result = await response.json();
         const aiReply = result.candidates[0].content.parts[0].text;
         
-        historyEl.innerHTML += `<div style="text-align: left; margin-bottom: 12px;"><span style="background: white; border: 1px solid var(--border); padding: 10px 14px; border-radius: 16px 16px 16px 0; display: inline-block; max-width: 80%;">${aiReply}</span></div>`;
+        const formattedReply = aiReply
+            .replace(/\*\*(.*?)\*\*/g, '<strong style="color:#1e293b;">$1</strong>')
+            .replace(/\n/g, '<br>');
+
+        historyEl.innerHTML += `<div style="text-align: left; margin-bottom: 12px; line-height: 1.7;"><span style="background: white; border: 1px solid var(--border); padding: 12px 16px; border-radius: 16px 16px 16px 0; display: inline-block; max-width: 85%; font-size: 0.95rem;">${formattedReply}</span></div>`;
+        
         if (window.MathJax) {
             MathJax.typesetClear();
             MathJax.typesetPromise([historyEl]).catch(err => console.log(err));
