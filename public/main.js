@@ -902,11 +902,22 @@ function showSection(id) {
     }
 }
 
+// main.js 수정
 function changeSubject() {
     currentSubject = document.getElementById('math-subjects').value;
     const data = subjectData[currentSubject];
-    initDashboard(); initLevelQuiz(); initChecklist();
+    
+    // 💡 상단 제목과 부제(단원명)를 과목 데이터에 맞게 업데이트
+    if (data) {
+        document.getElementById('main-title').innerText = data.title;
+        document.getElementById('main-subtitle').innerText = data.subtitle;
+    }
+    
+    initDashboard(); 
+    initLevelQuiz(); 
+    initChecklist();
 }
+
 
 function initDashboard() {
     const container = document.getElementById('card-container');
@@ -1162,7 +1173,7 @@ async function syncPendingFeedback() {
     localStorage.setItem('pending_feedback', JSON.stringify(remaining));
 }
 
-window.onlowindow.onload = () => {
+window.onload = () => {
     changeSubject();
-    syncPendingFeedback(); // 앱 실행 시 밀린 의견 몰래 전송하기
+    syncPendingFeedback(); 
 };

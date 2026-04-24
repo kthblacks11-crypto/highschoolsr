@@ -22,20 +22,64 @@ header {
     box-shadow: 0 4px 15px rgba(0,0,0,0.1);
     position: relative;
 }
+/* 🟢 지운 자리에 이 코드를 붙여넣으세요 */
 .header-container {
-    max-width: 1200px; margin: 0 auto;
-    display: flex; justify-content: space-between; align-items: center;
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: center; /* 제목을 정중앙으로 */
+    align-items: center;
+    position: relative; /* 버튼 배치를 위한 기준점 */
+    padding: 1rem 0; /* 위아래 여백을 약간 줍니다 */
 }
-#main-title { margin: 0; font-size: 1.6rem; font-weight: 800; letter-spacing: -0.5px; }
-#main-subtitle { margin: 5px 0 0; font-size: 0.95rem; color: #94a3b8; font-weight: 500; }
 
-.header-actions { display: flex; gap: 0.8rem; align-items: center; }
-.settings-btn {
-    background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
-    color: white; padding: 0.6rem; border-radius: 8px; cursor: pointer; font-size: 1.1rem; transition: 0.2s;
+.header-title-group {
+    text-align: center;
 }
-.settings-btn:hover { background: rgba(255,255,255,0.2); }
-.feedback-btn { font-size: 0.9rem; font-weight: bold; padding: 0.6rem 1rem; border-radius: 20px; }
+
+#main-title { 
+    margin: 0; 
+    font-size: 1.4rem; /* 제목 크기 살짝 조절 */
+    font-weight: 800; 
+    letter-spacing: -0.5px;
+}
+
+#main-subtitle { 
+    margin: 5px 0 0; 
+    font-size: 0.9rem; 
+    color: #94a3b8; 
+    font-weight: 500;
+}
+
+.header-actions {
+    position: absolute; /* 제목과 상관없이 우측 고정 */
+    right: 1rem;
+    display: flex;
+    gap: 0.5rem; /* 버튼 사이 간격 좁힘 */
+    align-items: center;
+}
+
+/* 버튼 크기를 전체적으로 작게 조절 */
+.settings-btn {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: white;
+    padding: 0.4rem 0.7rem; /* 패딩 축소 */
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem; /* 글자 크기 축소 */
+    transition: 0.2s;
+}
+
+.settings-btn:hover { 
+    background: rgba(255,255,255,0.2); 
+}
+
+.feedback-btn {
+    font-size: 0.8rem; /* 글자 크기 축소 */
+    padding: 0.4rem 0.8rem;
+    border-radius: 15px;
+}
 
 .subject-selector { text-align: center; margin: 2rem 0 1rem; }
 .subject-selector select { padding: 0.6rem 1.2rem; border-radius: 8px; border: 2px solid var(--border); font-weight: bold; color: var(--primary); font-size: 1rem;}
