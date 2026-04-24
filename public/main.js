@@ -22,6 +22,7 @@ auth.onAuthStateChanged((user) => {
         loginBtn.style.display = 'none';
         logoutBtn.style.display = 'inline-block';
         userInfo.innerText = user.displayName + " 선생님";
+        initChecklist(); // 로그인 성공 시 체크리스트 데이터 불러오기
         if (user.email === "kthblacks11@gmail.com") {
             adminBtn.style.display = 'inline-block';
         } else {
@@ -32,6 +33,7 @@ auth.onAuthStateChanged((user) => {
         logoutBtn.style.display = 'none';
         userInfo.innerText = "";
         if(adminBtn) adminBtn.style.display = 'none'; 
+        initChecklist(); // 로그아웃 시 화면 초기화
     }
 });
 
@@ -59,7 +61,11 @@ function shuffleArray(array) {
 }
 
 // 모달 설정
-function openSettings() { 
+async function openSettings() { 
+    // API 키를 넣기 전에도 반드시 로그인이 되어있어야 함
+    const isLoggedIn = await checkLogin();
+    if (!isLoggedIn) return;
+    
     document.getElementById('api-key-input').value = localStorage.getItem('gemini_api_key') || "";
     document.getElementById('settings-modal').style.display = 'flex'; 
 }
@@ -191,8 +197,11 @@ async function checkApiError(response) {
 
 // 🎯 분석 시작
 async function analyzeProblem() {
-    const apiKey = localStorage.getItem('gemini_api_key');
+    // 분석을 시작하기 전에 로그인 체크
+    const isLoggedIn = await checkLogin();
+    if (!isLoggedIn) return;
 
+    const apiKey = localStorage.getItem('gemini_api_key');
     if (!apiKey) {
         alert("⚙️ 분석을 위해서는 구글 AI 스튜디오 API 키 연결이 필요합니다.");
         openSettings();
@@ -564,11 +573,22 @@ function backToStandardSelection() {
     document.getElementById('quiz-level-matching').style.display = 'none';
 }
 
-function initChecklist() {
+async function initChecklist() {
     const container = document.getElementById('checklist-container');
     container.innerHTML = "";
     if (!subjectData[currentSubject]) return;
-    const saved = JSON.parse(localStorage.getItem('check_' + currentSubject)) || {};
+
+    let saved = {};
+    // 로그인이 되어 있다면 파이어베이스에서 기존 데이터를 불러옴
+    if (auth.currentUser) {
+        try {
+            const doc = await db.collection('user_checklists').doc(auth.currentUser.uid).get();
+            if (doc.exists) { saved = doc.data()[currentSubject] || {}; }
+        } catch (e) { console.warn("DB 로드 실패"); }
+    } else {
+        saved = JSON.parse(localStorage.getItem('check_' + currentSubject)) || {};
+    }
+
     subjectData[currentSubject].standards.forEach(std => {
         const div = document.createElement('div');
         div.className = 'check-item';
@@ -578,13 +598,26 @@ function initChecklist() {
     });
 }
 
-function saveChecklist() {
+async function saveChecklist() {
+    // 저장하기 전 로그인 체크 (로그인 안되어있으면 팝업 뜸)
+    const isLoggedIn = await checkLogin();
+    if (!isLoggedIn) return;
+
     const checks = {};
     document.querySelectorAll('#checklist-container input').forEach(input => {
         checks[input.id.replace('c-', '')] = input.checked;
     });
-    localStorage.setItem('check_' + currentSubject, JSON.stringify(checks));
-    alert("저장되었습니다.");
+
+    // 파이어베이스(클라우드)에 영구 저장
+    try {
+        await db.collection('user_checklists').doc(auth.currentUser.uid).set({
+            [currentSubject]: checks
+        }, { merge: true });
+        alert("✅ 진행 상황이 클라우드에 안전하게 저장되었습니다.\n(다음에 접속해도 유지됩니다.)");
+    } catch (e) {
+        console.error("저장 실패:", e);
+        alert("⚠️ 저장 중 오류가 발생했습니다.");
+    }
 }
 
 function openModal(std) {
@@ -702,3 +735,18 @@ window.onload = () => {
     changeSubject();
     syncPendingFeedback(); 
 };
+
+// 🟢 기능을 실행하기 전 로그인이 되어있는지 확인하고, 안 되어있으면 팝업을 띄우는 함수
+async function checkLogin() {
+    if (!auth.currentUser) {
+        alert("이 기능을 사용하려면 진행 상황 저장을 위해 '구글 아이디로 시작' 로그인이 필요합니다.\n확인을 누르면 로그인 화면으로 이동합니다.");
+        try {
+            await auth.signInWithPopup(provider);
+            return true; // 로그인 성공
+        } catch (error) {
+            console.error("로그인 취소 또는 실패", error);
+            return false; // 로그인 실패
+        }
+    }
+    return true; // 이미 로그인 되어있음
+}
