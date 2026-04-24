@@ -391,30 +391,29 @@ async function processAndSaveBackground(analysisText, apiKey) {
     } catch (e) { console.warn("Background Save Failed:", e); }
 }
 
+// 🟢 탭 이동 시 화면 덜컹거림(레이아웃 점프) 방지가 적용된 함수
 function showSection(id) {
     document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById(id).classList.add('active');
+    
     const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(`'${id}'`));
     if (activeBtn) activeBtn.classList.add('active');
     if (id === 'quiz') initLevelQuiz();
 
+    // 과목 선택창과 부제목 요소를 가져옵니다.
     const subjectSelector = document.querySelector('.subject-selector');
-    const mainSubtitle = document.getElementById('main-subtitle');
-    
-    if (id === 'problem-analysis') {
-        subjectSelector.style.display = 'none'; 
-        if(mainSubtitle) mainSubtitle.style.display = 'none'; 
-    } else {
-        subjectSelector.style.display = 'block';
-        if(mainSubtitle) mainSubtitle.style.display = 'block'; 
-    }
+    const subTitle = document.getElementById('sub-title'); 
 
-    const subjectSelectorStyle = document.querySelector('.subject-selector');
     if (id === 'problem-analysis') {
-        subjectSelectorStyle.style.visibility = 'hidden';
+        // 문제 분석 탭일 때: display: none; 대신 visibility: hidden; 을 사용하여 
+        // 눈에만 안 보이게 숨기고 원래 차지하던 빈 공간은 뼈대처럼 남겨둡니다.
+        if (subjectSelector) subjectSelector.style.visibility = 'hidden';
+        if (subTitle) subTitle.style.visibility = 'hidden';
     } else {
-        subjectSelectorStyle.style.visibility = 'visible';
+        // 다른 탭일 때: 다시 눈에 보이게 돌려놓습니다.
+        if (subjectSelector) subjectSelector.style.visibility = 'visible';
+        if (subTitle) subTitle.style.visibility = 'visible';
     }
 }
 
