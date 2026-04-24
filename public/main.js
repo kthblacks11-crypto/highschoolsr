@@ -906,15 +906,14 @@ function showSection(id) {
     }
 }
 
-// main.js 수정
+// main.js 수정 1: 간판은 놔두고 부제만 바꾸기
 function changeSubject() {
     currentSubject = document.getElementById('math-subjects').value;
     const data = subjectData[currentSubject];
     
-    // 💡 상단 제목과 부제(단원명)를 과목 데이터에 맞게 업데이트
     if (data) {
-        document.getElementById('main-title').innerText = data.title;
-        document.getElementById('main-subtitle').innerText = data.subtitle;
+        // 메인 타이틀('main-title')은 건드리지 않고, 부제('main-subtitle')만 변경합니다.
+        document.getElementById('main-subtitle').innerText = "[" + data.title + "] " + data.subtitle;
     }
     
     initDashboard(); 
@@ -934,7 +933,7 @@ function initDashboard() {
         card.onclick = () => openModal(std);
         container.appendChild(card);
     });
-    if (window.MathJax) { MathJax.typesetClear(); MathJax.typesetPromise([container]); }
+    if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([container]); }
 }
 
 function initLevelQuiz() {
@@ -1011,7 +1010,7 @@ function loadLevelQuestion() {
         btn.onclick = () => checkLevelAnswer(level, btn);
         optionsBox.appendChild(btn);
     });
-    if (window.MathJax) { MathJax.typesetClear(); MathJax.typesetPromise([qBox]); }
+    if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([qBox]); }
 }
 
 function checkLevelAnswer(selectedLevel, btn) {
@@ -1033,7 +1032,7 @@ function checkLevelAnswer(selectedLevel, btn) {
         });
     }
     document.getElementById('next-q-btn').style.display = 'block';
-    if (window.MathJax) { MathJax.typesetClear(); MathJax.typesetPromise([fb]); }
+    if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([fb]); }
 }
 
 function nextLevelQuestion() {
@@ -1151,7 +1150,7 @@ async function sendChatMessage() {
         const formattedReply = aiReply.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
 
         historyEl.innerHTML += `<div style="text-align: left; margin-bottom: 12px;"><span style="background: white; border: 1px solid var(--border); padding: 12px 16px; border-radius: 16px 16px 16px 0; display: inline-block; max-width: 85%;">${formattedReply}</span></div>`;
-        if (window.MathJax) { MathJax.typesetClear(); MathJax.typesetPromise([historyEl]); }
+        if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([historyEl]); }
         historyEl.scrollTop = historyEl.scrollHeight;
     } catch(e) { historyEl.innerHTML += `<div style="color: red;">오류가 발생했습니다.</div>`; }
 }
