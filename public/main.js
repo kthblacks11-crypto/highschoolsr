@@ -1,7 +1,11 @@
 const firebaseConfig = {
+    apiKey: "AIzaSyDq5c9_BMx-zoYHUAGAp8B3jbvi3tj8HXo",
+    authDomain: "math-asa-project-2026.firebaseapp.com",
     projectId: "math-asa-project-2026",
-    storageBucket: "math-asa-project-2026.appspot.com",
-};
+    storageBucket: "math-asa-project-2026.firebasestorage.app",
+    messagingSenderId: "1045151452788",
+    appId: "1:1045151452788:web:bf69cb26e0be84dd8b0b21"
+  };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const storage = firebase.storage();
