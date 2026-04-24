@@ -430,45 +430,45 @@ function initDashboard() {
     const container = document.getElementById('card-container');
     container.innerHTML = "";
     if (!subjectData[currentSubject]) return;
-
+    
     subjectData[currentSubject].standards.forEach(std => {
         const card = document.createElement('div');
         card.className = 'card';
-        // 카드 내부를 가로로 배치하기 위한 스타일 추가
+        // 💡 모바일 화면 대응: 화면이 좁으면 버튼이 아래 줄로 자연스럽게 넘어가도록 수정
         card.style.display = 'flex';
         card.style.justifyContent = 'space-between';
         card.style.alignItems = 'center';
+        card.style.flexWrap = 'wrap'; 
+        card.style.gap = '1rem'; 
 
-        // 왼쪽 텍스트 영역 (클릭 시 기존처럼 성취수준 모달 창 띄우기)
         const textArea = document.createElement('div');
         textArea.style.cursor = 'pointer';
         textArea.style.flex = '1';
+        textArea.style.minWidth = '200px'; // 글씨 영역 최소 너비 보장
         textArea.innerHTML = `<h3>${std.code}</h3><p>${std.desc}</p>`;
         textArea.onclick = () => openModal(std);
         card.appendChild(textArea);
 
-        // 해당 성취기준에 문항(questions)이 있는 경우에만 우측에 버튼 추가
-        if (std.questions && std.questions.length > 0) {
-            const btnArea = document.createElement('div');
-            const quizBtn = document.createElement('button');
-            quizBtn.className = 'save-btn'; 
-            quizBtn.style.width = 'auto';
-            quizBtn.style.marginTop = '0';
-            quizBtn.style.marginLeft = '1rem';
-            quizBtn.style.padding = '0.6rem 1rem';
-            quizBtn.style.fontSize = '0.9rem';
-            quizBtn.innerHTML = '📝 문항 매칭 연습';
+        // 💡 삭제했던 조건문 제거: 이제 문제가 있든 없든 모든 카드에 버튼 생성
+        const btnArea = document.createElement('div');
+        btnArea.style.flexShrink = '0'; // 버튼 크기가 찌그러지는 것 방지
 
-            // 버튼 클릭 시 퀴즈 화면으로 바로 넘어가도록 설정
-            quizBtn.onclick = (e) => {
-                e.stopPropagation(); // 카드의 모달창 클릭 이벤트가 같이 실행되는 것을 방지
-                showSection('quiz'); // 퀴즈 화면 탭으로 강제 이동
-                startLevelMatching(std.code); // 해당 코드의 퀴즈 시작
-            };
-
-            btnArea.appendChild(quizBtn);
-            card.appendChild(btnArea);
-        }
+        const quizBtn = document.createElement('button');
+        quizBtn.className = 'save-btn'; 
+        quizBtn.style.width = 'auto';
+        quizBtn.style.marginTop = '0';
+        quizBtn.style.padding = '0.6rem 1rem';
+        quizBtn.style.fontSize = '0.9rem';
+        quizBtn.innerHTML = '📝 문항 매칭 연습';
+        
+        quizBtn.onclick = (e) => {
+            e.stopPropagation(); 
+            showSection('quiz'); 
+            startLevelMatching(std.code); 
+        };
+        
+        btnArea.appendChild(quizBtn);
+        card.appendChild(btnArea);
 
         container.appendChild(card);
     });
@@ -497,7 +497,9 @@ function initLevelQuiz() {
 async function startLevelMatching(code) {
     currentStandardCode = code; currentLevelQ = 0;
     const standard = subjectData[currentSubject].standards.find(s => s.code === code);
-    let combinedQuestions = [...standard.questions]; 
+    
+    // 💡 에러 방지 핵심: 해당 성취기준에 문제가 없으면 빈 배열([])로 안전하게 시작
+    let combinedQuestions = standard.questions ? [...standard.questions] : []; 
 
     try {
         const snapshot = await db.collection('transformed_bank').where('standard_code', '==', code).get();
@@ -530,7 +532,16 @@ async function startLevelMatching(code) {
         <div class="guide-item"><strong>D (미흡)</strong> ${standard.levels.d || standard.levels.mid.replace("이해하고", "알고").replace("계산을 할 수 있다", "간단한 계산을 할 수 있다")}</div>
         <div class="guide-item"><strong>E (하)</strong> ${standard.levels.low}</div>
     `;
-    loadLevelQuestion();
+    
+    // 💡 변경점: 만약 데이터베이스에도, 기본 데이터에도 등록된 문제가 0개라면 안내 띄우기
+    if (currentQuestions.length === 0) {
+        document.getElementById('level-question-text').innerHTML = "<p style='text-align:center; margin-top:2rem;'>아직 이 성취기준에 등록된 문항이 없습니다.<br>문제 분석하기 기능을 통해 문항을 추가해 보세요!</p>";
+        document.getElementById('level-options').innerHTML = '';
+        document.getElementById('level-feedback').style.display = 'none';
+        document.getElementById('next-q-btn').style.display = 'none';
+    } else {
+        loadLevelQuestion();
+    }
 }
 
 function loadLevelQuestion() {
