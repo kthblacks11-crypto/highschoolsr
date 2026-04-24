@@ -14,14 +14,24 @@ auth.onAuthStateChanged((user) => {
     const loginBtn = document.getElementById('login-btn');
     const logoutBtn = document.getElementById('logout-btn');
     const userInfo = document.getElementById('user-info');
+    const adminBtn = document.getElementById('admin-btn'); // 관리자 버튼 찾기
+
     if (user) {
         loginBtn.style.display = 'none';
         logoutBtn.style.display = 'inline-block';
         userInfo.innerText = user.displayName + " 선생님";
+        
+        // 로그인한 사람이 선생님(관리자)일 때만 관리자 버튼 짠! 하고 나타남
+        if (user.email === "kthblacks11@gmail.com") {
+            adminBtn.style.display = 'inline-block';
+        } else {
+            adminBtn.style.display = 'none';
+        }
     } else {
         loginBtn.style.display = 'inline-block';
         logoutBtn.style.display = 'none';
         userInfo.innerText = "";
+        if(adminBtn) adminBtn.style.display = 'none'; // 로그아웃하면 숨김
     }
 });
 
@@ -885,8 +895,11 @@ function showSection(id) {
     if (id === 'quiz') initLevelQuiz();
 
     const subjectSelector = document.querySelector('.subject-selector');
-    if (id === 'problem-analysis') subjectSelector.style.display = 'none';
-    else subjectSelector.style.display = 'block';
+    if (id === 'problem-analysis') {
+        subjectSelector.style.visibility = 'hidden';
+    } else {
+        subjectSelector.style.visibility = 'visible';
+    }
 }
 
 function changeSubject() {
