@@ -161,19 +161,29 @@ function displayPreview(file) {
     reader.readAsDataURL(file);
 }
 
-// 🟢 영어 에러를 친절한 한글로 바꿔주는 마법의 함수
+// 🟢 1. 영어 에러를 친절한 한글로 바꿔주는 마법의 함수 (업그레이드)
 async function checkApiError(response) {
     if (!response.ok) {
-        const errData = await response.json();
-        const errMsg = errData.error?.message || "";
+        let errMsg = "";
+        try {
+            // 에러 메시지 추출 시도
+            const errData = await response.json();
+            errMsg = errData.error?.message || "";
+        } catch(e) {
+            errMsg = response.statusText;
+        }
         
         let koreanError = "서버와 통신 중 알 수 없는 문제가 발생했습니다.";
-        if (response.status === 400) koreanError = "이미지나 요청 형식이 잘못되었습니다. 다시 업로드해주세요.";
+        
+        if (response.status === 400) {
+            if (errMsg.includes("API key not valid")) koreanError = "입력하신 API 키가 유효하지 않습니다. 키를 다시 확인해주세요.";
+            else koreanError = "이미지나 요청 형식이 잘못되었습니다. 다시 업로드해주세요.";
+        }
         else if (response.status === 401 || response.status === 403) koreanError = "입력하신 API 키가 잘못되었거나 권한이 없습니다. API 키를 다시 확인해주세요!";
         else if (response.status === 404) koreanError = "AI 모델 버전을 찾을 수 없습니다. (시스템 관리자에게 문의하세요)";
-        else if (response.status === 429) koreanError = "무료 사용량 한도를 초과했습니다! 약 1분 뒤에 다시 시도해주세요.";
+        else if (response.status === 429 || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED")) koreanError = "무료 사용량(할당량) 한도를 초과했습니다! ⚙️설정에서 새로운 API 키를 발급받아 입력해주세요.";
         else if (response.status === 500) koreanError = "구글 AI 서버 내부에서 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
-        else if (response.status === 503 || errMsg.includes("high demand")) koreanError = "현재 구글 서버에 접속자가 너무 많아 일시적으로 바쁩니다! 10초만 기다렸다가 다시 눌러주세요.";
+        else if (response.status === 503 || errMsg.includes("high demand") || errMsg.includes("overloaded")) koreanError = "현재 구글 서버에 접속자가 너무 많아 일시적으로 바쁩니다! 10초만 기다렸다가 다시 눌러주세요.";
 
         throw new Error(koreanError);
     }
@@ -251,13 +261,18 @@ ${standardsInfo}
         }
         processAndSaveBackground(analysisText, apiKey);
 
-    } catch (error) {
-        // 🟢 예쁜 한글 안내창 띄우기
-        alert("⚠️ 분석 안내:\n" + error.message);
+} catch (error) {
+        let finalMsg = error.message;
+        if (error.name === 'TypeError' && finalMsg.includes('Failed to fetch')) {
+            finalMsg = "인터넷 연결이 불안정하거나 방화벽에 의해 차단되었습니다. 네트워크를 확인해주세요.";
+        }
+        alert("⚠️ 분석 안내:\n" + finalMsg);
         document.getElementById('analysis-loading').style.display = 'none';
         document.getElementById('analyze-btn').style.display = 'block';
     }
-}
+} // 👈 이 중괄호가 analyzeProblem 함수 전체를 닫아주는 역할입니다. 실수로 지워지기 쉬우니 꼭 확인해 주세요!
+
+
 
 // 🎯 글씨 잘림 완벽 방어 및 렌더링
 function renderSophisticatedResult(rawText) {
@@ -494,6 +509,7 @@ function loadLevelQuestion() {
     if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([qBox]); }
 }
 
+// 🟢 2. 문항 매칭 연습 오답 시 예제 출력 로직 복구
 function checkLevelAnswer(selectedLevel, btn) {
     const question = currentQuestions[currentLevelQ];
     const fb = document.getElementById('level-feedback');
@@ -507,7 +523,25 @@ function checkLevelAnswer(selectedLevel, btn) {
         fb.style.color = "#166534"; fb.style.backgroundColor = '#dcfce7';
         btn.style.border = '3px solid #166534'; btn.style.opacity = '1';
     } else {
-        fb.innerHTML = `❌ <strong>오답입니다.</strong> 이 문항은 <strong>'${question.level}'</strong> 수준입니다.<br><br><strong>[이유]</strong> ${question.reason} ${answerHTML}`;
+        // --- 복구된 오답 비교 로직 시작 ---
+        const standard = subjectData[currentSubject].standards.find(s => s.code === currentStandardCode);
+        const wrongLevelExample = standard.questions.find(q => q.level === selectedLevel);
+        let comparativeText = "";
+        
+        if (wrongLevelExample) {
+            comparativeText = `<hr style="margin: 1rem 0; border: 0; border-top: 1px solid #fca5a5;">
+                               <div style="text-align: left; font-size: 0.9rem;">
+                               <strong>💡 비교해 보세요:</strong><br>
+                               선택하신 <strong>'${selectedLevel}'</strong> 수준은 보통 아래와 같은 문항입니다.<br><br>
+                               <div style="background: white; padding: 0.8rem; border-radius: 6px; border-left: 4px solid #f87171; margin-bottom: 0.5rem; font-size: 0.85rem; color: #1e293b;">
+                                   ${wrongLevelExample.q}
+                               </div>
+                               <em>* 현재 제시된 문항은 '${question.level}' 수준의 특징을 더 강하게 가지고 있습니다.</em>
+                               </div>`;
+        }
+        // --- 복구된 오답 비교 로직 끝 ---
+
+        fb.innerHTML = `❌ <strong>오답입니다.</strong> 이 문항은 <strong>'${question.level}'</strong> 수준입니다.<br><br><strong>[이유]</strong> ${question.reason} ${answerHTML} ${comparativeText}`;
         fb.style.color = "#991b1b"; fb.style.backgroundColor = '#fee2e2';
         btn.style.border = '3px solid #ef4444'; btn.style.opacity = '1';
         document.querySelectorAll('#level-options .option-btn').forEach(b => {

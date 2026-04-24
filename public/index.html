@@ -183,6 +183,49 @@
     </div>
 </div>
 
+<div class="modal" id="settings-modal">
+    <div class="modal-content" style="max-width: 550px;">
+        <span class="close-btn" onclick="closeSettings()">&times;</span>
+        <h2 style="margin-top: 0; color: var(--primary);">⚙️ 구글 AI API 키 설정</h2>
+        
+        <div style="background: #f8fafc; padding: 1.2rem; border-radius: 10px; border: 1px solid #cbd5e1; margin-bottom: 1.5rem; font-size: 0.9rem; line-height: 1.6;">
+            <p style="margin-top: 0; font-weight: bold; color: #1e293b; font-size: 1rem;">💡 API 키란 무엇인가요?</p>
+            <p style="color: #475569;">이 시스템은 구글의 인공지능을 사용해 수학 문제를 분석합니다. 인공지능을 사용하기 위한 일종의 '개인 무료 출입증'이 바로 API 키입니다.</p>
+
+            <hr style="border:0; border-top: 1px dashed #cbd5e1; margin: 1rem 0;">
+
+            <p style="margin-top: 0; font-weight: bold; color: #1e293b; font-size: 1rem;">🚀 1분 만에 API 키 발급받는 방법</p>
+            <ol style="margin: 0; padding-left: 1.5rem; color: #334155;">
+                <li style="margin-bottom: 0.8rem;">
+                    구글 계정으로 로그인한 상태에서 아래 파란색 링크를 클릭하세요.<br>
+                    👉 <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: #2563eb; font-weight: bold; text-decoration: underline;">[구글 AI 스튜디오 바로가기]</a>
+                </li>
+                <li style="margin-bottom: 0.8rem;">
+                    새 창이 열리면 화면 왼쪽 상단에 있는 파란색 <strong>[Create API key]</strong> 버튼을 클릭하세요.
+                </li>
+                <li style="margin-bottom: 0.8rem;">
+                    중앙에 뜨는 창에서 <strong>'Create API key in new project'</strong>라는 버튼을 한 번 더 누릅니다. (로딩이 5~10초 정도 걸릴 수 있습니다.)
+                </li>
+                <li style="margin-bottom: 0.8rem;">
+                    <strong>'AIzaSy...'</strong> 로 시작하는 아주 긴 영어/숫자 비밀번호가 나타납니다. 그 옆에 있는 <strong>[Copy] (복사)</strong> 버튼을 누르세요.
+                </li>
+                <li>
+                    다시 이 화면으로 돌아와서, 복사한 키를 아래 빈칸에 붙여넣기(Ctrl+V) 하고 저장 버튼을 누르면 완료됩니다!
+                </li>
+            </ol>
+
+            <p style="margin-top: 1rem; font-size: 0.85rem; color: #b91c1c; background: #fee2e2; padding: 0.8rem; border-radius: 6px; font-weight: 500;">
+                ※ <strong>팁:</strong> 만약 사용 중에 '무료 할당량 초과' 에러가 나면, 위 사이트에 다시 접속해서 새 키를 하나 더 만들어 교체해주면 계속 무료로 사용할 수 있습니다.
+            </p>
+        </div>
+
+        <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #0f172a;">🔑 복사한 API 키 입력</label>
+        <input type="password" id="api-key-input" placeholder="이곳을 클릭하고 Ctrl+V 를 눌러 붙여넣으세요" style="width: 100%; padding: 0.8rem; border: 2px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; margin-bottom: 1rem; font-size: 1rem;">
+        
+        <button class="save-btn" onclick="saveApiKey()">설정 저장하고 분석 시작하기</button>
+    </div>
+</div>
+
 <div class="modal" id="level-modal">
     <div class="modal-content">
         <span class="close-btn" onclick="closeModal()">&times;</span>
