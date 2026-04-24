@@ -154,3 +154,30 @@ header {
     .pc-guide { display: block !important; }
     .mobile-guide { display: none !important; }
 }
+/* 성취기준 카드 레이아웃 최적화 */
+.card {
+    display: flex !important;
+    flex-direction: column; /* 모바일에서는 세로로 배치 */
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+/* PC나 태블릿처럼 화면이 넓어지면 가로로 배치 */
+@media (min-width: 600px) {
+    .card {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+    }
+}
+
+/* 모바일에서 버튼이 꽉 차게 보이도록 설정 */
+.card .quiz-btn-container {
+    width: 100%;
+}
+
+@media (min-width: 600px) {
+    .card .quiz-btn-container {
+        width: auto;
+    }
+}

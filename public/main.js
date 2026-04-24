@@ -399,19 +399,17 @@ function showSection(id) {
     
     const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(`'${id}'`));
     if (activeBtn) activeBtn.classList.add('active');
-    if (id === 'quiz') initLevelQuiz();
+    
+    // 💡 삭제된 부분: if (id === 'quiz') initLevelQuiz(); (이놈이 범인이었습니다!)
 
     // 과목 선택창과 부제목 요소를 가져옵니다.
     const subjectSelector = document.querySelector('.subject-selector');
     const subTitle = document.getElementById('sub-title'); 
 
     if (id === 'problem-analysis') {
-        // 문제 분석 탭일 때: display: none; 대신 visibility: hidden; 을 사용하여 
-        // 눈에만 안 보이게 숨기고 원래 차지하던 빈 공간은 뼈대처럼 남겨둡니다.
         if (subjectSelector) subjectSelector.style.visibility = 'hidden';
         if (subTitle) subTitle.style.visibility = 'hidden';
     } else {
-        // 다른 탭일 때: 다시 눈에 보이게 돌려놓습니다.
         if (subjectSelector) subjectSelector.style.visibility = 'visible';
         if (subTitle) subTitle.style.visibility = 'visible';
     }
@@ -422,7 +420,9 @@ function changeSubject() {
     const data = subjectData[currentSubject];
     if (data) { document.getElementById('main-subtitle').innerText = "[" + data.title + "] " + data.subtitle; }
     initDashboard(); 
-    initLevelQuiz(); 
+    
+    // 💡 삭제된 부분: initLevelQuiz(); 
+    
     initChecklist();
 }
 
@@ -433,32 +433,28 @@ function initDashboard() {
     
     subjectData[currentSubject].standards.forEach(std => {
         const card = document.createElement('div');
-        card.className = 'card';
-        // 💡 모바일 화면 대응: 화면이 좁으면 버튼이 아래 줄로 자연스럽게 넘어가도록 수정
-        card.style.display = 'flex';
-        card.style.justifyContent = 'space-between';
-        card.style.alignItems = 'center';
-        card.style.flexWrap = 'wrap'; 
-        card.style.gap = '1rem'; 
+        card.className = 'card'; // style.css에서 설정한 레이아웃 적용
 
+        // 텍스트 영역
         const textArea = document.createElement('div');
         textArea.style.cursor = 'pointer';
-        textArea.style.flex = '1';
-        textArea.style.minWidth = '200px'; // 글씨 영역 최소 너비 보장
+        textArea.style.width = '100%';
         textArea.innerHTML = `<h3>${std.code}</h3><p>${std.desc}</p>`;
         textArea.onclick = () => openModal(std);
         card.appendChild(textArea);
 
-        // 💡 삭제했던 조건문 제거: 이제 문제가 있든 없든 모든 카드에 버튼 생성
+        // 버튼 영역 (반응형 컨테이너)
         const btnArea = document.createElement('div');
-        btnArea.style.flexShrink = '0'; // 버튼 크기가 찌그러지는 것 방지
+        btnArea.className = 'quiz-btn-container';
 
         const quizBtn = document.createElement('button');
         quizBtn.className = 'save-btn'; 
-        quizBtn.style.width = 'auto';
+        // 모바일에서는 버튼을 누르기 쉽게 100% 너비로, PC에서는 자동 너비로 작동하게 함
+        quizBtn.style.width = '100%';
         quizBtn.style.marginTop = '0';
-        quizBtn.style.padding = '0.6rem 1rem';
-        quizBtn.style.fontSize = '0.9rem';
+        quizBtn.style.padding = '0.8rem';
+        quizBtn.style.fontSize = '0.95rem';
+        quizBtn.style.whiteSpace = 'nowrap'; // 글자 줄바꿈 방지
         quizBtn.innerHTML = '📝 문항 매칭 연습';
         
         quizBtn.onclick = (e) => {
@@ -472,7 +468,11 @@ function initDashboard() {
 
         container.appendChild(card);
     });
-    if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([container]); }
+    
+    if (window.MathJax && window.MathJax.typesetPromise) { 
+        MathJax.typesetClear(); 
+        MathJax.typesetPromise([container]); 
+    }
 }
 
 function initLevelQuiz() {
