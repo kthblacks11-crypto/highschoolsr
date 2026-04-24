@@ -184,35 +184,41 @@
 </div>
 
 <div class="modal" id="settings-modal">
-    <div class="modal-content" style="max-width: 550px;">
+    <div class="modal-content" style="max-width: 600px;">
         <span class="close-btn" onclick="closeSettings()">&times;</span>
         <h2 style="margin-top: 0; color: var(--primary);">⚙️ 구글 AI API 키 설정</h2>
         
-        <div style="background: #f8fafc; padding: 1.2rem; border-radius: 10px; border: 1px solid #cbd5e1; margin-bottom: 1.5rem; font-size: 0.9rem; line-height: 1.6;">
-            <p style="margin-top: 0; font-weight: bold; color: #1e293b; font-size: 1rem;">💡 API 키란 무엇인가요?</p>
-            <p style="color: #475569;">이 시스템은 구글의 인공지능을 사용해 문제를 분석합니다. 인공지능을 사용하기 위한 일종의 '개인 무료 출입증'이 바로 API 키입니다.</p>
+        <div style="background: #f8fafc; padding: 1.2rem; border-radius: 10px; border: 1px solid #cbd5e1; margin-bottom: 1.5rem; font-size: 0.95rem; line-height: 1.6;">
+            <p style="margin-top: 0; font-weight: bold; color: #1e293b; font-size: 1.05rem;">💡 API 키란 무엇인가요?</p>
+            <p style="color: #475569; margin-bottom: 1.5rem;">이 시스템은 구글의 최신 인공지능을 사용해 문제를 정밀하게 분석합니다. 인공지능을 무료로 사용하기 위한 일종의 <strong>'개인 전용 출입증'</strong>이 바로 API 키입니다.</p>
 
-            <hr style="border:0; border-top: 1px dashed #cbd5e1; margin: 1rem 0;">
-
-            <p style="margin-top: 0; font-weight: bold; color: #1e293b; font-size: 1rem;">🚀 1분 만에 API 키 발급받는 방법</p>
-            <ol style="margin: 0; padding-left: 1.5rem; color: #334155;">
+            <p style="margin-top: 0; font-weight: bold; color: #1e293b; font-size: 1.05rem;">🚀 1분 만에 API 키 발급받는 방법 (초보자용)</p>
+            <ol style="margin: 0; padding-left: 1.5rem; color: #334155; margin-bottom: 1.5rem;">
                 <li style="margin-bottom: 0.8rem;">
-                    구글 계정으로 로그인한 상태에서 아래 파란색 링크를 클릭하세요.<br>
+                    아래 파란색 링크를 클릭해 구글 AI 스튜디오로 이동하세요. (구글 로그인 필요)<br>
                     👉 <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: #2563eb; font-weight: bold; text-decoration: underline;">[구글 AI 스튜디오 바로가기]</a>
                 </li>
                 <li style="margin-bottom: 0.8rem;">
-                    화면 <strong>왼쪽 메뉴</strong>에서 <strong>'API 키'</strong> 탭이 선택되어 있는지 확인하세요.
+                    화면 오른쪽 위에 있는 회색 <strong>[API 키 만들기]</strong> 버튼을 클릭하세요.
+                </li>
+                <li style="margin-bottom: 0.8rem; background: #fffbeb; padding: 0.8rem; border-radius: 6px; border-left: 4px solid #f59e0b;">
+                    <strong>(핵심)</strong> 화면 가운데 '새 키 만들기' 창이 뜹니다. <strong>'가져온 프로젝트 선택'</strong> 칸을 누르고 <strong>[+ 프로젝트 만들기]</strong>를 선택한 뒤, 바로 아래의 <strong>[키 만들기]</strong> 버튼을 누르세요.<br>
+                    <span style="font-size: 0.85rem; color: #92400e;">* 만약 이미 영문으로 된 프로젝트(예: Default Gemini Project)가 있다면 아무거나 선택하셔도 무방합니다. (키 생성까지 5~10초 소요)</span>
                 </li>
                 <li style="margin-bottom: 0.8rem;">
-                    화면 <strong>오른쪽 위</strong>에 있는 회색 <strong>[API 키 만들기]</strong> 버튼을 클릭하세요.
-                </li>
-                <li style="margin-bottom: 0.8rem;">
-                    가운데 창이 뜨면 <strong>'새 프로젝트에서 API 키 만들기'</strong>를 누르세요. (로딩이 5~10초 정도 걸릴 수 있습니다.)
+                    'AIzaSy...' 로 시작하는 아주 긴 비밀번호가 생성됩니다. 그 옆의 <strong>[복사 아이콘(문서가 겹친 모양)]</strong>을 누르세요.
                 </li>
                 <li>
-                    생성된 아주 긴 영어/숫자 비밀번호 옆의 <strong>[복사 아이콘]</strong>을 누른 후, 다시 이 창으로 돌아와 아래 빈칸에 붙여넣기(Ctrl+V) 하세요!
+                    다시 이 화면으로 돌아와서, 아래 빈칸에 복사한 키를 붙여넣기(Ctrl+V) 하세요!
                 </li>
             </ol>
+
+            <div style="background: #fff7ed; padding: 1rem; border-radius: 8px; border: 1px solid #fed7aa;">
+                <p style="margin: 0 0 0.5rem 0; font-weight: bold; color: #9a3412;">⚠️ 사용 중 '무료 할당량 초과' 에러가 뜬다면?</p>
+                <p style="margin: 0; font-size: 0.9rem; color: #7c2d12;">
+                    한도를 다 썼다는 뜻이니 당황하지 마세요! <strong>위 사이트에 다시 접속해서 똑같이 새 키를 하나 더 발급받아 아래 칸에 새로 덮어쓰기</strong> 해주시면 계속 무료로 사용할 수 있습니다.
+                </p>
+            </div>
         </div>
 
         <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #0f172a;">🔑 복사한 API 키 입력</label>
