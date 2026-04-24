@@ -576,8 +576,14 @@ function shuffleArray(array) {
     return array;
 }
 
-// 💡 시스템 모달 관리 (피드백 포함)
+// 💡 시스템 모달 관리 (로그인 체크 로직 추가)
 function openSettings() { 
+    // API 키를 입력하기 전에 로그인이 되어있는지 먼저 확인합니다.
+    const user = auth.currentUser;
+    if (!user) {
+        alert("기기 간 API 키 자동 연동을 위해 먼저 구글 로그인이 필요합니다.\n우측 상단의 [🔑 로그인] 버튼을 눌러주세요!");
+        return; // 로그인이 안 되어있으면 설정 창을 열어주지 않음
+    }
     document.getElementById('api-key-input').value = localStorage.getItem('gemini_api_key') || "";
     document.getElementById('settings-modal').style.display = 'flex'; 
 }
@@ -710,9 +716,18 @@ function displayPreview(file) {
 
 // 🎯 엄밀한 AI 분석 요청 프롬프트 적용
 async function analyzeProblem() {
+    const user = auth.currentUser; // 🟢 추가된 로그인 체크 로직
     const apiKey = localStorage.getItem('gemini_api_key');
+
+    // 1단계: 로그인 여부 먼저 확인
+    if (!user) {
+        alert("먼저 우측 상단의 [🔑 로그인] 버튼을 눌러주세요.\n(로그인 후 API 키를 연동하면 스마트폰에서도 바로 사용할 수 있습니다!)");
+        return;
+    }
+
+    // 2단계: API 키 여부 확인
     if (!apiKey) {
-        alert("⚙️ 설정에서 API 키를 먼저 입력해주세요!");
+        alert("⚙️ 분석을 위해서는 구글 AI 스튜디오 API 키 연결이 필요합니다.\n안내창을 열어드릴 테니 확인해 주세요!");
         openSettings();
         return;
     }
@@ -732,7 +747,7 @@ async function analyzeProblem() {
             }
         }
         
-        const prompt = `당신은 대한민국 최고의 수학 교사입니다. 문항을 엄밀히 분석하여 아래 4가지 대괄호 태그를 '토씨 하나 틀리지 말고' 사용하여 답변하세요. 마크다운 볼드체(**)를 태그 이름에 절대 사용하지 마세요.
+const prompt = `당신은 대한민국 최고의 수학 교사입니다. 문항을 엄밀히 분석하여 아래 4가지 대괄호 태그를 '토씨 하나 틀리지 말고' 사용하여 답변하세요. 마크다운 볼드체(**)를 태그 이름에 절대 사용하지 마세요.
 
 [교과 및 단원]: 해당 문제의 교과명과 단원명을 명시하세요.
 
@@ -899,10 +914,22 @@ function showSection(id) {
     if (id === 'quiz') initLevelQuiz();
 
     const subjectSelector = document.querySelector('.subject-selector');
+    const mainSubtitle = document.getElementById('main-subtitle');
+    
+    // 🟢 문제 분석 탭일 경우 과목 선택기와 부제(단원명)를 모두 숨김
     if (id === 'problem-analysis') {
-        subjectSelector.style.visibility = 'hidden';
+        subjectSelector.style.display = 'none'; 
+        if(mainSubtitle) mainSubtitle.style.display = 'none'; 
     } else {
-        subjectSelector.style.visibility = 'visible';
+        subjectSelector.style.display = 'block';
+        if(mainSubtitle) mainSubtitle.style.display = 'block'; 
+    }
+
+    const subjectSelectorStyle = document.querySelector('.subject-selector');
+    if (id === 'problem-analysis') {
+        subjectSelectorStyle.style.visibility = 'hidden';
+    } else {
+        subjectSelectorStyle.style.visibility = 'visible';
     }
 }
 

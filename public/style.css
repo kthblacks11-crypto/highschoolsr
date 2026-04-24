@@ -144,3 +144,13 @@ header {
 }
 
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* PC와 모바일 안내문 분리 표시 */
+@media (max-width: 850px) {
+    .pc-guide { display: none !important; }
+    .mobile-guide { display: block !important; }
+}
+@media (min-width: 851px) {
+    .pc-guide { display: block !important; }
+    .mobile-guide { display: none !important; }
+}
