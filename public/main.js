@@ -58,12 +58,8 @@ function shuffleArray(array) {
     return array;
 }
 
+// 모달 설정
 function openSettings() { 
-    const user = auth.currentUser;
-    if (!user) {
-        alert("기기 간 API 키 자동 연동을 위해 먼저 구글 로그인이 필요합니다.\n우측 상단의 [🔑 로그인] 버튼을 눌러주세요!");
-        return; 
-    }
     document.getElementById('api-key-input').value = localStorage.getItem('gemini_api_key') || "";
     document.getElementById('settings-modal').style.display = 'flex'; 
 }
@@ -77,7 +73,7 @@ function saveApiKey() {
     const key = document.getElementById('api-key-input').value.trim();
     if (key) {
         localStorage.setItem('gemini_api_key', key);
-        alert("API 키가 저장되었습니다.");
+        alert("API 키가 기기에 안전하게 저장되었습니다.");
         closeSettings();
     }
 }
@@ -98,7 +94,7 @@ async function submitFeedback() {
         let pending = JSON.parse(localStorage.getItem('pending_feedback')) || [];
         pending.push({ text: text, time: new Date().toISOString() });
         localStorage.setItem('pending_feedback', JSON.stringify(pending));
-        alert("현재 서버 통신이 원활하지 않아 의견이 안전하게 임시 저장되었습니다.");
+        alert("현재 서버 통신이 원활하지 않아 의견이 임시 저장되었습니다.");
         document.getElementById('feedback-message').value = "";
     } finally {
         submitBtn.disabled = false; submitBtn.innerText = "의견 전송하기"; closeFeedback(); 
@@ -165,15 +161,28 @@ function displayPreview(file) {
     reader.readAsDataURL(file);
 }
 
-// 🎯 분석 시작 (선생님 맞춤형 모델명 복구)
+// 🟢 영어 에러를 친절한 한글로 바꿔주는 마법의 함수
+async function checkApiError(response) {
+    if (!response.ok) {
+        const errData = await response.json();
+        const errMsg = errData.error?.message || "";
+        
+        let koreanError = "서버와 통신 중 알 수 없는 문제가 발생했습니다.";
+        if (response.status === 400) koreanError = "이미지나 요청 형식이 잘못되었습니다. 다시 업로드해주세요.";
+        else if (response.status === 401 || response.status === 403) koreanError = "입력하신 API 키가 잘못되었거나 권한이 없습니다. API 키를 다시 확인해주세요!";
+        else if (response.status === 404) koreanError = "AI 모델 버전을 찾을 수 없습니다. (시스템 관리자에게 문의하세요)";
+        else if (response.status === 429) koreanError = "무료 사용량 한도를 초과했습니다! 약 1분 뒤에 다시 시도해주세요.";
+        else if (response.status === 500) koreanError = "구글 AI 서버 내부에서 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+        else if (response.status === 503 || errMsg.includes("high demand")) koreanError = "현재 구글 서버에 접속자가 너무 많아 일시적으로 바쁩니다! 10초만 기다렸다가 다시 눌러주세요.";
+
+        throw new Error(koreanError);
+    }
+}
+
+// 🎯 분석 시작
 async function analyzeProblem() {
-    const user = auth.currentUser; 
     const apiKey = localStorage.getItem('gemini_api_key');
 
-    if (!user) {
-        alert("먼저 우측 상단의 [🔑 로그인] 버튼을 눌러주세요.");
-        return;
-    }
     if (!apiKey) {
         alert("⚙️ 분석을 위해서는 구글 AI 스튜디오 API 키 연결이 필요합니다.");
         openSettings();
@@ -213,25 +222,17 @@ ${standardsInfo}
 
 [중요 지침]: 모든 수식은 반드시 앞뒤로 $ 기호를 감싸서 LaTeX 문법으로 작성하세요.`;
 
-        // 🟢 선생님 맞춤형 모델명 복구 완료!
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        // 🟢 가장 안정적인 공식 모델명으로 완벽 복구
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [{
-                    parts: [
-                        { text: prompt },
-                        { inline_data: { mime_type: selectedFile.type, data: base64Image } }
-                    ]
-                }],
+                contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: selectedFile.type, data: base64Image } }] }],
                 generationConfig: { temperature: 0.1, topP: 0.9, maxOutputTokens: 3072 }
             })
         });
 
-        if (!response.ok) {
-            const errData = await response.json();
-            throw new Error(errData.error?.message || "API 통신 오류가 발생했습니다.");
-        }
+        await checkApiError(response); // 🟢 한글 에러 처리 함수 호출
 
         const result = await response.json();
         const analysisText = result.candidates[0].content.parts[0].text;
@@ -251,7 +252,8 @@ ${standardsInfo}
         processAndSaveBackground(analysisText, apiKey);
 
     } catch (error) {
-        alert("⚠️ 분석 오류: " + error.message);
+        // 🟢 예쁜 한글 안내창 띄우기
+        alert("⚠️ 분석 안내:\n" + error.message);
         document.getElementById('analysis-loading').style.display = 'none';
         document.getElementById('analyze-btn').style.display = 'block';
     }
@@ -323,13 +325,12 @@ function renderSophisticatedResult(rawText) {
     });
 }
 
-// 🎯 배경 저장 로직 (정답 포함 생성 및 DB 저장)
+// 🎯 배경 저장 로직 (DB 저장)
 async function processAndSaveBackground(analysisText, apiKey) {
     try {
-        // 🟢 정답까지 생성하도록 프롬프트 강화
         const transformPrompt = "위 분석 결과를 바탕으로, 원본의 저작권을 침해하지 않게 숫자와 상황을 바꾼 '변형된 수학 문제' 1개를 생성하고 정답도 구하세요. \n\n반드시 아래 형식으로만 출력하세요:\n문제: [변형된 문제 내용]\n정답: [정답 내용]";
         
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: analysisText + "\n\n" + transformPrompt }] }] })
@@ -337,7 +338,6 @@ async function processAndSaveBackground(analysisText, apiKey) {
         const result = await response.json();
         const aiResponse = result.candidates[0].content.parts[0].text;
         
-        // 🟢 문제와 정답 분리 파싱
         let finalQuestion = aiResponse;
         let finalAnswer = "정답 정보 없음";
         
@@ -356,11 +356,10 @@ async function processAndSaveBackground(analysisText, apiKey) {
             }
         }
 
-        // DB에 정답 필드(answer) 추가하여 저장
         db.collection('transformed_bank').add({
             subject: matchedSubject,
             question: finalQuestion,
-            answer: finalAnswer, // 🟢 파이어베이스 DB에 정답 저장!
+            answer: finalAnswer, 
             original_analysis: analysisText, 
             standard_code: stdCode,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
@@ -454,7 +453,7 @@ async function startLevelMatching(code) {
                     </div>` + data.question,
                 level: extractedLevel,
                 reason: "사용자가 업로드한 문항을 AI가 분석하고 변형한 실전 문항입니다.",
-                answer: data.answer || "정답 정보 없음" // 🟢 DB에서 정답 가져오기
+                answer: data.answer || "정답 정보 없음" 
             });
         });
     } catch (error) { console.warn("DB 로드 실패"); }
@@ -501,7 +500,6 @@ function checkLevelAnswer(selectedLevel, btn) {
     document.querySelectorAll('#level-options .option-btn').forEach(b => { b.disabled = true; b.style.opacity = '0.6'; });
     fb.style.display = 'block';
     
-    // 🟢 피드백창 아래에 정답도 같이 표시!
     const answerHTML = question.answer ? `<br><br><div style="background: white; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;"><strong style="color: #475569;">[정답]</strong> ${question.answer}</div>` : '';
 
     if (selectedLevel === question.level) {
@@ -595,14 +593,12 @@ async function reAnalyzeWithChat() {
         
         대화를 깊이 분석하여 '최종 최적화 분석 결과'를 4가지 태그([교과 및 단원]:, [성취기준 및 수준]:, [핵심 개념]:, [상세 풀이]:)를 유지하여 답변하세요. 수식은 $ LaTeX를 사용하세요.`;
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
         
-        if (!response.ok) {
-            throw new Error("서버 오류가 발생했습니다.");
-        }
+        await checkApiError(response); // 🟢 한글 에러 확인 적용
 
         const result = await response.json();
         renderSophisticatedResult(result.candidates[0].content.parts[0].text);
@@ -610,7 +606,7 @@ async function reAnalyzeWithChat() {
         document.getElementById('analysis-loading').style.display = 'none';
         document.getElementById('analysis-result').style.display = 'block';
         if (window.MathJax) MathJax.typesetPromise();
-    } catch (error) { alert("오류 발생: " + error.message); }
+    } catch (error) { alert("⚠️ 재분석 오류:\n" + error.message); }
 }
 
 async function sendChatMessage() {
@@ -627,15 +623,12 @@ async function sendChatMessage() {
     try {
         const prompt = `이전 분석: ${currentChatContext}\n교사의 의견: "${message}"\n\n[지침]: 수학 교사의 의견을 바탕으로 답변하세요. 가독성을 위해 적절한 단락 나누기, 글머리 기호(•), 마크다운 굵은 글씨(**)를 사용하세요. 수식은 $ LaTeX 문법을 사용하세요.`;
         
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
         
-        if (!response.ok) {
-            const errData = await response.json();
-            throw new Error(errData.error?.message || "알 수 없는 오류");
-        }
+        await checkApiError(response); // 🟢 한글 에러 확인 적용
         
         const result = await response.json();
         const aiReply = result.candidates[0].content.parts[0].text;
@@ -646,7 +639,8 @@ async function sendChatMessage() {
         if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([historyEl]); }
         historyEl.scrollTop = historyEl.scrollHeight;
     } catch(e) { 
-        historyEl.innerHTML += `<div style="text-align: left; margin-bottom: 12px;"><span style="color: #dc2626; background: #fee2e2; padding: 10px; border-radius: 8px; display: inline-block;">⚠️ API 통신 실패: ${e.message}</span></div>`; 
+        // 🟢 채팅창 내부 에러도 한글로 예쁘게 출력
+        historyEl.innerHTML += `<div style="text-align: left; margin-bottom: 12px;"><span style="color: #dc2626; background: #fee2e2; padding: 10px; border-radius: 8px; display: inline-block; font-size: 0.9rem;">⚠️ ${e.message}</span></div>`; 
         historyEl.scrollTop = historyEl.scrollHeight;
     }
 }
