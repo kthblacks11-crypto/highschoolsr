@@ -24,7 +24,9 @@
                 <div id="system-title" style="font-size: 1.2rem; font-weight: 700; color: #bae6fd; margin-top: 5px; letter-spacing: -0.5px;">성취기준 매칭 시스템</div>
                 <p id="main-subtitle" style="margin-top: 10px;">과목을 선택하면 단원명이 표시됩니다.</p>
             </div>
-            
+            <div style="position: absolute; top: -5px; right: 1rem; font-size: 0.8rem; color: #cbd5e1;">
+                개발자(배방고등학교 수학교사 thkim, <a href="mailto:kthblacks11@gmail.com" style="color: #bae6fd; text-decoration: underline;">메일보내기</a>)
+            </div>
             <div class="header-actions">
                 <span id="user-info" style="color: white; font-size: 0.75rem; margin-right: 5px;"></span>
                 <button id="login-btn" class="settings-btn" onclick="handleLogin()">🔑 구글 아이디로 시작</button>
@@ -59,7 +61,6 @@
 <div class="container">
     <div class="tabs">
         <button class="tab-btn active" onclick="showSection('dashboard')">성취기준과 성취수준</button>
-        <button class="tab-btn" onclick="showSection('quiz')">문항 매칭 연습</button>
         <button class="tab-btn" onclick="showSection('checklist')">📋 나의 체크리스트</button>
         <button class="tab-btn" onclick="showSection('problem-analysis')">🔍 문제 분석하기</button>
     </div>

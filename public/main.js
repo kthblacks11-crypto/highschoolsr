@@ -430,11 +430,46 @@ function initDashboard() {
     const container = document.getElementById('card-container');
     container.innerHTML = "";
     if (!subjectData[currentSubject]) return;
+
     subjectData[currentSubject].standards.forEach(std => {
         const card = document.createElement('div');
         card.className = 'card';
-        card.innerHTML = `<h3>${std.code}</h3><p>${std.desc}</p>`;
-        card.onclick = () => openModal(std);
+        // 카드 내부를 가로로 배치하기 위한 스타일 추가
+        card.style.display = 'flex';
+        card.style.justifyContent = 'space-between';
+        card.style.alignItems = 'center';
+
+        // 왼쪽 텍스트 영역 (클릭 시 기존처럼 성취수준 모달 창 띄우기)
+        const textArea = document.createElement('div');
+        textArea.style.cursor = 'pointer';
+        textArea.style.flex = '1';
+        textArea.innerHTML = `<h3>${std.code}</h3><p>${std.desc}</p>`;
+        textArea.onclick = () => openModal(std);
+        card.appendChild(textArea);
+
+        // 해당 성취기준에 문항(questions)이 있는 경우에만 우측에 버튼 추가
+        if (std.questions && std.questions.length > 0) {
+            const btnArea = document.createElement('div');
+            const quizBtn = document.createElement('button');
+            quizBtn.className = 'save-btn'; 
+            quizBtn.style.width = 'auto';
+            quizBtn.style.marginTop = '0';
+            quizBtn.style.marginLeft = '1rem';
+            quizBtn.style.padding = '0.6rem 1rem';
+            quizBtn.style.fontSize = '0.9rem';
+            quizBtn.innerHTML = '📝 문항 매칭 연습';
+
+            // 버튼 클릭 시 퀴즈 화면으로 바로 넘어가도록 설정
+            quizBtn.onclick = (e) => {
+                e.stopPropagation(); // 카드의 모달창 클릭 이벤트가 같이 실행되는 것을 방지
+                showSection('quiz'); // 퀴즈 화면 탭으로 강제 이동
+                startLevelMatching(std.code); // 해당 코드의 퀴즈 시작
+            };
+
+            btnArea.appendChild(quizBtn);
+            card.appendChild(btnArea);
+        }
+
         container.appendChild(card);
     });
     if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([container]); }
@@ -567,9 +602,10 @@ function nextLevelQuestion() {
 }
 
 function backToStandardSelection() {
-    currentStandardCode = null; currentQuestions = [];
-    document.getElementById('quiz-standard-selection').style.display = 'block';
-    document.getElementById('quiz-level-matching').style.display = 'none';
+    currentStandardCode = null; 
+    currentQuestions = [];
+    // 기존 퀴즈 목록 화면을 띄우는 대신, 첫 번째 대시보드 탭으로 돌아갑니다.
+    showSection('dashboard'); 
 }
 
 async function initChecklist() {
