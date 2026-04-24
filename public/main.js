@@ -5,14 +5,14 @@ const firebaseConfig = {
     storageBucket: "math-asa-project-2026.firebasestorage.app",
     messagingSenderId: "1045151452788",
     appId: "1:1045151452788:web:bf69cb26e0be84dd8b0b21"
-  };
+};
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const storage = firebase.storage();
 const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 
-// 로그인 상태에 따라 화면을 자동으로 바꿔주는 기능입니다.
+// 로그인 상태 관리
 auth.onAuthStateChanged((user) => {
     const loginBtn = document.getElementById('login-btn');
     const logoutBtn = document.getElementById('logout-btn');
@@ -23,7 +23,6 @@ auth.onAuthStateChanged((user) => {
         loginBtn.style.display = 'none';
         logoutBtn.style.display = 'inline-block';
         userInfo.innerText = user.displayName + " 선생님";
-        
         if (user.email === "kthblacks11@gmail.com") {
             adminBtn.style.display = 'inline-block';
         } else {
@@ -41,7 +40,6 @@ async function handleLogin() {
     try { await auth.signInWithPopup(provider); }
     catch (error) { alert("로그인에 실패했습니다."); }
 }
-
 function handleLogout() {
     if(confirm("로그아웃 하시겠습니까?")) { auth.signOut(); }
 }
@@ -61,7 +59,7 @@ function shuffleArray(array) {
     return array;
 }
 
-// 💡 시스템 모달 관리 (로그인 체크 로직 추가됨)
+// 모달 및 시스템 관리
 function openSettings() { 
     const user = auth.currentUser;
     if (!user) {
@@ -102,7 +100,6 @@ async function submitFeedback() {
         alert("의견이 성공적으로 전송되었습니다. 감사합니다!");
         document.getElementById('feedback-message').value = "";
     } catch(e) {
-        console.error("의견 전송 실패, 로컬에 임시 저장합니다:", e);
         let pending = JSON.parse(localStorage.getItem('pending_feedback')) || [];
         pending.push({ text: text, time: new Date().toISOString() });
         localStorage.setItem('pending_feedback', JSON.stringify(pending));
@@ -190,7 +187,7 @@ function displayPreview(file) {
     reader.readAsDataURL(file);
 }
 
-// 🎯 엄밀한 AI 분석 요청 (gemini-1.5-flash 버전 적용 및 로그인 체크)
+// 🎯 엄밀한 AI 분석 요청 (에러 핸들링 강화)
 async function analyzeProblem() {
     const user = auth.currentUser; 
     const apiKey = localStorage.getItem('gemini_api_key');
@@ -199,7 +196,6 @@ async function analyzeProblem() {
         alert("먼저 우측 상단의 [🔑 로그인] 버튼을 눌러주세요.\n(로그인 후 API 키를 연동하면 스마트폰에서도 바로 사용할 수 있습니다!)");
         return;
     }
-
     if (!apiKey) {
         alert("⚙️ 분석을 위해서는 구글 AI 스튜디오 API 키 연결이 필요합니다.\n안내창을 열어드릴 테니 확인해 주세요!");
         openSettings();
@@ -212,7 +208,6 @@ async function analyzeProblem() {
 
     try {
         const base64Image = document.getElementById('image-preview').src.split(',')[1];
-        
         let standardsInfo = "";
         for (const key in subjectData) {
             if (subjectData[key].standards && subjectData[key].standards.length > 0) {
@@ -221,7 +216,7 @@ async function analyzeProblem() {
             }
         }
         
-const prompt = `당신은 대한민국 최고의 수학 교사입니다. 문항을 엄밀히 분석하여 아래 4가지 대괄호 태그를 '토씨 하나 틀리지 말고' 사용하여 답변하세요. 마크다운 볼드체(**)를 태그 이름에 절대 사용하지 마세요.
+        const prompt = `당신은 대한민국 최고의 수학 교사입니다. 문항을 엄밀히 분석하여 아래 4가지 대괄호 태그를 '토씨 하나 틀리지 말고' 사용하여 답변하세요. 마크다운 볼드체(**)를 태그 이름에 절대 사용하지 마세요.
 
 [교과 및 단원]: 해당 문제의 교과명과 단원명을 명시하세요.
 
@@ -240,7 +235,6 @@ ${standardsInfo}
 
 [중요 지침]: 모든 수학 기호, 변수, 숫자, 수식은 반드시 앞뒤로 $ 기호를 감싸서 LaTeX 문법으로 작성하세요. 수식 작성 시 일반 유니코드 특수문자(예: ×, ÷, ≤, ≥, ≠)를 절대 사용하지 말고, 반드시 LaTeX 명령어(예: \\times, \\div, \\le, \\ge, \\neq)를 사용하세요.`;
 
-        // 🟢 공식 1.5-flash 버전으로 변경됨
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -255,7 +249,10 @@ ${standardsInfo}
             })
         });
 
-        if (!response.ok) throw new Error("API 오류가 발생했습니다.");
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error?.message || "API 통신 오류가 발생했습니다.");
+        }
 
         const result = await response.json();
         const analysisText = result.candidates[0].content.parts[0].text;
@@ -281,19 +278,21 @@ ${standardsInfo}
     }
 }
 
-// 🎯 태그 이름 오타 방어 및 렌더링 (강력한 정규식 적용 완료)
+// 🎯 글씨 잘림(부등호 버그) 완벽 해결 및 무적의 정규식 적용
 function renderSophisticatedResult(rawText) {
     const container = document.getElementById('res-container');
     container.innerHTML = "";
 
-    // 🟢 AI의 띄어쓰기 및 콜론 오타 완벽 방어
-    let text = rawText.replace(/\*\*/g, '');
-    text = text.replace(/\[\s+/g, '[').replace(/\s+\]/g, ']');
-    text = text.replace(/\[\s*교과\s*및\s*단원\s*\]\s*:?/g, '[교과 및 단원]:');
-    text = text.replace(/\[\s*성취기준\s*및\s*수준\s*\]\s*:?/g, '[성취기준 및 수준]:');
-    text = text.replace(/\[\s*핵심\s*개념\s*\]\s*:?/g, '[핵심 개념]:');
-    text = text.replace(/\[\s*상세\s*풀이\s*\]\s*:?/g, '[상세 풀이]:');
-    text = text.replace(/\[\s*문제\s*풀이.*?\]\s*:?/g, '[상세 풀이]:');
+    // 🟢 1. 치명적 오류 해결: 수식의 부등호(<, >)가 HTML 태그로 인식되어 화면이 끊기는 현상 완벽 방어!
+    let text = rawText.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    // 🟢 2. AI의 띄어쓰기, 마크다운(#, **), 괄호 생략 등 모든 변덕을 잡아내는 무적의 정규식
+    text = text.replace(/(\*\*|#)/g, ''); // 볼드체, 제목 기호 모두 제거
+    text = text.replace(/(?:\[)?\s*교과\s*및\s*단원\s*(?:\])?\s*:?/g, '[교과 및 단원]:');
+    text = text.replace(/(?:\[)?\s*성취기준\s*및\s*수준\s*(?:\])?\s*:?/g, '[성취기준 및 수준]:');
+    text = text.replace(/(?:\[)?\s*핵심\s*개념\s*(?:\])?\s*:?/g, '[핵심 개념]:');
+    text = text.replace(/(?:\[)?\s*상세\s*풀이\s*(?:\])?\s*:?/g, '[상세 풀이]:');
+    text = text.replace(/(?:\[)?\s*문제\s*풀이\s*(?:\])?\s*:?/g, '[상세 풀이]:'); // 문제풀이라고 썼을 때 대비
     
     const configs = [
         { key: "[교과 및 단원]:", title: "1. 교과명 및 단원명", icon: "📚", bg: "#f3f4f6", border: "#64748b" },
@@ -353,7 +352,7 @@ function renderSophisticatedResult(rawText) {
     });
 }
 
-// 🎯 신뢰도(성취수준 A~E) 유지 로직 (gemini-1.5-flash 버전 적용됨)
+// 🎯 배경 저장 로직
 async function processAndSaveBackground(analysisText, apiKey) {
     try {
         const transformPrompt = "위 분석 결과를 바탕으로, 원본의 저작권을 침해하지 않게 숫자와 상황을 바꾼 '변형된 수학 문제' 1개만 생성하세요. 인사말 없이 문제 텍스트만 출력하세요.";
@@ -422,7 +421,6 @@ function changeSubject() {
     initLevelQuiz(); 
     initChecklist();
 }
-
 
 function initDashboard() {
     const container = document.getElementById('card-container');
@@ -595,7 +593,6 @@ function resetAnalysis() {
     }
 }
 
-// 🎯 재분석 로직 (gemini-1.5-flash 버전 적용됨)
 async function reAnalyzeWithChat() {
     const apiKey = localStorage.getItem('gemini_api_key');
     if (!apiKey) return;
@@ -616,6 +613,10 @@ async function reAnalyzeWithChat() {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
+        
+        if (!response.ok) {
+            throw new Error("서버 오류가 발생했습니다.");
+        }
 
         const result = await response.json();
         renderSophisticatedResult(result.candidates[0].content.parts[0].text);
@@ -623,10 +624,10 @@ async function reAnalyzeWithChat() {
         document.getElementById('analysis-loading').style.display = 'none';
         document.getElementById('analysis-result').style.display = 'block';
         if (window.MathJax) MathJax.typesetPromise();
-    } catch (error) { alert("오류 발생"); }
+    } catch (error) { alert("오류 발생: " + error.message); }
 }
 
-// 🎯 챗봇 로직 (gemini-1.5-flash 버전 적용됨)
+// 🎯 챗봇 에러 핸들링 강화 로직
 async function sendChatMessage() {
     const inputEl = document.getElementById('chat-input');
     const message = inputEl.value.trim();
@@ -645,6 +646,12 @@ async function sendChatMessage() {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
+        
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error?.message || "알 수 없는 오류");
+        }
+        
         const result = await response.json();
         const aiReply = result.candidates[0].content.parts[0].text;
         
@@ -653,7 +660,10 @@ async function sendChatMessage() {
         historyEl.innerHTML += `<div style="text-align: left; margin-bottom: 12px;"><span style="background: white; border: 1px solid var(--border); padding: 12px 16px; border-radius: 16px 16px 16px 0; display: inline-block; max-width: 85%;">${formattedReply}</span></div>`;
         if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([historyEl]); }
         historyEl.scrollTop = historyEl.scrollHeight;
-    } catch(e) { historyEl.innerHTML += `<div style="color: red;">오류가 발생했습니다. API 연결을 확인해주세요.</div>`; }
+    } catch(e) { 
+        historyEl.innerHTML += `<div style="text-align: left; margin-bottom: 12px;"><span style="color: #dc2626; background: #fee2e2; padding: 10px; border-radius: 8px; display: inline-block;">⚠️ API 통신 실패: ${e.message}</span></div>`; 
+        historyEl.scrollTop = historyEl.scrollHeight;
+    }
 }
 
 async function syncPendingFeedback() {
