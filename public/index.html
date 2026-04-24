@@ -7,6 +7,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     
     <script>
         MathJax = { tex: { inlineMath: [['$','$'], ['\\(','\\)']] }, svg: { fontCache: 'global' } };
@@ -17,17 +18,16 @@
 <body onpaste="handlePaste(event)">
 
 <header>
-    <div class="header-container">
-        <div class="header-title-group">
-            <h1 id="main-title">2022 개정교육과정 고등학교 수학</h1>
-            <p id="main-subtitle">성취기준 매칭 및 AI 분석 시스템</p>
-        </div>
-        <div class="header-actions">
-            <button class="settings-btn feedback-btn" onclick="openFeedback()" title="개발자에게 의견 보내기">💡 의견보내기</button>
-            <button class="settings-btn" onclick="openAdminFeedback()" title="의견 확인(관리자용)">📥</button>
-            <button class="settings-btn" onclick="openSettings()" title="API 설정">⚙️ API 가져오기</button>
-        </div>
+    <div class="header-actions">
+        <span id="user-info" style="color: white; font-size: 0.85rem; margin-right: 10px; font-weight: bold;"></span>
+        <button id="login-btn" class="settings-btn" onclick="handleLogin()" title="구글 로그인">🔑 로그인</button>
+        <button id="logout-btn" class="settings-btn" onclick="handleLogout()" style="display:none; font-size: 0.85rem;">로그아웃</button>
+        
+        <button class="settings-btn feedback-btn" onclick="openFeedback()" title="개발자에게 의견 보내기">💡 의견보내기</button>
+        <button class="settings-btn" onclick="openAdminFeedback()" title="의견 확인(관리자용)">📥</button>
+        <button class="settings-btn" onclick="openSettings()" title="API 설정">⚙️ API 가져오기</button>
     </div>
+    
 </header>
 
 <div class="subject-selector">

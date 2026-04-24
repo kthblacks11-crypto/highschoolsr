@@ -5,6 +5,34 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const storage = firebase.storage();
+// main.js의 7번 줄 바로 다음에 붙여넣으세요
+const auth = firebase.auth();
+const provider = new firebase.auth.GoogleAuthProvider();
+
+// 로그인 상태에 따라 화면을 자동으로 바꿔주는 기능입니다.
+auth.onAuthStateChanged((user) => {
+    const loginBtn = document.getElementById('login-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+    const userInfo = document.getElementById('user-info');
+    if (user) {
+        loginBtn.style.display = 'none';
+        logoutBtn.style.display = 'inline-block';
+        userInfo.innerText = user.displayName + " 선생님";
+    } else {
+        loginBtn.style.display = 'inline-block';
+        logoutBtn.style.display = 'none';
+        userInfo.innerText = "";
+    }
+});
+
+async function handleLogin() {
+    try { await auth.signInWithPopup(provider); }
+    catch (error) { alert("로그인에 실패했습니다."); }
+}
+
+function handleLogout() {
+    if(confirm("로그아웃 하시겠습니까?")) { auth.signOut(); }
+}
 
 // 📂 [핵심 요건 완벽 수행] 기존 문제 100% 보존 + 구버전 성취기준 복구 및 수준 합성
 const subjectData = {
@@ -589,18 +617,24 @@ async function submitFeedback() {
     }
 }
 
-// 📥 관리자용 의견 확인 (비밀번호 보호)
+// 📥 관리자용 의견 확인 (로그인 형식으로 보호)
+// main.js의 296~326번 줄을 아래로 교체하세요
 async function openAdminFeedback() {
-    // 1. 관리자 확인을 위한 간단한 암호 프롬프트
-    const password = prompt("관리자 암호를 입력하세요.");
-    if (password !== "teacher2026") { // <-- 여기서 암호를 원하시는 대로 수정하세요!
-        alert("권한이 없습니다.");
+    const user = auth.currentUser;
+    const adminEmail = "kthblacks11@gmail.com"; // 선생님의 관리자 계정 이메일입니다.
+
+    if (!user) {
+        alert("먼저 구글 로그인을 해주세요.");
+        return;
+    }
+    if (user.email !== adminEmail) {
+        alert("관리자 계정만 접근할 수 있습니다.");
         return;
     }
 
     document.getElementById('admin-feedback-modal').style.display = 'flex';
     const listEl = document.getElementById('admin-feedback-list');
-    listEl.innerHTML = "<p style='text-align:center; padding: 2rem;'>의견을 불러오는 중입니다...</p>";
+    listEl.innerHTML = "<p style='text-align:center; padding: 2rem;'>의견 목록을 불러오는 중입니다...</p>";
     
     try {
         const snapshot = await db.collection('developer_feedback').orderBy('timestamp', 'desc').get();
@@ -619,8 +653,7 @@ async function openAdminFeedback() {
         });
         listEl.innerHTML = html;
     } catch(e) {
-        console.error("의견 로드 에러:", e);
-        listEl.innerHTML = "<p style='color:red; text-align:center;'>의견을 불러오는데 실패했습니다. 파이어베이스 권한을 확인하세요.</p>";
+        listEl.innerHTML = "<p style='color:red;'>데이터 로드 실패. 보안 규칙을 확인하세요.</p>";
     }
 }
 
