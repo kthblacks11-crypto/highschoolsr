@@ -9,7 +9,6 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const storage = firebase.storage();
-// main.js의 7번 줄 바로 다음에 붙여넣으세요
 const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 
@@ -18,14 +17,13 @@ auth.onAuthStateChanged((user) => {
     const loginBtn = document.getElementById('login-btn');
     const logoutBtn = document.getElementById('logout-btn');
     const userInfo = document.getElementById('user-info');
-    const adminBtn = document.getElementById('admin-btn'); // 관리자 버튼 찾기
+    const adminBtn = document.getElementById('admin-btn'); 
 
     if (user) {
         loginBtn.style.display = 'none';
         logoutBtn.style.display = 'inline-block';
         userInfo.innerText = user.displayName + " 선생님";
         
-        // 로그인한 사람이 선생님(관리자)일 때만 관리자 버튼 짠! 하고 나타남
         if (user.email === "kthblacks11@gmail.com") {
             adminBtn.style.display = 'inline-block';
         } else {
@@ -35,7 +33,7 @@ auth.onAuthStateChanged((user) => {
         loginBtn.style.display = 'inline-block';
         logoutBtn.style.display = 'none';
         userInfo.innerText = "";
-        if(adminBtn) adminBtn.style.display = 'none'; // 로그아웃하면 숨김
+        if(adminBtn) adminBtn.style.display = 'none'; 
     }
 });
 
@@ -47,9 +45,6 @@ async function handleLogin() {
 function handleLogout() {
     if(confirm("로그아웃 하시겠습니까?")) { auth.signOut(); }
 }
-
-// 📂 [핵심 요건 완벽 수행] 기존 문제 100% 보존 + 구버전 성취기준 복구 및 수준 합성
-
 
 let currentSubject = "common2";
 let currentStandardCode = null;
@@ -66,13 +61,12 @@ function shuffleArray(array) {
     return array;
 }
 
-// 💡 시스템 모달 관리 (로그인 체크 로직 추가)
+// 💡 시스템 모달 관리 (로그인 체크 로직 추가됨)
 function openSettings() { 
-    // API 키를 입력하기 전에 로그인이 되어있는지 먼저 확인합니다.
     const user = auth.currentUser;
     if (!user) {
         alert("기기 간 API 키 자동 연동을 위해 먼저 구글 로그인이 필요합니다.\n우측 상단의 [🔑 로그인] 버튼을 눌러주세요!");
-        return; // 로그인이 안 되어있으면 설정 창을 열어주지 않음
+        return; 
     }
     document.getElementById('api-key-input').value = localStorage.getItem('gemini_api_key') || "";
     document.getElementById('settings-modal').style.display = 'flex'; 
@@ -92,12 +86,10 @@ function saveApiKey() {
     }
 }
 
-// 💡 의견 보내기 (실패 시 로컬 임시 저장 기능 포함)
 async function submitFeedback() {
     const text = document.getElementById('feedback-message').value.trim();
     if(!text) { alert("의견을 입력해주세요!"); return; }
     
-    // 전송 버튼을 잠시 비활성화하여 중복 클릭 방지
     const submitBtn = document.querySelector('#feedback-modal .save-btn');
     submitBtn.disabled = true;
     submitBtn.innerText = "전송 중...";
@@ -111,27 +103,21 @@ async function submitFeedback() {
         document.getElementById('feedback-message').value = "";
     } catch(e) {
         console.error("의견 전송 실패, 로컬에 임시 저장합니다:", e);
-        
-        // 에러 발생 시 브라우저의 localStorage에 의견을 임시 저장
         let pending = JSON.parse(localStorage.getItem('pending_feedback')) || [];
         pending.push({ text: text, time: new Date().toISOString() });
         localStorage.setItem('pending_feedback', JSON.stringify(pending));
-
         alert("현재 서버 통신이 원활하지 않아 의견이 안전하게 임시 저장되었습니다. 다음 접속 시 자동으로 전송됩니다.");
         document.getElementById('feedback-message').value = "";
     } finally {
-        // 성공하든 실패하든 모달 창을 닫고 버튼 상태 복구
         submitBtn.disabled = false;
         submitBtn.innerText = "의견 전송하기";
         closeFeedback(); 
     }
 }
 
-// 📥 관리자용 의견 확인 (로그인 형식으로 보호)
-// main.js의 296~326번 줄을 아래로 교체하세요
 async function openAdminFeedback() {
     const user = auth.currentUser;
-    const adminEmail = "kthblacks11@gmail.com"; // 선생님의 관리자 계정 이메일입니다.
+    const adminEmail = "kthblacks11@gmail.com"; 
 
     if (!user) {
         alert("먼저 구글 로그인을 해주세요.");
@@ -204,18 +190,16 @@ function displayPreview(file) {
     reader.readAsDataURL(file);
 }
 
-// 🎯 엄밀한 AI 분석 요청 프롬프트 적용
+// 🎯 엄밀한 AI 분석 요청 (gemini-1.5-flash 버전 적용 및 로그인 체크)
 async function analyzeProblem() {
-    const user = auth.currentUser; // 🟢 추가된 로그인 체크 로직
+    const user = auth.currentUser; 
     const apiKey = localStorage.getItem('gemini_api_key');
 
-    // 1단계: 로그인 여부 먼저 확인
     if (!user) {
         alert("먼저 우측 상단의 [🔑 로그인] 버튼을 눌러주세요.\n(로그인 후 API 키를 연동하면 스마트폰에서도 바로 사용할 수 있습니다!)");
         return;
     }
 
-    // 2단계: API 키 여부 확인
     if (!apiKey) {
         alert("⚙️ 분석을 위해서는 구글 AI 스튜디오 API 키 연결이 필요합니다.\n안내창을 열어드릴 테니 확인해 주세요!");
         openSettings();
@@ -256,7 +240,8 @@ ${standardsInfo}
 
 [중요 지침]: 모든 수학 기호, 변수, 숫자, 수식은 반드시 앞뒤로 $ 기호를 감싸서 LaTeX 문법으로 작성하세요. 수식 작성 시 일반 유니코드 특수문자(예: ×, ÷, ≤, ≥, ≠)를 절대 사용하지 말고, 반드시 LaTeX 명령어(예: \\times, \\div, \\le, \\ge, \\neq)를 사용하세요.`;
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        // 🟢 공식 1.5-flash 버전으로 변경됨
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -296,16 +281,19 @@ ${standardsInfo}
     }
 }
 
-// 🎯 태그 이름 오타 방어 및 렌더링
+// 🎯 태그 이름 오타 방어 및 렌더링 (강력한 정규식 적용 완료)
 function renderSophisticatedResult(rawText) {
     const container = document.getElementById('res-container');
     container.innerHTML = "";
 
-    // AI 오타 강제 치환 (상세풀이, 문제풀이 등)
+    // 🟢 AI의 띄어쓰기 및 콜론 오타 완벽 방어
     let text = rawText.replace(/\*\*/g, '');
     text = text.replace(/\[\s+/g, '[').replace(/\s+\]/g, ']');
-    text = text.replace(/\[상세풀이\]:/g, '[상세 풀이]:');
-    text = text.replace(/\[문제\s*풀이.*?\]:/g, '[상세 풀이]:');
+    text = text.replace(/\[\s*교과\s*및\s*단원\s*\]\s*:?/g, '[교과 및 단원]:');
+    text = text.replace(/\[\s*성취기준\s*및\s*수준\s*\]\s*:?/g, '[성취기준 및 수준]:');
+    text = text.replace(/\[\s*핵심\s*개념\s*\]\s*:?/g, '[핵심 개념]:');
+    text = text.replace(/\[\s*상세\s*풀이\s*\]\s*:?/g, '[상세 풀이]:');
+    text = text.replace(/\[\s*문제\s*풀이.*?\]\s*:?/g, '[상세 풀이]:');
     
     const configs = [
         { key: "[교과 및 단원]:", title: "1. 교과명 및 단원명", icon: "📚", bg: "#f3f4f6", border: "#64748b" },
@@ -365,11 +353,11 @@ function renderSophisticatedResult(rawText) {
     });
 }
 
-// 🎯 신뢰도(성취수준 A~E) 유지 로직
+// 🎯 신뢰도(성취수준 A~E) 유지 로직 (gemini-1.5-flash 버전 적용됨)
 async function processAndSaveBackground(analysisText, apiKey) {
     try {
         const transformPrompt = "위 분석 결과를 바탕으로, 원본의 저작권을 침해하지 않게 숫자와 상황을 바꾼 '변형된 수학 문제' 1개만 생성하세요. 인사말 없이 문제 텍스트만 출력하세요.";
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: analysisText + "\n\n" + transformPrompt }] }] })
@@ -388,7 +376,7 @@ async function processAndSaveBackground(analysisText, apiKey) {
         db.collection('transformed_bank').add({
             subject: matchedSubject,
             question: transformedQ.trim(),
-            original_analysis: analysisText, // 분석 원본(A~E 판정 포함) 통째로 저장
+            original_analysis: analysisText, 
             standard_code: stdCode,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
@@ -406,7 +394,6 @@ function showSection(id) {
     const subjectSelector = document.querySelector('.subject-selector');
     const mainSubtitle = document.getElementById('main-subtitle');
     
-    // 🟢 문제 분석 탭일 경우 과목 선택기와 부제(단원명)를 모두 숨김
     if (id === 'problem-analysis') {
         subjectSelector.style.display = 'none'; 
         if(mainSubtitle) mainSubtitle.style.display = 'none'; 
@@ -423,13 +410,11 @@ function showSection(id) {
     }
 }
 
-// main.js 수정 1: 간판은 놔두고 부제만 바꾸기
 function changeSubject() {
     currentSubject = document.getElementById('math-subjects').value;
     const data = subjectData[currentSubject];
     
     if (data) {
-        // 메인 타이틀('main-title')은 건드리지 않고, 부제('main-subtitle')만 변경합니다.
         document.getElementById('main-subtitle').innerText = "[" + data.title + "] " + data.subtitle;
     }
     
@@ -475,13 +460,12 @@ function initLevelQuiz() {
 async function startLevelMatching(code) {
     currentStandardCode = code; currentLevelQ = 0;
     const standard = subjectData[currentSubject].standards.find(s => s.code === code);
-    let combinedQuestions = [...standard.questions]; // 기본 문항 복사
+    let combinedQuestions = [...standard.questions]; 
 
     try {
         const snapshot = await db.collection('transformed_bank').where('standard_code', '==', code).get();
         snapshot.forEach(doc => {
             const data = doc.data();
-            // 🎯 성취수준 파싱 정규식 완벽 수정 (A~E 무조건 캡처)
             let extractedLevel = data.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1] || "C"; 
 
             combinedQuestions.push({
@@ -611,6 +595,7 @@ function resetAnalysis() {
     }
 }
 
+// 🎯 재분석 로직 (gemini-1.5-flash 버전 적용됨)
 async function reAnalyzeWithChat() {
     const apiKey = localStorage.getItem('gemini_api_key');
     if (!apiKey) return;
@@ -627,7 +612,7 @@ async function reAnalyzeWithChat() {
         
         대화를 깊이 분석하여 '최종 최적화 분석 결과'를 4가지 태그([교과 및 단원]:, [성취기준 및 수준]:, [핵심 개념]:, [상세 풀이]:)를 유지하여 답변하세요. 수식은 $ LaTeX를 사용하세요.`;
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
@@ -641,7 +626,7 @@ async function reAnalyzeWithChat() {
     } catch (error) { alert("오류 발생"); }
 }
 
-// 🎯 챗봇 답변 가독성 (HTML 태그 변환) 로직
+// 🎯 챗봇 로직 (gemini-1.5-flash 버전 적용됨)
 async function sendChatMessage() {
     const inputEl = document.getElementById('chat-input');
     const message = inputEl.value.trim();
@@ -656,25 +641,24 @@ async function sendChatMessage() {
     try {
         const prompt = `이전 분석: ${currentChatContext}\n교사의 의견: "${message}"\n\n[지침]: 수학 교사의 의견을 바탕으로 답변하세요. 가독성을 위해 적절한 단락 나누기, 글머리 기호(•), 마크다운 굵은 글씨(**)를 사용하세요. 수식은 $ LaTeX 문법을 사용하세요.`;
         
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
         const result = await response.json();
         const aiReply = result.candidates[0].content.parts[0].text;
         
-        // ✨ 줄바꿈(\n)과 굵은 글씨(**)를 HTML로 예쁘게 치환
         const formattedReply = aiReply.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
 
         historyEl.innerHTML += `<div style="text-align: left; margin-bottom: 12px;"><span style="background: white; border: 1px solid var(--border); padding: 12px 16px; border-radius: 16px 16px 16px 0; display: inline-block; max-width: 85%;">${formattedReply}</span></div>`;
         if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([historyEl]); }
         historyEl.scrollTop = historyEl.scrollHeight;
-    } catch(e) { historyEl.innerHTML += `<div style="color: red;">오류가 발생했습니다.</div>`; }
+    } catch(e) { historyEl.innerHTML += `<div style="color: red;">오류가 발생했습니다. API 연결을 확인해주세요.</div>`; }
 }
-// ♻️ 밀린 의견(임시 저장된 의견) 백그라운드 전송 함수
+
 async function syncPendingFeedback() {
     let pending = JSON.parse(localStorage.getItem('pending_feedback')) || [];
-    if (pending.length === 0) return; // 보낼 게 없으면 바로 종료
+    if (pending.length === 0) return; 
 
     let remaining = [];
     for (let item of pending) {
@@ -684,12 +668,10 @@ async function syncPendingFeedback() {
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
         } catch (e) {
-            // 또 실패하면 remaining 배열에 남겨둠
             remaining.push(item);
         }
     }
 
-    // 전송 성공한 것들은 지우고, 실패한 것만 다시 로컬에 덮어쓰기
     localStorage.setItem('pending_feedback', JSON.stringify(remaining));
 }
 

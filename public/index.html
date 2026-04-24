@@ -1,681 +1,201 @@
-const firebaseConfig = {
-    apiKey: "AIzaSyDq5c9_BMx-zoYHUAGAp8B3jbvi3tj8HXo",
-    authDomain: "math-asa-project-2026.firebaseapp.com",
-    projectId: "math-asa-project-2026",
-    storageBucket: "math-asa-project-2026.firebasestorage.app",
-    messagingSenderId: "1045151452788",
-    appId: "1:1045151452788:web:bf69cb26e0be84dd8b0b21"
-  };
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-const storage = firebase.storage();
-const auth = firebase.auth();
-const provider = new firebase.auth.GoogleAuthProvider();
-
-// 로그인 상태에 따라 화면을 자동으로 바꿔주는 기능입니다.
-auth.onAuthStateChanged((user) => {
-    const loginBtn = document.getElementById('login-btn');
-    const logoutBtn = document.getElementById('logout-btn');
-    const userInfo = document.getElementById('user-info');
-    const adminBtn = document.getElementById('admin-btn'); 
-
-    if (user) {
-        loginBtn.style.display = 'none';
-        logoutBtn.style.display = 'inline-block';
-        userInfo.innerText = user.displayName + " 선생님";
-        
-        if (user.email === "kthblacks11@gmail.com") {
-            adminBtn.style.display = 'inline-block';
-        } else {
-            adminBtn.style.display = 'none';
-        }
-    } else {
-        loginBtn.style.display = 'inline-block';
-        logoutBtn.style.display = 'none';
-        userInfo.innerText = "";
-        if(adminBtn) adminBtn.style.display = 'none'; 
-    }
-});
-
-async function handleLogin() {
-    try { await auth.signInWithPopup(provider); }
-    catch (error) { alert("로그인에 실패했습니다."); }
-}
-
-function handleLogout() {
-    if(confirm("로그아웃 하시겠습니까?")) { auth.signOut(); }
-}
-
-let currentSubject = "common2";
-let currentStandardCode = null;
-let currentLevelQ = 0;
-let currentQuestions = [];
-let selectedFile = null;
-let currentChatContext = ""; 
-
-function shuffleArray(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-    }
-    return array;
-}
-
-// 💡 시스템 모달 관리 (로그인 체크 로직 추가됨)
-function openSettings() { 
-    const user = auth.currentUser;
-    if (!user) {
-        alert("기기 간 API 키 자동 연동을 위해 먼저 구글 로그인이 필요합니다.\n우측 상단의 [🔑 로그인] 버튼을 눌러주세요!");
-        return; 
-    }
-    document.getElementById('api-key-input').value = localStorage.getItem('gemini_api_key') || "";
-    document.getElementById('settings-modal').style.display = 'flex'; 
-}
-function closeSettings() { document.getElementById('settings-modal').style.display = 'none'; }
-function openFeedback() { document.getElementById('feedback-modal').style.display = 'flex'; }
-function closeFeedback() { document.getElementById('feedback-modal').style.display = 'none'; }
-function closeModal() { document.getElementById('level-modal').style.display = 'none'; }
-function closeAdminFeedback() { document.getElementById('admin-feedback-modal').style.display = 'none'; }
-
-function saveApiKey() {
-    const key = document.getElementById('api-key-input').value.trim();
-    if (key) {
-        localStorage.setItem('gemini_api_key', key);
-        alert("API 키가 저장되었습니다.");
-        closeSettings();
-    }
-}
-
-async function submitFeedback() {
-    const text = document.getElementById('feedback-message').value.trim();
-    if(!text) { alert("의견을 입력해주세요!"); return; }
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2022 개정교육과정 고등학교 수학-성취기준 매칭 시스템</title>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     
-    const submitBtn = document.querySelector('#feedback-modal .save-btn');
-    submitBtn.disabled = true;
-    submitBtn.innerText = "전송 중...";
+    <script>
+        MathJax = { tex: { inlineMath: [['$','$'], ['\\(','\\)']] }, svg: { fontCache: 'global' } };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body onpaste="handlePaste(event)">
 
-    try {
-        await db.collection('developer_feedback').add({
-            text: text,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        alert("의견이 성공적으로 전송되었습니다. 감사합니다!");
-        document.getElementById('feedback-message').value = "";
-    } catch(e) {
-        console.error("의견 전송 실패, 로컬에 임시 저장합니다:", e);
-        let pending = JSON.parse(localStorage.getItem('pending_feedback')) || [];
-        pending.push({ text: text, time: new Date().toISOString() });
-        localStorage.setItem('pending_feedback', JSON.stringify(pending));
-        alert("현재 서버 통신이 원활하지 않아 의견이 안전하게 임시 저장되었습니다. 다음 접속 시 자동으로 전송됩니다.");
-        document.getElementById('feedback-message').value = "";
-    } finally {
-        submitBtn.disabled = false;
-        submitBtn.innerText = "의견 전송하기";
-        closeFeedback(); 
-    }
-}
-
-async function openAdminFeedback() {
-    const user = auth.currentUser;
-    const adminEmail = "kthblacks11@gmail.com"; 
-
-    if (!user) {
-        alert("먼저 구글 로그인을 해주세요.");
-        return;
-    }
-    if (user.email !== adminEmail) {
-        alert("관리자 계정만 접근할 수 있습니다.");
-        return;
-    }
-
-    document.getElementById('admin-feedback-modal').style.display = 'flex';
-    const listEl = document.getElementById('admin-feedback-list');
-    listEl.innerHTML = "<p style='text-align:center; padding: 2rem;'>의견 목록을 불러오는 중입니다...</p>";
-    
-    try {
-        const snapshot = await db.collection('developer_feedback').orderBy('timestamp', 'desc').get();
-        if(snapshot.empty) {
-            listEl.innerHTML = "<p style='text-align:center; color:#64748b;'>아직 접수된 의견이 없습니다.</p>";
-            return;
-        }
-        let html = "";
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            const date = data.timestamp ? data.timestamp.toDate().toLocaleString() : "방금 전";
-            html += `<div style="background: white; padding: 1.2rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                        <p style="margin:0 0 0.5rem 0; font-size:0.8rem; color:var(--text-light); font-weight:bold;">🕒 ${date}</p>
-                        <p style="margin:0; font-size:0.95rem; white-space:pre-wrap; line-height:1.5;">${data.text}</p>
-                     </div>`;
-        });
-        listEl.innerHTML = html;
-    } catch(e) {
-        listEl.innerHTML = "<p style='color:red;'>데이터 로드 실패. 보안 규칙을 확인하세요.</p>";
-    }
-}
-
-function handleImageUpload(event) {
-    selectedFile = event.target.files[0];
-    displayPreview(selectedFile);
-}
-
-function handlePaste(event) {
-    const items = (event.clipboardData || event.originalEvent.clipboardData).items;
-    for (let index in items) {
-        const item = items[index];
-        if (item.kind === 'file' && item.type.startsWith('image/')) {
-            selectedFile = item.getAsFile();
-            displayPreview(selectedFile);
-            showSection('problem-analysis');
-            break;
-        }
-    }
-}
-
-function displayPreview(file) {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        document.getElementById('image-preview').src = e.target.result;
-        document.getElementById('preview-container').style.display = 'block';
-        document.getElementById('upload-placeholder').style.display = 'none';
-        document.getElementById('analyze-btn').style.display = 'block';
-        document.getElementById('analysis-result').style.display = 'none';
-        
-        if(document.getElementById('ai-chat-container')) {
-            document.getElementById('ai-chat-container').style.display = 'none';
-            document.getElementById('chat-history').innerHTML = ""; 
-            currentChatContext = ""; 
-        }
-    }
-    reader.readAsDataURL(file);
-}
-
-// 🎯 엄밀한 AI 분석 요청 (gemini-1.5-flash 버전 적용 및 로그인 체크)
-async function analyzeProblem() {
-    const user = auth.currentUser; 
-    const apiKey = localStorage.getItem('gemini_api_key');
-
-    if (!user) {
-        alert("먼저 우측 상단의 [🔑 로그인] 버튼을 눌러주세요.\n(로그인 후 API 키를 연동하면 스마트폰에서도 바로 사용할 수 있습니다!)");
-        return;
-    }
-
-    if (!apiKey) {
-        alert("⚙️ 분석을 위해서는 구글 AI 스튜디오 API 키 연결이 필요합니다.\n안내창을 열어드릴 테니 확인해 주세요!");
-        openSettings();
-        return;
-    }
-
-    document.getElementById('analyze-btn').style.display = 'none';
-    document.getElementById('analysis-loading').style.display = 'block';
-    document.getElementById('loading-status').innerText = "AI 교사가 문제를 정밀 분석 및 시각화 중입니다...";
-
-    try {
-        const base64Image = document.getElementById('image-preview').src.split(',')[1];
-        
-        let standardsInfo = "";
-        for (const key in subjectData) {
-            if (subjectData[key].standards && subjectData[key].standards.length > 0) {
-                standardsInfo += `\n--- ${subjectData[key].title} ---\n`;
-                standardsInfo += subjectData[key].standards.map(s => `${s.code} ${s.desc}`).join('\n');
-            }
-        }
-        
-const prompt = `당신은 대한민국 최고의 수학 교사입니다. 문항을 엄밀히 분석하여 아래 4가지 대괄호 태그를 '토씨 하나 틀리지 말고' 사용하여 답변하세요. 마크다운 볼드체(**)를 태그 이름에 절대 사용하지 마세요.
-
-[교과 및 단원]: 해당 문제의 교과명과 단원명을 명시하세요.
-
-[성취기준 및 수준]: 
-아래 제공된 <과목별 성취기준 목록>에서 가장 적합한 것을 골라 반드시 아래의 3줄 형식으로 작성하세요.
-성취기준: [코드] 성취기준의 전체 내용
-성취수준: A~E 중 택 1
-판정 이유: 수학적 엄밀성과 사고 도약의 단계를 근거로 서술
-<과목별 성취기준 목록>
-${standardsInfo}
-</과목별 성취기준 목록>
-
-[핵심 개념]: 문제 해결에 필요한 핵심 공식, 정리, 또는 수학적 원리를 글머리 기호(•)를 사용하여 2~3가지로 명확하고 깊이 있게 제시하세요. 단순 나열이 아닌 조건과 정의를 엄밀하게 기술하세요.
-
-[상세 풀이]: 논리적 비약이나 생략 없이 가독성 좋은 단계별 풀이를 작성하세요. 반드시 '1단계:', '2단계:' 형식으로 문단을 시작하세요. 절대 '[상세 풀이]:' 라는 태그 이름을 '[문제 풀이]:' 등으로 변경하지 마세요.
-
-[중요 지침]: 모든 수학 기호, 변수, 숫자, 수식은 반드시 앞뒤로 $ 기호를 감싸서 LaTeX 문법으로 작성하세요. 수식 작성 시 일반 유니코드 특수문자(예: ×, ÷, ≤, ≥, ≠)를 절대 사용하지 말고, 반드시 LaTeX 명령어(예: \\times, \\div, \\le, \\ge, \\neq)를 사용하세요.`;
-
-        // 🟢 공식 1.5-flash 버전으로 변경됨
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [
-                        { text: prompt },
-                        { inline_data: { mime_type: selectedFile.type, data: base64Image } }
-                    ]
-                }],
-                generationConfig: { temperature: 0.1, topP: 0.9, maxOutputTokens: 3072 }
-            })
-        });
-
-        if (!response.ok) throw new Error("API 오류가 발생했습니다.");
-
-        const result = await response.json();
-        const analysisText = result.candidates[0].content.parts[0].text;
-
-        renderSophisticatedResult(analysisText);
-
-        document.getElementById('analysis-loading').style.display = 'none';
-        document.getElementById('analysis-result').style.display = 'block';
-        
-        currentChatContext = analysisText; 
-        document.getElementById('ai-chat-container').style.display = 'block'; 
-        
-        if (window.MathJax) {
-            MathJax.typesetClear();
-            MathJax.typesetPromise([document.getElementById('analysis-result')]).catch(err => console.log(err));
-        }
-        processAndSaveBackground(analysisText, apiKey);
-
-    } catch (error) {
-        alert("⚠️ 분석 오류: " + error.message);
-        document.getElementById('analysis-loading').style.display = 'none';
-        document.getElementById('analyze-btn').style.display = 'block';
-    }
-}
-
-// 🎯 태그 이름 오타 방어 및 렌더링 (강력한 정규식 적용 완료)
-function renderSophisticatedResult(rawText) {
-    const container = document.getElementById('res-container');
-    container.innerHTML = "";
-
-    // 🟢 AI의 띄어쓰기 및 콜론 오타 완벽 방어
-    let text = rawText.replace(/\*\*/g, '');
-    text = text.replace(/\[\s+/g, '[').replace(/\s+\]/g, ']');
-    text = text.replace(/\[\s*교과\s*및\s*단원\s*\]\s*:?/g, '[교과 및 단원]:');
-    text = text.replace(/\[\s*성취기준\s*및\s*수준\s*\]\s*:?/g, '[성취기준 및 수준]:');
-    text = text.replace(/\[\s*핵심\s*개념\s*\]\s*:?/g, '[핵심 개념]:');
-    text = text.replace(/\[\s*상세\s*풀이\s*\]\s*:?/g, '[상세 풀이]:');
-    text = text.replace(/\[\s*문제\s*풀이.*?\]\s*:?/g, '[상세 풀이]:');
-    
-    const configs = [
-        { key: "[교과 및 단원]:", title: "1. 교과명 및 단원명", icon: "📚", bg: "#f3f4f6", border: "#64748b" },
-        { key: "[성취기준 및 수준]:", title: "2. 성취기준과 성취수준", icon: "📍", bg: "#eff6ff", border: "#3b82f6" },
-        { key: "[핵심 개념]:", title: "3. 엄밀한 핵심 개념", icon: "💡", bg: "#fffbeb", border: "#f59e0b" },
-        { key: "[상세 풀이]:", title: "4. 단계별 정밀 풀이", icon: "✍️", bg: "#f0fdf4", border: "#10b981" }
-    ];
-
-    configs.forEach((conf, index) => {
-        let content = "";
-        const startIndex = text.indexOf(conf.key);
-        
-        if (startIndex !== -1) {
-            const contentStart = startIndex + conf.key.length;
-            let nextKeyIndex = text.length; 
-            
-            configs.forEach((otherConf, otherIndex) => {
-                if (index !== otherIndex) {
-                    const idx = text.indexOf(otherConf.key, contentStart);
-                    if (idx !== -1 && idx < nextKeyIndex) {
-                        nextKeyIndex = idx;
-                    }
-                }
-            });
-            content = text.substring(contentStart, nextKeyIndex).trim();
-        }
-
-        if (!content) content = "데이터를 분석 중이거나 형식이 일치하지 않습니다.";
-
-        // HTML 태그 변환
-        if (conf.key === "[성취기준 및 수준]:") {
-            content = content.replace(/\n/g, ' ')
-                             .replace(/(성취기준:)/g, '<strong style="color:#2563eb; font-size: 1.05rem;">$1</strong>')
-                             .replace(/(성취수준:)/g, '<br><strong style="color:#2563eb; font-size: 1.05rem; margin-top: 8px; display: inline-block;">$1</strong>')
-                             .replace(/(판정 이유:)/g, '<br><strong style="color:#2563eb; font-size: 1.05rem; margin-top: 8px; display: inline-block;">$1</strong>');
-        }
-        if (conf.key === "[상세 풀이]:") {
-            content = content.replace(/(\d+단계[:.])/g, '<br><br><span style="background-color:#dbeafe; color:#1e40af; padding:4px 10px; border-radius:20px; font-weight:bold; font-size:0.95rem; display:inline-block; margin-bottom:8px;">$1</span><br>');
-            if(content.startsWith('<br><br>')) content = content.substring(8);
-            if(content.startsWith('<br>')) content = content.substring(4);
-        }
-        if (conf.key === "[핵심 개념]:") {
-            content = content.replace(/\n/g, '<br>');
-        }
-
-        const card = document.createElement('div');
-        card.style.cssText = `background: ${conf.bg}; border: 1px solid ${conf.border}44; border-left: 6px solid ${conf.border}; padding: 1.2rem; border-radius: 12px; margin-bottom: 1.2rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);`;
-        
-        card.innerHTML = `
-            <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.8rem;">
-                <span style="font-size:1.2rem;">${conf.icon}</span>
-                <strong style="font-size:1.1rem; color:#1e293b;">${conf.title}</strong>
+    <header>
+        <div class="header-container">
+            <div class="header-title-group">
+                <h1 id="main-title" style="margin-bottom: 0;">2022 개정교육과정 고등학교 수학</h1>
+                <div id="system-title" style="font-size: 1.2rem; font-weight: 700; color: #bae6fd; margin-top: 5px; letter-spacing: -0.5px;">성취기준 매칭 시스템</div>
+                <p id="main-subtitle" style="margin-top: 10px;">과목을 선택하면 단원명이 표시됩니다.</p>
             </div>
-            <div class="analysis-content" style="color:#334155; line-height:1.8; font-size:0.95rem;">${content}</div>
-        `;
-        container.appendChild(card);
-    });
-}
+            
+            <div class="header-actions">
+                <span id="user-info" style="color: white; font-size: 0.75rem; margin-right: 5px;"></span>
+                <button id="login-btn" class="settings-btn" onclick="handleLogin()">🔑 로그인</button>
+                <button id="logout-btn" class="settings-btn" onclick="handleLogout()" style="display:none;">로그아웃</button>
+                <button class="settings-btn feedback-btn" onclick="openFeedback()">💡 의견보내기</button>
+                <button id="admin-btn" class="settings-btn" onclick="openAdminFeedback()" style="display:none;">📥</button>
+                <button class="settings-btn" onclick="openSettings()">⚙️ API 가져오기</button>
+            </div>
+        </div>
+    </header>
 
-// 🎯 신뢰도(성취수준 A~E) 유지 로직 (gemini-1.5-flash 버전 적용됨)
-async function processAndSaveBackground(analysisText, apiKey) {
-    try {
-        const transformPrompt = "위 분석 결과를 바탕으로, 원본의 저작권을 침해하지 않게 숫자와 상황을 바꾼 '변형된 수학 문제' 1개만 생성하세요. 인사말 없이 문제 텍스트만 출력하세요.";
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: analysisText + "\n\n" + transformPrompt }] }] })
-        });
-        const result = await response.json();
-        const transformedQ = result.candidates[0].content.parts[0].text;
-        const stdCode = analysisText.match(/\[10공수\d-\d\d-\d\d\]/g)?.[0] || "unknown";
+<div class="subject-selector">
+  <label for="math-subjects">과목 선택 (2022 개정): </label>
+  <select id="math-subjects" onchange="changeSubject()">
+    <optgroup label="공통 과목">
+      <option value="common1">공통수학1</option>
+      <option value="common2" selected>공통수학2</option>
+    </optgroup>
+    <optgroup label="일반 선택">
+      <option value="algebra">대수</option>
+      <option value="calculus1">미적분Ⅰ</option>
+      <option value="stats">확률과 통계</option>
+    </optgroup>
+    <optgroup label="진로/융합 선택">
+      <option value="calculus2">미적분Ⅱ</option>
+      <option value="geometry">기하</option>
+      <option value="ai-math">인공지능 수학</option>
+    </optgroup>
+  </select>
+</div>
 
-        let matchedSubject = currentSubject;
-        for (const key in subjectData) {
-            if (subjectData[key].standards && subjectData[key].standards.some(s => s.code === stdCode)) {
-                matchedSubject = key; break;
-            }
-        }
+<div class="container">
+    <div class="tabs">
+        <button class="tab-btn active" onclick="showSection('dashboard')">성취기준과 성취수준</button>
+        <button class="tab-btn" onclick="showSection('quiz')">문항 매칭 연습</button>
+        <button class="tab-btn" onclick="showSection('checklist')">📋 나의 체크리스트</button>
+        <button class="tab-btn" onclick="showSection('problem-analysis')">🔍 문제 분석하기</button>
+    </div>
 
-        db.collection('transformed_bank').add({
-            subject: matchedSubject,
-            question: transformedQ.trim(),
-            original_analysis: analysisText, 
-            standard_code: stdCode,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-    } catch (e) { console.warn("Background Save Failed:", e); }
-}
+    <div id="dashboard" class="section active">
+        <h2>성취기준 목록</h2>
+        <div id="card-container"></div>
+    </div>
 
-function showSection(id) {
-    document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-    const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(`'${id}'`));
-    if (activeBtn) activeBtn.classList.add('active');
-    if (id === 'quiz') initLevelQuiz();
+    <div id="quiz" class="section">
+        <h2>성취수준 분석기</h2>
+        <div id="quiz-standard-selection">
+            <p style="text-align:center; margin-bottom:1.5rem;">분석할 성취기준을 선택하세요.</p>
+            <div id="quiz-standard-list"></div>
+        </div>
+        <div id="quiz-level-matching" style="display: none;">
+            <button class="save-btn" onclick="backToStandardSelection()" style="margin-bottom: 1rem; background:none; border:none; color:var(--primary); cursor:pointer; font-size:1rem; width: auto; padding: 0; font-weight: bold;">&larr; 성취기준 다시 선택</button>
+            <div class="quiz-layout">
+                <div class="guide-side" id="achievement-levels-side"></div>
+                <div class="quiz-side">
+                    <div class="quiz-container">
+                        <h3 id="selected-standard-info" style="margin-top:0; font-size:0.95rem; color:var(--text-light); text-align:center; margin-bottom: 1rem;"></h3>
+                        <div class="question-box" id="level-question-text">문제를 불러오는 중...</div>
+                        <p style="text-align: center; font-weight: bold; margin-bottom: 1rem; font-size: 0.95rem;">이 문항의 성취수준을 판정하세요.</p>
+                        <div class="options" id="level-options"></div>
+                        <div id="level-feedback"></div>
+                        <button class="save-btn" id="next-q-btn" onclick="nextLevelQuestion()" style="margin-top:1rem; display: none;">다음 문항 보기</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-    const subjectSelector = document.querySelector('.subject-selector');
-    const mainSubtitle = document.getElementById('main-subtitle');
-    
-    if (id === 'problem-analysis') {
-        subjectSelector.style.display = 'none'; 
-        if(mainSubtitle) mainSubtitle.style.display = 'none'; 
-    } else {
-        subjectSelector.style.display = 'block';
-        if(mainSubtitle) mainSubtitle.style.display = 'block'; 
-    }
+    <div id="checklist" class="section">
+        <h2>수업 진행 체크리스트</h2>
+        <div id="checklist-container"></div>
+        <button class="save-btn" onclick="saveChecklist()">진행 상황 저장하기</button>
+    </div>
 
-    const subjectSelectorStyle = document.querySelector('.subject-selector');
-    if (id === 'problem-analysis') {
-        subjectSelectorStyle.style.visibility = 'hidden';
-    } else {
-        subjectSelectorStyle.style.visibility = 'visible';
-    }
-}
-
-function changeSubject() {
-    currentSubject = document.getElementById('math-subjects').value;
-    const data = subjectData[currentSubject];
-    
-    if (data) {
-        document.getElementById('main-subtitle').innerText = "[" + data.title + "] " + data.subtitle;
-    }
-    
-    initDashboard(); 
-    initLevelQuiz(); 
-    initChecklist();
-}
-
-
-function initDashboard() {
-    const container = document.getElementById('card-container');
-    container.innerHTML = "";
-    if (!subjectData[currentSubject]) return;
-    subjectData[currentSubject].standards.forEach(std => {
-        const card = document.createElement('div');
-        card.className = 'card';
-        card.innerHTML = `<h3>${std.code}</h3><p>${std.desc}</p>`;
-        card.onclick = () => openModal(std);
-        container.appendChild(card);
-    });
-    if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([container]); }
-}
-
-function initLevelQuiz() {
-    const container = document.getElementById('quiz-standard-list');
-    container.innerHTML = '';
-    if (!subjectData[currentSubject]) return;
-    const stds = subjectData[currentSubject].standards.filter(std => std.questions && std.questions.length > 0);
-    if (stds.length === 0) {
-        container.innerHTML = "<p style='text-align:center;'>이 과목에는 아직 문제가 없습니다.</p>";
-    } else {
-        stds.forEach(std => {
-            const btn = document.createElement('button');
-            btn.className = 'option-btn';
-            btn.innerHTML = `<strong>${std.code}</strong><br>${std.desc}`;
-            btn.onclick = () => startLevelMatching(std.code);
-            container.appendChild(btn);
-        });
-    }
-    backToStandardSelection();
-}
-
-async function startLevelMatching(code) {
-    currentStandardCode = code; currentLevelQ = 0;
-    const standard = subjectData[currentSubject].standards.find(s => s.code === code);
-    let combinedQuestions = [...standard.questions]; 
-
-    try {
-        const snapshot = await db.collection('transformed_bank').where('standard_code', '==', code).get();
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            let extractedLevel = data.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1] || "C"; 
-
-            combinedQuestions.push({
-                q: `<div style="background-color: #f0fdf4; padding: 10px; border-left: 4px solid #22c55e; margin-bottom: 10px; border-radius: 4px;">
-                        <span style="font-size: 0.8rem; color: #166534; font-weight: bold;">💡 AI 변형 추가 문항</span>
-                    </div>` + data.question,
-                level: extractedLevel,
-                reason: "사용자가 업로드한 문항을 AI가 분석하고 변형한 실전 문항입니다."
-            });
-        });
-    } catch (error) { console.warn("DB 로드 실패"); }
-
-    currentQuestions = shuffleArray(combinedQuestions);
-    document.getElementById('quiz-standard-selection').style.display = 'none';
-    document.getElementById('quiz-level-matching').style.display = 'block';
-    document.getElementById('selected-standard-info').innerText = `${standard.code} ${standard.desc}`;
-    
-    const levelsContainer = document.getElementById('achievement-levels-side');
-    levelsContainer.innerHTML = `
-        <h4>성취수준 가이드</h4>
-        <div class="guide-item"><strong>A (상)</strong> ${standard.levels.high}</div>
-        <div class="guide-item"><strong>B (우수)</strong> ${standard.levels.b || standard.levels.high.replace("이해하여 설명할 수 있으며", "설명할 수 있고").replace("체계적으로 수행", "정확하게 수행")}</div>
-        <div class="guide-item"><strong>C (중)</strong> ${standard.levels.mid}</div>
-        <div class="guide-item"><strong>D (미흡)</strong> ${standard.levels.d || standard.levels.mid.replace("이해하고", "알고").replace("계산을 할 수 있다", "간단한 계산을 할 수 있다")}</div>
-        <div class="guide-item"><strong>E (하)</strong> ${standard.levels.low}</div>
-    `;
-    loadLevelQuestion();
-}
-
-function loadLevelQuestion() {
-    const qBox = document.getElementById('level-question-text');
-    const optionsBox = document.getElementById('level-options');
-    const feedbackBox = document.getElementById('level-feedback');
-    const nextBtn = document.getElementById('next-q-btn');
-    if (currentQuestions.length === 0) return;
-    const question = currentQuestions[currentLevelQ];
-    qBox.innerHTML = `<strong>[문항 ${currentLevelQ + 1}/${currentQuestions.length}]</strong><br><br>${question.q}`;
-    optionsBox.innerHTML = ''; feedbackBox.style.display = 'none'; nextBtn.style.display = 'none';
-    
-    ['A', 'B', 'C', 'D', 'E'].forEach(level => {
-        const btn = document.createElement('button');
-        btn.className = 'option-btn'; btn.innerText = level;
-        btn.onclick = () => checkLevelAnswer(level, btn);
-        optionsBox.appendChild(btn);
-    });
-    if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([qBox]); }
-}
-
-function checkLevelAnswer(selectedLevel, btn) {
-    const question = currentQuestions[currentLevelQ];
-    const fb = document.getElementById('level-feedback');
-    document.querySelectorAll('#level-options .option-btn').forEach(b => { b.disabled = true; b.style.opacity = '0.6'; });
-    fb.style.display = 'block';
-    
-    if (selectedLevel === question.level) {
-        fb.innerHTML = `🎉 <strong>정답입니다!</strong><br><br><strong>[이유]</strong> ${question.reason}`;
-        fb.style.color = "#166534"; fb.style.backgroundColor = '#dcfce7';
-        btn.style.border = '3px solid #166534'; btn.style.opacity = '1';
-    } else {
-        fb.innerHTML = `❌ <strong>오답입니다.</strong> 이 문항은 <strong>'${question.level}'</strong> 수준입니다.<br><br><strong>[이유]</strong> ${question.reason}`;
-        fb.style.color = "#991b1b"; fb.style.backgroundColor = '#fee2e2';
-        btn.style.border = '3px solid #ef4444'; btn.style.opacity = '1';
-        document.querySelectorAll('#level-options .option-btn').forEach(b => {
-            if (b.innerText === question.level) { b.style.backgroundColor = '#dcfce7'; b.style.border = '3px solid #166534'; b.style.opacity = '1'; }
-        });
-    }
-    document.getElementById('next-q-btn').style.display = 'block';
-    if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([fb]); }
-}
-
-function nextLevelQuestion() {
-    if (currentQuestions.length === 0) return;
-    currentLevelQ = (currentLevelQ + 1) % currentQuestions.length;
-    loadLevelQuestion();
-}
-
-function backToStandardSelection() {
-    currentStandardCode = null; currentQuestions = [];
-    document.getElementById('quiz-standard-selection').style.display = 'block';
-    document.getElementById('quiz-level-matching').style.display = 'none';
-}
-
-function initChecklist() {
-    const container = document.getElementById('checklist-container');
-    container.innerHTML = "";
-    if (!subjectData[currentSubject]) return;
-    const saved = JSON.parse(localStorage.getItem('check_' + currentSubject)) || {};
-    subjectData[currentSubject].standards.forEach(std => {
-        const div = document.createElement('div');
-        div.className = 'check-item';
-        div.innerHTML = `<input type="checkbox" id="c-${std.code}" ${saved[std.code]?'checked':''}>
-                         <label for="c-${std.code}"><strong>${std.code}</strong> ${std.desc}</label>`;
-        container.appendChild(div);
-    });
-}
-
-function saveChecklist() {
-    const checks = {};
-    document.querySelectorAll('#checklist-container input').forEach(input => {
-        checks[input.id.replace('c-', '')] = input.checked;
-    });
-    localStorage.setItem('check_' + currentSubject, JSON.stringify(checks));
-    alert("저장되었습니다.");
-}
-
-function openModal(std) {
-    document.getElementById('modal-title').innerText = std.code;
-    document.getElementById('modal-desc').innerText = std.desc;
-    document.getElementById('level-high').innerText = std.levels.high;
-    document.getElementById('level-b').innerText = std.levels.b || std.levels.high.replace("이해하여 설명할 수 있으며", "설명할 수 있고");
-    document.getElementById('level-mid').innerText = std.levels.mid;
-    document.getElementById('level-d').innerText = std.levels.d || std.levels.mid.replace("이해하고", "알고");
-    document.getElementById('level-low').innerText = std.levels.low;
-    document.getElementById('level-modal').style.display = 'flex';
-}
-
-function resetAnalysis() {
-    document.getElementById('problem-image').value = "";
-    document.getElementById('preview-container').style.display = 'none';
-    document.getElementById('upload-placeholder').style.display = 'block';
-    document.getElementById('analyze-btn').style.display = 'none';
-    document.getElementById('analysis-result').style.display = 'none';
-    if(document.getElementById('ai-chat-container')) {
-        document.getElementById('ai-chat-container').style.display = 'none';
-        document.getElementById('chat-history').innerHTML = "";
-        currentChatContext = ""; 
-    }
-}
-
-// 🎯 재분석 로직 (gemini-1.5-flash 버전 적용됨)
-async function reAnalyzeWithChat() {
-    const apiKey = localStorage.getItem('gemini_api_key');
-    if (!apiKey) return;
-    const chatHistory = document.getElementById('chat-history').innerText;
-    if (!chatHistory) { alert("먼저 대화를 진행해주세요."); return; }
-
-    document.getElementById('analysis-result').style.display = 'none';
-    document.getElementById('analysis-loading').style.display = 'block';
-
-    try {
-        const prompt = `당신은 대한민국 최고의 수학 교사입니다. 
-        처음 분석: ${currentChatContext}
-        교사 대화 내역: ${chatHistory}
+    <div id="problem-analysis" class="section">
+        <h2>문제 분석하기</h2>
         
-        대화를 깊이 분석하여 '최종 최적화 분석 결과'를 4가지 태그([교과 및 단원]:, [성취기준 및 수준]:, [핵심 개념]:, [상세 풀이]:)를 유지하여 답변하세요. 수식은 $ LaTeX를 사용하세요.`;
+        <div id="analysis-layout-wrapper" style="display: flex; gap: 1.5rem; align-items: flex-start;">
+            <div class="quiz-container" style="flex: 1; min-width: 300px; margin: 0;">
+                <div id="upload-area" style="border: 2px dashed #cbd5e1; border-radius: 12px; padding: 2rem; text-align: center; margin-bottom: 1.5rem; cursor: pointer;" onclick="document.getElementById('problem-image').click()">
+                    <div id="preview-container" style="display: none; margin-bottom: 1rem;">
+                        <img id="image-preview" src="" alt="Preview" style="max-width: 100%; border-radius: 8px;">
+                    </div>
+                    <div id="upload-placeholder">
+                        <span style="font-size: 3rem;">📸</span>
+                        <p style="margin-top: 1rem; font-weight: bold; color: var(--primary);">사진 찍기, 업로드 또는 붙여넣기(Ctrl+V)</p>
+                        <p style="font-size: 0.8rem; color: var(--text-light);">문제를 AI가 분석하여 성취기준과 연결해줍니다.</p>
+                    </div>
+                    <input type="file" id="problem-image" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
+                </div>
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-        });
+                <button class="save-btn" id="analyze-btn" onclick="analyzeProblem()" style="display: none; width: 100%;">AI 분석 시작</button>
 
-        const result = await response.json();
-        renderSophisticatedResult(result.candidates[0].content.parts[0].text);
-        
-        document.getElementById('analysis-loading').style.display = 'none';
-        document.getElementById('analysis-result').style.display = 'block';
-        if (window.MathJax) MathJax.typesetPromise();
-    } catch (error) { alert("오류 발생"); }
-}
+                <div id="analysis-loading" style="display: none; text-align: center; padding: 2rem;">
+                    <div style="border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 1rem;"></div>
+                    <p id="loading-status">AI 교사가 문제를 정밀 분석 및 시각화 중입니다...</p>
+                    <p><small>(이미지 분석은 약 5-10초 소요됩니다)</small></p>
+                </div>
 
-// 🎯 챗봇 로직 (gemini-1.5-flash 버전 적용됨)
-async function sendChatMessage() {
-    const inputEl = document.getElementById('chat-input');
-    const message = inputEl.value.trim();
-    if(!message) return;
-    
-    const historyEl = document.getElementById('chat-history');
-    historyEl.innerHTML += `<div style="text-align: right; margin-bottom: 12px;"><span style="background: #e0e7ff; color: #1e40af; padding: 10px 14px; border-radius: 16px 16px 0 16px; display: inline-block; text-align: left; max-width: 80%">${message}</span></div>`;
-    inputEl.value = '';
-    historyEl.scrollTop = historyEl.scrollHeight;
+                <div id="analysis-result" style="display: none; margin-top: 2rem; border-top: 2px solid #f1f5f9; padding-top: 1.5rem;">
+                    <div id="res-container"></div>
+                    <div id="copyright-notice" style="background: #f8fafc; padding: 1.2rem; border-radius: 12px; border: 1px solid #e2e8f0; margin-top: 1.5rem; display: flex; align-items: center; gap: 0.8rem;">
+                        <span style="font-size: 1.5rem;">🛡️</span>
+                        <p style="margin: 0; font-size: 0.85rem; color: #64748b; line-height: 1.5;">
+                            <strong>공지:</strong> 입력하신 문제는 저작권 보호를 위해 AI가 유사한 형태로 변형하였으며, 데이터베이스에 안전하게 저장되었습니다.
+                        </p>
+                    </div>
+                    <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                        <button class="save-btn" onclick="reAnalyzeWithChat()" style="background: #2563eb; flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.8rem 0.5rem; font-size:0.9rem;">
+                            <span>✨</span> 대화 반영 재분석
+                        </button>
+                        <button class="save-btn" onclick="resetAnalysis()" style="background: #64748b; flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.8rem 0.5rem; font-size:0.9rem;">
+                            <span>📝</span> 다른 문제 분석
+                        </button>
+                    </div>
+                </div>
+            </div> 
+            
+            <div id="ai-chat-container" style="display:none; flex: 0 0 400px; position: sticky; top: 1rem; padding: 1.5rem; background: #f8fafc; border-radius: 12px; border: 2px solid #e2e8f0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); box-sizing: border-box;">
+                <h3 style="margin-top:0; color: var(--primary); display:flex; align-items:center; gap:0.5rem; font-size:1.1rem;">
+                    <span>🤖</span> AI 조수와 판정 토론하기
+                </h3>
+                <div style="background: #fffbeb; padding: 1rem; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 1rem;">
+                    <p style="margin: 0; font-size: 0.85rem; color: #92400e; line-height: 1.6;">
+                        <strong>💡 "AI 판정이 내 생각과 다른데?"</strong><br>
+                        선생님의 교육적 판단과 다르다면, 아래 채팅창에 의견을 제시해 보세요! 교사의 피드백을 수용하여 논리적으로 답변하고 결과를 업데이트합니다.
+                    </p>
+                </div>
+                <div id="chat-history" style="height: 400px; overflow-y: auto; background: white; padding: 1rem; border-radius: 8px; border: 1px solid #cbd5e1; margin-bottom: 1rem; font-size: 0.95rem; line-height: 1.6;"></div>
+                <div style="display: flex; gap: 0.5rem;">
+                    <input type="text" id="chat-input" placeholder="이유나 의견을 입력하세요..." style="flex: 1; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;" onkeypress="if(event.key==='Enter') sendChatMessage()">
+                    <button onclick="sendChatMessage()" style="background: var(--primary); color: white; border: none; padding: 0.8rem 1.2rem; border-radius: 8px; cursor: pointer; font-weight:bold;">전송</button>
+                </div>
+            </div> 
+        </div>
+    </div>
+</div>
 
-    const apiKey = localStorage.getItem('gemini_api_key');
-    try {
-        const prompt = `이전 분석: ${currentChatContext}\n교사의 의견: "${message}"\n\n[지침]: 수학 교사의 의견을 바탕으로 답변하세요. 가독성을 위해 적절한 단락 나누기, 글머리 기호(•), 마크다운 굵은 글씨(**)를 사용하세요. 수식은 $ LaTeX 문법을 사용하세요.`;
-        
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-        });
-        const result = await response.json();
-        const aiReply = result.candidates[0].content.parts[0].text;
-        
-        const formattedReply = aiReply.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
 
-        historyEl.innerHTML += `<div style="text-align: left; margin-bottom: 12px;"><span style="background: white; border: 1px solid var(--border); padding: 12px 16px; border-radius: 16px 16px 16px 0; display: inline-block; max-width: 85%;">${formattedReply}</span></div>`;
-        if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([historyEl]); }
-        historyEl.scrollTop = historyEl.scrollHeight;
-    } catch(e) { historyEl.innerHTML += `<div style="color: red;">오류가 발생했습니다. API 연결을 확인해주세요.</div>`; }
-}
+<div class="modal" id="feedback-modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <span class="close-btn" onclick="closeFeedback()">&times;</span>
+        <h2 style="margin-top: 0; color: #10b981;">💡 개발자에게 의견 보내기</h2>
+        <p style="font-size: 0.9rem; color: var(--text-light); margin-bottom: 1rem;">시스템 개선 사항, 추가할 기능, 버그 등을 자유롭게 남겨주세요. 남겨주신 의견은 데이터베이스에 안전하게 전달됩니다.</p>
+        <textarea id="feedback-message" rows="5" placeholder="여기에 의견을 작성해 주세요..." style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px; box-sizing: border-box; margin-bottom: 1rem; font-family: inherit; resize: vertical;"></textarea>
+        <button class="save-btn" onclick="submitFeedback()" style="background: #10b981;">의견 전송하기</button>
+    </div>
+</div>
 
-async function syncPendingFeedback() {
-    let pending = JSON.parse(localStorage.getItem('pending_feedback')) || [];
-    if (pending.length === 0) return; 
+<div class="modal" id="admin-feedback-modal">
+    <div class="modal-content" style="max-width: 600px; background: #f8fafc;">
+        <span class="close-btn" onclick="closeAdminFeedback()">&times;</span>
+        <h2 style="margin-top: 0; color: var(--primary);">📥 접수된 의견 목록 (관리자용)</h2>
+        <div id="admin-feedback-list" style="max-height: 400px; overflow-y: auto; margin-top: 1rem;">
+            </div>
+    </div>
+</div>
 
-    let remaining = [];
-    for (let item of pending) {
-        try {
-            await db.collection('developer_feedback').add({
-                text: "[지연 전송됨] " + item.text,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            });
-        } catch (e) {
-            remaining.push(item);
-        }
-    }
+<div class="modal" id="level-modal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal()">&times;</span>
+        <h2 id="modal-title">성취수준</h2>
+        <p id="modal-desc" style="color:var(--text-light); margin-bottom: 1.5rem; font-weight: bold;"></p>
+        <div class="level-row"><span class="level-badge bg-high">A</span> <span id="level-high"></span></div>
+        <div class="level-row"><span class="level-badge bg-high" style="background:#f87171">B</span> <span id="level-b"></span></div>
+        <div class="level-row"><span class="level-badge bg-mid">C</span> <span id="level-mid"></span></div>
+        <div class="level-row"><span class="level-badge bg-low" style="background:#4ade80">D</span> <span id="level-d"></span></div>
+        <div class="level-row"><span class="level-badge bg-low">E</span> <span id="level-low"></span></div>
+    </div>
+</div>
 
-    localStorage.setItem('pending_feedback', JSON.stringify(remaining));
-}
-
-window.onload = () => {
-    changeSubject();
-    syncPendingFeedback(); 
-};
+<script src="data.js"></script>
+<script src="main.js"></script>
+</body>
