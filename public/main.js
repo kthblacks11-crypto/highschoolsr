@@ -433,37 +433,45 @@ function initDashboard() {
     
     subjectData[currentSubject].standards.forEach(std => {
         const card = document.createElement('div');
-        card.className = 'card'; // style.css에서 설정한 레이아웃 적용
+        card.className = 'card';
+        
+        // 💡 핵심: CSS 파일 대신 JS에서 직접 스타일을 주입하여 스마트폰 캐시를 강제로 무시합니다.
+        card.style.display = 'flex';
+        card.style.flexWrap = 'wrap'; // 공간이 좁으면 밑으로 줄바꿈!
+        card.style.gap = '15px';
+        card.style.justifyContent = 'space-between';
+        card.style.alignItems = 'center';
 
-        // 텍스트 영역
+        // 1. 텍스트 영역
         const textArea = document.createElement('div');
         textArea.style.cursor = 'pointer';
-        textArea.style.width = '100%';
-        textArea.innerHTML = `<h3>${std.code}</h3><p>${std.desc}</p>`;
+        // 넓은 화면에서는 공간을 적당히, 좁은 화면(모바일)에서는 100% 차지하게 밀어냅니다.
+        textArea.style.flex = '1 1 250px'; 
+        textArea.innerHTML = `<h3 style="margin: 0 0 0.5rem 0; color: var(--primary);">${std.code}</h3><p style="margin: 0; color: var(--text-main);">${std.desc}</p>`;
         textArea.onclick = () => openModal(std);
-        card.appendChild(textArea);
-
-        // 버튼 영역 (반응형 컨테이너)
+        
+        // 2. 버튼 영역
         const btnArea = document.createElement('div');
-        btnArea.className = 'quiz-btn-container';
+        // 넓은 화면에서는 우측에 아담하게, 모바일이라 줄바꿈이 되면 100% 꽉 차게 늘어납니다.
+        btnArea.style.flex = '1 1 150px';
+        btnArea.style.display = 'flex';
 
         const quizBtn = document.createElement('button');
         quizBtn.className = 'save-btn'; 
-        // 모바일에서는 버튼을 누르기 쉽게 100% 너비로, PC에서는 자동 너비로 작동하게 함
-        quizBtn.style.width = '100%';
-        quizBtn.style.marginTop = '0';
+        quizBtn.style.margin = '0'; // 기존 버튼의 위쪽 여백 무시
         quizBtn.style.padding = '0.8rem';
-        quizBtn.style.fontSize = '0.95rem';
-        quizBtn.style.whiteSpace = 'nowrap'; // 글자 줄바꿈 방지
+        quizBtn.style.width = '100%'; // 컨테이너 안에서 꽉 차게
         quizBtn.innerHTML = '📝 문항 매칭 연습';
         
         quizBtn.onclick = (e) => {
-            e.stopPropagation(); 
+            e.stopPropagation(); // 텍스트 영역 클릭(모달창 띄우기)과 겹치지 않게 방어
             showSection('quiz'); 
             startLevelMatching(std.code); 
         };
         
         btnArea.appendChild(quizBtn);
+        
+        card.appendChild(textArea);
         card.appendChild(btnArea);
 
         container.appendChild(card);
