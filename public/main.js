@@ -189,19 +189,22 @@ function setAnalysisMode(mode) {
     const canvas = document.getElementById('crop-canvas');
     const analyzeBtn = document.getElementById('analyze-btn');
     const warningTxt = document.getElementById('analysis-warning'); 
+    const cropMsg = document.getElementById('crop-msg'); // 🟢 안내 문구 가져오기
 
     if (mode === 'single') {
         canvas.style.display = 'none';
         analyzeBtn.style.display = 'block';
         analyzeBtn.innerText = "✨ 사진 전체 분석 시작";
-        if(warningTxt) warningTxt.style.display = 'none'; // 🟢 선택 후 경고 숨김
-        cropRect = null;
+        if(warningTxt) warningTxt.style.display = 'none'; 
+        if(cropMsg) cropMsg.style.display = 'none'; // 한 문제 모드일 땐 문구 숨김
+        freehandPoints = []; 
     } else {
         canvas.style.display = 'block';
         analyzeBtn.style.display = 'none';
-        if(warningTxt) warningTxt.style.display = 'none'; // 🟢 선택 후 경고 숨김
+        if(warningTxt) warningTxt.style.display = 'none'; 
         initCropCanvas();
-        alert("분석하고 싶은 문제 영역을 드래그해 주세요!");
+        // 🟢 기존의 성가신 alert() 창 제거하고 화면 위에 글씨 띄우기
+        if(cropMsg) cropMsg.style.display = 'block'; 
     }
 }
 
@@ -210,15 +213,12 @@ function initCropCanvas() {
     const canvas = document.getElementById('crop-canvas');
     const ctx = canvas.getContext('2d');
 
-    // 사진 크기에 맞게 도화지 세팅
     canvas.width = imgEl.clientWidth;
     canvas.height = imgEl.clientHeight;
 
-    // 화면 어둡게 만들기
     drawOverlay(ctx, canvas.width, canvas.height, null);
 
     let isDrawing = false;
-    let startX, startY;
 
     function getPos(e) {
         const rect = canvas.getBoundingClientRect();
@@ -230,56 +230,68 @@ function initCropCanvas() {
     function startDraw(e) {
         e.preventDefault();
         isDrawing = true;
-        const pos = getPos(e);
-        startX = pos.x; startY = pos.y;
-        cropRect = { x: startX, y: startY, w: 0, h: 0 };
+        
+        // 🟢 그리기 시작하는 순간! 화면 중앙의 안내 문구 싹 지우기
+        if(document.getElementById('crop-msg')) document.getElementById('crop-msg').style.display = 'none'; 
+        
+        freehandPoints = [getPos(e)]; 
+        drawOverlay(ctx, canvas.width, canvas.height, freehandPoints);
     }
 
     function draw(e) {
         if (!isDrawing) return;
         e.preventDefault();
-        const pos = getPos(e);
-        cropRect.w = pos.x - startX;
-        cropRect.h = pos.y - startY;
-        drawOverlay(ctx, canvas.width, canvas.height, cropRect);
+        freehandPoints.push(getPos(e)); 
+        drawOverlay(ctx, canvas.width, canvas.height, freehandPoints);
     }
 
     function endDraw(e) {
         if (!isDrawing) return;
         isDrawing = false;
         
-        // 너무 작게 드래그했으면 취소
-        if (Math.abs(cropRect.w) < 30 || Math.abs(cropRect.h) < 30) {
-            cropRect = null;
+        // 너무 짧게 점만 찍은 경우(실수) 초기화
+        if (freehandPoints.length < 10) {
+            freehandPoints = [];
             drawOverlay(ctx, canvas.width, canvas.height, null);
+            // 취소되었으니 다시 안내 문구 보여주기
+            if(document.getElementById('crop-msg')) document.getElementById('crop-msg').style.display = 'block';
         } else {
-            // 거꾸로 드래그했을 때 좌표 보정
-            if (cropRect.w < 0) { cropRect.x += cropRect.w; cropRect.w = Math.abs(cropRect.w); }
-            if (cropRect.h < 0) { cropRect.y += cropRect.h; cropRect.h = Math.abs(cropRect.h); }
-            
-            // 드래그를 완료하면 분석 버튼 띄우기
             const analyzeBtn = document.getElementById('analyze-btn');
             analyzeBtn.style.display = 'block';
             analyzeBtn.innerText = "🔍 선택 영역 분석 시작";
         }
     }
 
-    // 마우스 및 터치 이벤트 연결
     canvas.onmousedown = startDraw; canvas.onmousemove = draw; canvas.onmouseup = endDraw; canvas.onmouseout = endDraw;
     canvas.ontouchstart = startDraw; canvas.ontouchmove = draw; canvas.ontouchend = endDraw;
 }
 
-function drawOverlay(ctx, w, h, rect) {
+function drawOverlay(ctx, w, h, points) {
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; // 60% 어둡게
+    // 🟢 핵심! 투명도를 0.6에서 0.3으로 낮춰서 뒤에 있는 다른 문제들이 잘 보이게 만듦
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'; 
     ctx.fillRect(0, 0, w, h);
 
-    if (rect) {
-        // 드래그한 부분만 뚫어서 밝게 보여주기
-        ctx.clearRect(rect.x, rect.y, rect.w, rect.h);
+    if (points && points.length > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.closePath(); 
+
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.fillStyle = 'black';
+        ctx.fill();
+
+        ctx.globalCompositeOperation = 'source-over';
         ctx.strokeStyle = '#3b82f6';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+        ctx.lineWidth = 4;
+        ctx.lineJoin = 'round'; 
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.restore();
     }
 }
 
