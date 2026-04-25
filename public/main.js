@@ -163,9 +163,15 @@ function displayPreview(file) {
         imgEl.onload = function() {
             document.getElementById('preview-container').style.display = 'block';
             document.getElementById('upload-placeholder').style.display = 'none';
-            document.getElementById('mode-selector').style.display = 'flex'; // 선택지 버튼 보이기
-            document.getElementById('analyze-btn').style.display = 'none'; // 분석버튼 숨기기
-            document.getElementById('crop-canvas').style.display = 'none'; // 캔버스 숨기기
+            document.getElementById('mode-selector').style.display = 'flex'; 
+            
+            // 🟢 경고 문구 표시
+            if(document.getElementById('analysis-warning')) {
+                document.getElementById('analysis-warning').style.display = 'block'; 
+            }
+            
+            document.getElementById('analyze-btn').style.display = 'none'; 
+            document.getElementById('crop-canvas').style.display = 'none'; 
             cropRect = null;
 
             if(document.getElementById('ai-chat-container')) {
@@ -182,17 +188,18 @@ function setAnalysisMode(mode) {
     analysisMode = mode;
     const canvas = document.getElementById('crop-canvas');
     const analyzeBtn = document.getElementById('analyze-btn');
+    const warningTxt = document.getElementById('analysis-warning'); 
 
     if (mode === 'single') {
-        // 한 문제만 있을 때: 바로 분석 버튼 표시
         canvas.style.display = 'none';
         analyzeBtn.style.display = 'block';
         analyzeBtn.innerText = "✨ 사진 전체 분석 시작";
+        if(warningTxt) warningTxt.style.display = 'none'; // 🟢 선택 후 경고 숨김
         cropRect = null;
     } else {
-        // 영역 선택을 눌렀을 때: 드래그 캔버스 활성화
         canvas.style.display = 'block';
         analyzeBtn.style.display = 'none';
+        if(warningTxt) warningTxt.style.display = 'none'; // 🟢 선택 후 경고 숨김
         initCropCanvas();
         alert("분석하고 싶은 문제 영역을 드래그해 주세요!");
     }
@@ -823,9 +830,12 @@ function resetAnalysis() {
     document.getElementById('analyze-btn').style.display = 'none';
     document.getElementById('analysis-result').style.display = 'none';
     
-    // 💡 추가된 부분: 리셋할 때 선택 버튼과 도화지도 말끔하게 숨기기
     if(document.getElementById('mode-selector')) {
         document.getElementById('mode-selector').style.display = 'none';
+    }
+    // 🟢 리셋할 때 경고 문구도 같이 숨김
+    if(document.getElementById('analysis-warning')) {
+        document.getElementById('analysis-warning').style.display = 'none';
     }
     if(document.getElementById('crop-canvas')) {
         document.getElementById('crop-canvas').style.display = 'none';
