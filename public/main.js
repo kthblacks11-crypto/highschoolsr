@@ -822,6 +822,15 @@ function resetAnalysis() {
     document.getElementById('upload-placeholder').style.display = 'block';
     document.getElementById('analyze-btn').style.display = 'none';
     document.getElementById('analysis-result').style.display = 'none';
+    
+    // 💡 추가된 부분: 리셋할 때 선택 버튼과 도화지도 말끔하게 숨기기
+    if(document.getElementById('mode-selector')) {
+        document.getElementById('mode-selector').style.display = 'none';
+    }
+    if(document.getElementById('crop-canvas')) {
+        document.getElementById('crop-canvas').style.display = 'none';
+    }
+    
     if(document.getElementById('ai-chat-container')) {
         document.getElementById('ai-chat-container').style.display = 'none';
         document.getElementById('chat-history').innerHTML = "";
