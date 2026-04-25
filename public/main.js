@@ -150,21 +150,153 @@ function handlePaste(event) {
     }
 }
 
+let cropRect = null;
+let analysisMode = 'single';
+
 function displayPreview(file) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = function(e) {
-        document.getElementById('image-preview').src = e.target.result;
-        document.getElementById('preview-container').style.display = 'block';
-        document.getElementById('upload-placeholder').style.display = 'none';
-        document.getElementById('analyze-btn').style.display = 'block';
-        document.getElementById('analysis-result').style.display = 'none';
-        if(document.getElementById('ai-chat-container')) {
-            document.getElementById('ai-chat-container').style.display = 'none';
-            document.getElementById('chat-history').innerHTML = ""; currentChatContext = ""; 
+        const imgEl = document.getElementById('image-preview');
+        imgEl.src = e.target.result;
+        
+        imgEl.onload = function() {
+            document.getElementById('preview-container').style.display = 'block';
+            document.getElementById('upload-placeholder').style.display = 'none';
+            document.getElementById('mode-selector').style.display = 'flex'; // 선택지 버튼 보이기
+            document.getElementById('analyze-btn').style.display = 'none'; // 분석버튼 숨기기
+            document.getElementById('crop-canvas').style.display = 'none'; // 캔버스 숨기기
+            cropRect = null;
+
+            if(document.getElementById('ai-chat-container')) {
+                document.getElementById('ai-chat-container').style.display = 'none';
+                document.getElementById('chat-history').innerHTML = ""; 
+                currentChatContext = ""; 
+            }
         }
     }
     reader.readAsDataURL(file);
+}
+
+function setAnalysisMode(mode) {
+    analysisMode = mode;
+    const canvas = document.getElementById('crop-canvas');
+    const analyzeBtn = document.getElementById('analyze-btn');
+
+    if (mode === 'single') {
+        // 한 문제만 있을 때: 바로 분석 버튼 표시
+        canvas.style.display = 'none';
+        analyzeBtn.style.display = 'block';
+        analyzeBtn.innerText = "✨ 사진 전체 분석 시작";
+        cropRect = null;
+    } else {
+        // 영역 선택을 눌렀을 때: 드래그 캔버스 활성화
+        canvas.style.display = 'block';
+        analyzeBtn.style.display = 'none';
+        initCropCanvas();
+        alert("분석하고 싶은 문제 영역을 드래그해 주세요!");
+    }
+}
+
+function initCropCanvas() {
+    const imgEl = document.getElementById('image-preview');
+    const canvas = document.getElementById('crop-canvas');
+    const ctx = canvas.getContext('2d');
+
+    // 사진 크기에 맞게 도화지 세팅
+    canvas.width = imgEl.clientWidth;
+    canvas.height = imgEl.clientHeight;
+
+    // 화면 어둡게 만들기
+    drawOverlay(ctx, canvas.width, canvas.height, null);
+
+    let isDrawing = false;
+    let startX, startY;
+
+    function getPos(e) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: clientX - rect.left, y: clientY - rect.top };
+    }
+
+    function startDraw(e) {
+        e.preventDefault();
+        isDrawing = true;
+        const pos = getPos(e);
+        startX = pos.x; startY = pos.y;
+        cropRect = { x: startX, y: startY, w: 0, h: 0 };
+    }
+
+    function draw(e) {
+        if (!isDrawing) return;
+        e.preventDefault();
+        const pos = getPos(e);
+        cropRect.w = pos.x - startX;
+        cropRect.h = pos.y - startY;
+        drawOverlay(ctx, canvas.width, canvas.height, cropRect);
+    }
+
+    function endDraw(e) {
+        if (!isDrawing) return;
+        isDrawing = false;
+        
+        // 너무 작게 드래그했으면 취소
+        if (Math.abs(cropRect.w) < 30 || Math.abs(cropRect.h) < 30) {
+            cropRect = null;
+            drawOverlay(ctx, canvas.width, canvas.height, null);
+        } else {
+            // 거꾸로 드래그했을 때 좌표 보정
+            if (cropRect.w < 0) { cropRect.x += cropRect.w; cropRect.w = Math.abs(cropRect.w); }
+            if (cropRect.h < 0) { cropRect.y += cropRect.h; cropRect.h = Math.abs(cropRect.h); }
+            
+            // 드래그를 완료하면 분석 버튼 띄우기
+            const analyzeBtn = document.getElementById('analyze-btn');
+            analyzeBtn.style.display = 'block';
+            analyzeBtn.innerText = "🔍 선택 영역 분석 시작";
+        }
+    }
+
+    // 마우스 및 터치 이벤트 연결
+    canvas.onmousedown = startDraw; canvas.onmousemove = draw; canvas.onmouseup = endDraw; canvas.onmouseout = endDraw;
+    canvas.ontouchstart = startDraw; canvas.ontouchmove = draw; canvas.ontouchend = endDraw;
+}
+
+function drawOverlay(ctx, w, h, rect) {
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; // 60% 어둡게
+    ctx.fillRect(0, 0, w, h);
+
+    if (rect) {
+        // 드래그한 부분만 뚫어서 밝게 보여주기
+        ctx.clearRect(rect.x, rect.y, rect.w, rect.h);
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+    }
+}
+
+function getCroppedBase64() {
+    const imgEl = document.getElementById('image-preview');
+    // 한 문항 전체 분석이거나 드래그를 안 했으면 원본 전송
+    if (!cropRect || analysisMode === 'single') return imgEl.src.split(',')[1]; 
+
+    const scaleX = imgEl.naturalWidth / imgEl.clientWidth;
+    const scaleY = imgEl.naturalHeight / imgEl.clientHeight;
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = cropRect.w * scaleX;
+    tempCanvas.height = cropRect.h * scaleY;
+    const tCtx = tempCanvas.getContext('2d');
+
+    // 선택 영역만 잘라내기
+    tCtx.drawImage(
+        imgEl,
+        cropRect.x * scaleX, cropRect.y * scaleY, cropRect.w * scaleX, cropRect.h * scaleY, 
+        0, 0, tempCanvas.width, tempCanvas.height 
+    );
+
+    return tempCanvas.toDataURL('image/jpeg', 0.9).split(',')[1];
 }
 
 // 🟢 1. 영어 에러를 친절한 한글로 바꿔주는 마법의 함수 (업그레이드)
@@ -213,7 +345,7 @@ async function analyzeProblem() {
     document.getElementById('loading-status').innerText = "AI 교사가 문제를 정밀 분석 및 시각화 중입니다...";
 
     try {
-        const base64Image = document.getElementById('image-preview').src.split(',')[1];
+        const base64Image = getCroppedBase64();
         let standardsInfo = "";
         for (const key in subjectData) {
             if (subjectData[key].standards && subjectData[key].standards.length > 0) {
