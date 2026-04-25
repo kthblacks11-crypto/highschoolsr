@@ -435,36 +435,35 @@ function initDashboard() {
         const card = document.createElement('div');
         card.className = 'card';
         
-        // 💡 핵심: CSS 파일 대신 JS에서 직접 스타일을 주입하여 스마트폰 캐시를 강제로 무시합니다.
-        card.style.display = 'flex';
-        card.style.flexWrap = 'wrap'; // 공간이 좁으면 밑으로 줄바꿈!
-        card.style.gap = '15px';
-        card.style.justifyContent = 'space-between';
-        card.style.alignItems = 'center';
+        // Flexbox의 복잡한 속성들을 빼고, 가장 안정적인 기본 블록(Block) 형태로 배치합니다.
+        card.style.display = 'block';
+        card.style.position = 'relative';
 
         // 1. 텍스트 영역
         const textArea = document.createElement('div');
         textArea.style.cursor = 'pointer';
-        // 넓은 화면에서는 공간을 적당히, 좁은 화면(모바일)에서는 100% 차지하게 밀어냅니다.
-        textArea.style.flex = '1 1 250px'; 
-        textArea.innerHTML = `<h3 style="margin: 0 0 0.5rem 0; color: var(--primary);">${std.code}</h3><p style="margin: 0; color: var(--text-main);">${std.desc}</p>`;
+        textArea.innerHTML = `<h3 style="margin: 0 0 0.5rem 0; color: var(--primary);">${std.code}</h3><p style="margin: 0; color: var(--text-main); line-height: 1.6;">${std.desc}</p>`;
         textArea.onclick = () => openModal(std);
         
-        // 2. 버튼 영역
+        // 2. 버튼 영역 (아래쪽 우측 정렬)
         const btnArea = document.createElement('div');
-        // 넓은 화면에서는 우측에 아담하게, 모바일이라 줄바꿈이 되면 100% 꽉 차게 늘어납니다.
-        btnArea.style.flex = '1 1 150px';
-        btnArea.style.display = 'flex';
-
+        btnArea.style.textAlign = 'right';
+        btnArea.style.marginTop = '15px'; // 텍스트와 약간의 여백 띄우기
+        
         const quizBtn = document.createElement('button');
         quizBtn.className = 'save-btn'; 
-        quizBtn.style.margin = '0'; // 기존 버튼의 위쪽 여백 무시
-        quizBtn.style.padding = '0.8rem';
-        quizBtn.style.width = '100%'; // 컨테이너 안에서 꽉 차게
+        
+        // 💡 핵심: 버튼이 거대해지는 것을 막고 텍스트 길이에 맞춰 컴팩트하게 조절
+        quizBtn.style.display = 'inline-block';
+        quizBtn.style.width = 'auto'; // 화면을 100% 꽉 채우는 현상 방지!
+        quizBtn.style.margin = '0';
+        quizBtn.style.padding = '0.5rem 1.2rem'; // 상하는 슬림하게, 좌우는 적당히
+        quizBtn.style.fontSize = '0.9rem';
+        quizBtn.style.borderRadius = '8px'; // 모서리를 둥글게
         quizBtn.innerHTML = '📝 문항 매칭 연습';
         
         quizBtn.onclick = (e) => {
-            e.stopPropagation(); // 텍스트 영역 클릭(모달창 띄우기)과 겹치지 않게 방어
+            e.stopPropagation(); 
             showSection('quiz'); 
             startLevelMatching(std.code); 
         };
