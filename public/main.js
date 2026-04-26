@@ -159,7 +159,16 @@ function handlePaste(event) {
     }
 }
 
-// 🟢 여기서부터 모드 전환 및 크롭(서클투서치) 기능들
+// 🟢 네모 박스 크롭 및 미세조정을 위한 상태 변수들
+let analysisMainMode = 'single'; 
+let singleCropMode = 'single'; 
+let cropBoxes = []; // 네모 상자들을 담을 배열 {x, y, w, h}
+let isInteracting = false; 
+let interactionType = null; // 'create', 'move', 'resize_nw', 'resize_n', etc.
+let activeBoxIndex = -1;
+let dragStartX = 0, dragStartY = 0;
+let initialBoxState = null;
+
 function openAnalysisMode(mode) {
     showSection('problem-analysis');
     analysisMainMode = mode;
@@ -210,7 +219,7 @@ function setAnalysisMode(mode) {
         canvas.style.display = 'none';
         analyzeBtn.style.display = 'block';
         analyzeBtn.innerText = "✨ 사진 전체 분석 시작";
-        freehandPoints = [];
+        cropBoxes = [];
     } else {
         canvas.style.display = 'block';
         analyzeBtn.style.display = 'none';
@@ -219,6 +228,42 @@ function setAnalysisMode(mode) {
     }
 }
 
+// 🟢 박스를 항상 정상적인 좌표(음수 넓이 방지)로 변환하는 마법 함수
+function normalizeBox(b) {
+    return {
+        x: b.w < 0 ? b.x + b.w : b.x,
+        y: b.h < 0 ? b.y + b.h : b.y,
+        w: Math.abs(b.w),
+        h: Math.abs(b.h)
+    };
+}
+
+// 🟢 마우스 위치에 따라 테두리(핸들)를 잡았는지 확인하는 함수
+function checkHit(x, y) {
+    const TOLERANCE = 10; // 마우스 인식 범위
+    for (let i = cropBoxes.length - 1; i >= 0; i--) {
+        const b = normalizeBox(cropBoxes[i]);
+        const nearL = Math.abs(x - b.x) < TOLERANCE;
+        const nearR = Math.abs(x - (b.x + b.w)) < TOLERANCE;
+        const nearT = Math.abs(y - b.y) < TOLERANCE;
+        const nearB = Math.abs(y - (b.y + b.h)) < TOLERANCE;
+        const insideX = x >= b.x && x <= b.x + b.w;
+        const insideY = y >= b.y && y <= b.y + b.h;
+
+        if (nearT && nearL) return { type: 'resize_nw', index: i };
+        if (nearT && nearR) return { type: 'resize_ne', index: i };
+        if (nearB && nearL) return { type: 'resize_sw', index: i };
+        if (nearB && nearR) return { type: 'resize_se', index: i };
+        if (nearT && insideX) return { type: 'resize_n', index: i };
+        if (nearB && insideX) return { type: 'resize_s', index: i };
+        if (nearL && insideY) return { type: 'resize_w', index: i };
+        if (nearR && insideY) return { type: 'resize_e', index: i };
+        if (insideX && insideY) return { type: 'move', index: i };
+    }
+    return null;
+}
+
+// 🎯 본격적인 네모 그리기 및 미세조정 에디터 로직
 function initCropCanvas() {
     const imgEl = document.getElementById('image-preview');
     const canvas = document.getElementById('crop-canvas');
@@ -226,8 +271,7 @@ function initCropCanvas() {
     canvas.width = imgEl.clientWidth;
     canvas.height = imgEl.clientHeight;
 
-    drawOverlay(ctx, canvas.width, canvas.height, null);
-    let isDrawing = false;
+    drawOverlay();
 
     function getPos(e) {
         const rect = canvas.getBoundingClientRect();
@@ -236,105 +280,151 @@ function initCropCanvas() {
         return { x: clientX - rect.left, y: clientY - rect.top };
     }
 
-    function startDraw(e) {
+    canvas.onmousedown = canvas.ontouchstart = (e) => {
         e.preventDefault();
-        isDrawing = true;
+        const pos = getPos(e);
+        const hit = checkHit(pos.x, pos.y);
         if(document.getElementById('crop-msg')) document.getElementById('crop-msg').style.display = 'none';
-        freehandPoints = [getPos(e)];
-        drawOverlay(ctx, canvas.width, canvas.height, freehandPoints);
-    }
 
-    function draw(e) {
-        if (!isDrawing) return;
+        if (hit) { // 이미 그려진 상자를 클릭(미세조정 또는 이동)
+            isInteracting = true;
+            interactionType = hit.type;
+            activeBoxIndex = hit.index;
+            dragStartX = pos.x; dragStartY = pos.y;
+            initialBoxState = { ...cropBoxes[activeBoxIndex] };
+        } else { // 빈 공간 클릭(새 상자 그리기 시작)
+            if (analysisMainMode === 'single') cropBoxes = []; // 한 문제 모드는 무조건 1개만
+            const newBox = { x: pos.x, y: pos.y, w: 0, h: 0 };
+            cropBoxes.push(newBox);
+            activeBoxIndex = cropBoxes.length - 1;
+            isInteracting = true;
+            interactionType = 'create';
+            dragStartX = pos.x; dragStartY = pos.y;
+        }
+        drawOverlay();
+    };
+
+    canvas.onmousemove = canvas.ontouchmove = (e) => {
         e.preventDefault();
-        freehandPoints.push(getPos(e));
-        drawOverlay(ctx, canvas.width, canvas.height, freehandPoints);
-    }
+        const pos = getPos(e);
 
-    function endDraw(e) {
-        if (!isDrawing) return;
-        isDrawing = false;
-        
-        if (freehandPoints.length < 10) {
-            freehandPoints = [];
-            drawOverlay(ctx, canvas.width, canvas.height, null);
-            if(document.getElementById('crop-msg')) document.getElementById('crop-msg').style.display = 'block';
+        // 상호작용 중이 아닐 때는 마우스 모양(커서)만 변경
+        if (!isInteracting) {
+            const hit = checkHit(pos.x, pos.y);
+            if (hit) {
+                if (hit.type === 'move') canvas.style.cursor = 'move';
+                else if (['resize_n', 'resize_s'].includes(hit.type)) canvas.style.cursor = 'ns-resize';
+                else if (['resize_e', 'resize_w'].includes(hit.type)) canvas.style.cursor = 'ew-resize';
+                else if (['resize_nw', 'resize_se'].includes(hit.type)) canvas.style.cursor = 'nwse-resize';
+                else if (['resize_ne', 'resize_sw'].includes(hit.type)) canvas.style.cursor = 'nesw-resize';
+            } else canvas.style.cursor = 'crosshair';
+            return;
+        }
+
+        const dx = pos.x - dragStartX;
+        const dy = pos.y - dragStartY;
+        const box = cropBoxes[activeBoxIndex];
+
+        // 상호작용 실행 (생성, 이동, 크기조절)
+        if (interactionType === 'create') {
+            box.w = pos.x - box.x; box.h = pos.y - box.y;
+        } else if (interactionType === 'move') {
+            box.x = initialBoxState.x + dx; box.y = initialBoxState.y + dy;
         } else {
+            if (interactionType.includes('n')) { box.y = initialBoxState.y + dy; box.h = initialBoxState.h - dy; }
+            if (interactionType.includes('s')) { box.h = initialBoxState.h + dy; }
+            if (interactionType.includes('w')) { box.x = initialBoxState.x + dx; box.w = initialBoxState.w - dx; }
+            if (interactionType.includes('e')) { box.w = initialBoxState.w + dx; }
+        }
+        drawOverlay();
+    };
+
+    canvas.onmouseup = canvas.onmouseout = canvas.ontouchend = (e) => {
+        if (!isInteracting) return;
+        isInteracting = false;
+        
+        // 너무 작게 클릭된(실수) 상자 제거 및 정상화
+        cropBoxes = cropBoxes.map(normalizeBox).filter(b => b.w > 20 && b.h > 20);
+        
+        // UI 버튼 제어
+        if (cropBoxes.length > 0) {
             if (analysisMainMode === 'single') {
                 document.getElementById('analyze-single-btn').style.display = 'block';
                 document.getElementById('analyze-single-btn').innerText = "🔍 선택 영역 분석 시작";
             } else {
-                document.getElementById('save-crop-btn').style.display = 'block';
+                document.getElementById('analyze-multi-btn').style.display = 'block';
+                if(document.getElementById('crop-count')) document.getElementById('crop-count').innerText = `${cropBoxes.length}개 영역 지정됨`;
             }
+        } else {
+            if(document.getElementById('crop-msg')) document.getElementById('crop-msg').style.display = 'block';
+            if(analysisMainMode === 'single') document.getElementById('analyze-single-btn').style.display = 'none';
+            else document.getElementById('analyze-multi-btn').style.display = 'none';
+            if(document.getElementById('crop-count')) document.getElementById('crop-count').innerText = `0개 영역 지정됨`;
         }
-    }
-
-    canvas.onmousedown = startDraw; canvas.onmousemove = draw; canvas.onmouseup = endDraw; canvas.onmouseout = endDraw;
-    canvas.ontouchstart = startDraw; canvas.ontouchmove = draw; canvas.ontouchend = endDraw;
+        drawOverlay();
+    };
 }
 
-function drawOverlay(ctx, w, h, points) {
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; 
-    ctx.fillRect(0, 0, w, h);
-
-    if (analysisMainMode === 'multi') {
-        savedRects.forEach((rect, index) => {
-            ctx.clearRect(rect.x, rect.y, rect.w, rect.h);
-            ctx.strokeStyle = '#10b981'; ctx.lineWidth = 3;
-            ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
-            ctx.fillStyle = '#10b981'; ctx.font = "bold 16px sans-serif";
-            ctx.fillText(`저장됨 ${index + 1}`, rect.x + 5, rect.y + 20);
-        });
-    }
-
-    if (points && points.length > 0) {
-        ctx.save(); ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
-        ctx.closePath(); 
-        ctx.globalCompositeOperation = 'destination-out'; ctx.fillStyle = 'black'; ctx.fill();
-        ctx.globalCompositeOperation = 'source-over'; ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 4;
-        ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke(); ctx.restore();
-    }
-}
-
-function saveCropArea() {
-    if (!freehandPoints || freehandPoints.length === 0) return;
-    const base64 = getCroppedBase64();
-    savedImagesBase64.push(base64);
-
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    freehandPoints.forEach(p => {
-        if (p.x < minX) minX = p.x; if (p.y < minY) minY = p.y;
-        if (p.x > maxX) maxX = p.x; if (p.y > maxY) maxY = p.y;
-    });
-    savedRects.push({ x: minX, y: minY, w: maxX - minX, h: maxY - minY });
-
-    document.getElementById('crop-count').innerText = `${savedImagesBase64.length}개 저장됨`;
-    document.getElementById('analyze-multi-btn').style.display = 'block';
-    document.getElementById('save-crop-btn').style.display = 'none';
-
-    freehandPoints = [];
-    drawOverlay(document.getElementById('crop-canvas').getContext('2d'), document.getElementById('crop-canvas').width, document.getElementById('crop-canvas').height, null);
-}
-
-function getCroppedBase64() {
-    const imgEl = document.getElementById('image-preview');
-    if (analysisMainMode === 'single' && singleCropMode === 'single') return imgEl.src.split(',')[1];
+// 🟢 화면에 어두운 배경, 네모 상자, 번호 배지 그리기
+function drawOverlay() {
+    const canvas = document.getElementById('crop-canvas');
+    if(!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    freehandPoints.forEach(p => {
-        if (p.x < minX) minX = p.x; if (p.y < minY) minY = p.y;
-        if (p.x > maxX) maxX = p.x; if (p.y > maxY) maxY = p.y;
-    });
-    const boxW = maxX - minX; const boxH = maxY - minY;
-    if (boxW <= 0 || boxH <= 0) return imgEl.src.split(',')[1];
+    // 전체 어둡게 덮기
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; 
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    cropBoxes.forEach((box, index) => {
+        const nb = normalizeBox(box);
+        
+        // 박스 안쪽 밝게 뚫기
+        ctx.clearRect(nb.x, nb.y, nb.w, nb.h);
+        
+        // 파란색 테두리
+        ctx.strokeStyle = '#3b82f6'; 
+        ctx.lineWidth = 3;
+        ctx.strokeRect(nb.x, nb.y, nb.w, nb.h);
+
+        // 다중 모드일 때 우측 상단에 🔴 빨간색 원문자(배지) 그리기
+        if (analysisMainMode === 'multi') {
+            const badgeRadius = 14;
+            const badgeX = nb.x + nb.w; // 우측 모서리
+            const badgeY = nb.y;        // 상단 모서리
+            
+            ctx.fillStyle = '#ef4444'; // 빨간색
+            ctx.beginPath();
+            ctx.arc(badgeX, badgeY, badgeRadius, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText((index + 1).toString(), badgeX, badgeY);
+        }
+    });
+}
+
+// 🟢 지정된 상자 영역만 잘라서 AI에게 보낼 이미지로 변환
+function getCroppedBase64(boxObj) {
+    const imgEl = document.getElementById('image-preview');
+    // 상자가 없으면 전체 이미지 반환
+    if (!boxObj) return imgEl.src.split(',')[1]; 
+    
+    const nb = normalizeBox(boxObj);
     const scaleX = imgEl.naturalWidth / imgEl.clientWidth;
     const scaleY = imgEl.naturalHeight / imgEl.clientHeight;
+    
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = boxW * scaleX; tempCanvas.height = boxH * scaleY;
-    tempCanvas.getContext('2d').drawImage(imgEl, minX * scaleX, minY * scaleY, boxW * scaleX, boxH * scaleY, 0, 0, tempCanvas.width, tempCanvas.height);
+    tempCanvas.width = nb.w * scaleX; 
+    tempCanvas.height = nb.h * scaleY;
+    tempCanvas.getContext('2d').drawImage(
+        imgEl, 
+        nb.x * scaleX, nb.y * scaleY, nb.w * scaleX, nb.h * scaleY, 
+        0, 0, tempCanvas.width, tempCanvas.height
+    );
     return tempCanvas.toDataURL('image/jpeg', 0.9).split(',')[1];
 }
 
@@ -348,10 +438,9 @@ function resetAnalysis() {
     if(document.getElementById('analyze-multi-btn')) document.getElementById('analyze-multi-btn').style.display = 'none';
     document.getElementById('analysis-result').style.display = 'none';
     document.getElementById('crop-canvas').style.display = 'none';
-    if(document.getElementById('save-crop-btn')) document.getElementById('save-crop-btn').style.display = 'none';
     
-    savedImagesBase64 = []; savedRects = []; freehandPoints = [];
-    if(document.getElementById('crop-count')) document.getElementById('crop-count').innerText = "0개 저장됨";
+    cropBoxes = [];
+    if(document.getElementById('crop-count')) document.getElementById('crop-count').innerText = "0개 영역 지정됨";
     
     if(document.getElementById('ai-chat-container')) {
         document.getElementById('ai-chat-container').style.display = 'none';
@@ -360,32 +449,7 @@ function resetAnalysis() {
     }
 }
 
-// 🟢 선생님의 한글 에러 처리 함수
-async function checkApiError(response) {
-    if (!response.ok) {
-        let errMsg = "";
-        try {
-            const errData = await response.json();
-            errMsg = errData.error?.message || "";
-        } catch(e) { errMsg = response.statusText; }
-        
-        let koreanError = "서버와 통신 중 알 수 없는 문제가 발생했습니다.";
-        
-        if (response.status === 400) {
-            if (errMsg.includes("API key not valid")) koreanError = "입력하신 API 키가 유효하지 않습니다. 키를 다시 확인해주세요.";
-            else koreanError = "이미지나 요청 형식이 잘못되었습니다. 다시 업로드해주세요.";
-        }
-        else if (response.status === 401 || response.status === 403) koreanError = "입력하신 API 키가 잘못되었거나 권한이 없습니다. API 키를 다시 확인해주세요!";
-        else if (response.status === 404) koreanError = "AI 모델 버전을 찾을 수 없습니다. (시스템 관리자에게 문의하세요)";
-        else if (response.status === 429 || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED")) koreanError = "무료 사용량(할당량) 한도를 초과했습니다! ⚙️설정에서 새로운 API 키를 발급받아 입력해주세요.";
-        else if (response.status === 500) koreanError = "구글 AI 서버 내부에서 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
-        else if (response.status === 503 || errMsg.includes("high demand") || errMsg.includes("overloaded")) koreanError = "현재 구글 서버에 접속자가 너무 많아 일시적으로 바쁩니다! 10초만 기다렸다가 다시 눌러주세요.";
-
-        throw new Error(koreanError);
-    }
-}
-
-// 🎯 대망의 완벽 통합된 분석 시작 함수
+// 🎯 최종 AI 통신 및 분석 시작 함수 (중간 저장 없이 상자들 바로 전송)
 async function executeAnalysis() {
     const isLoggedIn = await checkLogin();
     if (!isLoggedIn) return;
@@ -405,7 +469,6 @@ async function executeAnalysis() {
     const resultText = document.getElementById('result-text');
     resultDiv.style.display = 'block';
     
-    // 로딩 화면 표시
     resultText.innerHTML = '<div style="text-align:center; padding: 3rem; color: #3b82f6; font-weight: bold; font-size: 1.1rem;">AI 교사가 문제를 정밀 분석 중입니다... ⏳</div>';
     resultDiv.scrollIntoView({ behavior: 'smooth' });
 
@@ -422,7 +485,10 @@ async function executeAnalysis() {
         let isSingleMode = (analysisMainMode === 'single');
 
         if (isSingleMode) {
-            const base64Image = getCroppedBase64();
+            // 한 문제 모드: 그려진 1개의 상자(없으면 전체) 전송
+            const box = (singleCropMode === 'multi' && cropBoxes.length > 0) ? cropBoxes[0] : null;
+            const base64Image = getCroppedBase64(box);
+            
             const prompt = `당신은 대한민국 최고의 수학 교사입니다. 문항을 엄밀히 분석하여 아래 4가지 대괄호 태그를 '토씨 하나 틀리지 말고' 사용하여 답변하세요. 마크다운 볼드체(**)를 태그 이름에 절대 사용하지 마세요.
 
 [교과 및 단원]: 해당 문제의 교과명과 단원명을 명시하세요.
@@ -444,7 +510,8 @@ ${standardsInfo}
             apiParts.push({ text: prompt });
             apiParts.push({ inlineData: { mimeType: "image/jpeg", data: base64Image } });
         } else {
-            const prompt = `당신은 대한민국 최고의 수학 교사입니다. 첨부된 ${savedImagesBase64.length}개의 이미지들은 각각 서로 다른 수학 문제입니다. 
+            // 다중 문제 모드: 화면에 그려진 모든 상자들을 추출해서 한 번에 전송
+            const prompt = `당신은 대한민국 최고의 수학 교사입니다. 첨부된 ${cropBoxes.length}개의 이미지들은 각각 서로 다른 수학 문제입니다. 
 각 문제별로 명확하게 구분선(---)을 긋고 [문항 1], [문항 2] 형식으로 제목을 달아주세요.
 각 문항마다 풀이과정은 생략하고 아래 항목만 간결하게 요약 제시하세요. 수식은 반드시 $ 기호로 감싸서 LaTeX 문법으로 작성하세요.
 
@@ -457,8 +524,10 @@ ${standardsInfo}
 [참고할 2022 개정 성취기준 데이터]
 ${standardsInfo}`;
             apiParts.push({ text: prompt });
-            savedImagesBase64.forEach(imgData => {
-                apiParts.push({ inlineData: { mimeType: "image/jpeg", data: imgData } });
+            
+            // 배열에 저장된 상자 좌표들을 순회하며 이미지를 잘라서 추가
+            cropBoxes.forEach(box => {
+                apiParts.push({ inlineData: { mimeType: "image/jpeg", data: getCroppedBase64(box) } });
             });
         }
 
@@ -476,13 +545,11 @@ ${standardsInfo}`;
         const analysisText = data.candidates[0].content.parts[0].text;
 
         if (isSingleMode) {
-            // 단일 분석은 선생님이 만든 예쁜 카드로 렌더링
             renderSophisticatedResult(analysisText);
             currentChatContext = analysisText; 
             document.getElementById('ai-chat-container').style.display = 'block'; 
             processAndSaveBackground(analysisText, apiKey);
         } else {
-            // 다중 분석은 깔끔한 텍스트 뷰어로 렌더링 (챗봇은 숨김)
             let rawText = analysisText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
             resultText.innerHTML = `<div style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); line-height: 1.8;">${rawText}</div>`;
             document.getElementById('ai-chat-container').style.display = 'none'; 
@@ -505,7 +572,6 @@ ${standardsInfo}`;
             <p style="margin: 0; color: #7f1d1d;">${finalMsg}</p>
         </div>`;
         
-        // 에러 났을 때 다시 시도할 수 있게 UI 복구
         if (analysisMainMode === 'single') document.getElementById('single-mode-ui').style.display = 'block';
         else {
             document.getElementById('multi-mode-ui').style.display = 'block';

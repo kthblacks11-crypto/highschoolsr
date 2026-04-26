@@ -235,14 +235,16 @@
                 </div>
 
                 <div id="multi-mode-ui" style="display: none;">
-                    <p style="margin: 0 0 1rem 0; font-size: 0.85rem; color: #ef4444; text-align: center; font-weight: bold;">
-                        ⚠️ 문제를 하나씩 둥글게 지정한 후 [➕ 저장]을 누르세요.<br>저장이 끝나면 [요약 분석 시작]을 누르세요.
-                    </p>
-                    <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 1rem;">
-                        <button class="save-btn" id="save-crop-btn" onclick="saveCropArea()" style="background: #10b981; margin: 0; display: none;">➕ 이 영역을 문제로 저장</button>
-                        <span id="crop-count" style="font-weight: bold; color: #ef4444; background: #fee2e2; padding: 8px 15px; border-radius: 20px;">0개 저장됨</span>
+                    <div style="background: #fffbeb; padding: 1rem; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 1rem;">
+                        <p style="margin: 0; font-size: 0.9rem; color: #92400e; font-weight: bold;">
+                            💡 드래그하여 여러 문제에 각각 네모 상자를 그려주세요.<br>
+                            상자 테두리를 잡아 크기를 미세조정할 수 있습니다.
+                        </p>
                     </div>
-                    <button class="save-btn" id="analyze-multi-btn" onclick="executeAnalysis()" style="display: none; width: 100%; background: #8b5cf6;">🚀 저장된 모든 문제 요약 분석 시작</button>
+                    <div style="text-align: center; margin-bottom: 1rem;">
+                        <span id="crop-count" style="font-weight: bold; color: #ef4444; background: #fee2e2; padding: 8px 20px; border-radius: 20px; font-size: 1.1rem;">0개 영역 지정됨</span>
+                    </div>
+                    <button class="save-btn" id="analyze-multi-btn" onclick="executeAnalysis()" style="display: none; width: 100%; background: #8b5cf6;">🚀 지정된 모든 문제 요약 분석 시작</button>
                 </div>
 
                 <div id="analysis-result" style="display: none; margin-top: 2rem; padding: 1.5rem; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0;">
