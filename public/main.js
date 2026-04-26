@@ -16,19 +16,15 @@ auth.onAuthStateChanged((user) => {
     const loginBtn = document.getElementById('login-btn');
     const logoutBtn = document.getElementById('logout-btn');
     const userInfo = document.getElementById('user-info');
-    
-    // 🟢 기존 admin-btn 대신 우리가 새로 만든 2개의 버튼 가져오기
     const adminFeedbackBtn = document.getElementById('admin-feedback-btn'); 
     const adminModeBtn = document.getElementById('admin-mode-btn'); 
 
     if (user) {
-        // 1. 일반 로그인 사용자 처리 (선생님 기존 코드 유지)
         loginBtn.style.display = 'none';
         logoutBtn.style.display = 'inline-block';
         userInfo.innerText = user.displayName + " 선생님";
         initChecklist(); 
         
-        // 2. 관리자(선생님 본인)일 경우에만 버튼 2개 다 보여주기
         if (user.email === "kthblacks11@gmail.com") {
             if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'inline-block';
             if(adminModeBtn) adminModeBtn.style.display = 'inline-block';
@@ -37,15 +33,11 @@ auth.onAuthStateChanged((user) => {
             if(adminModeBtn) adminModeBtn.style.display = 'none';
         }
     } else {
-        // 3. 로그아웃 상태 처리 (선생님 기존 코드 유지)
         loginBtn.style.display = 'inline-block';
         logoutBtn.style.display = 'none';
         userInfo.innerText = "";
-        
-        // 로그아웃 시 관리자 버튼도 당연히 숨기기
         if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'none'; 
         if(adminModeBtn) adminModeBtn.style.display = 'none'; 
-        
         initChecklist(); 
     }
 });
@@ -65,6 +57,13 @@ let currentQuestions = [];
 let selectedFile = null;
 let currentChatContext = ""; 
 
+// 🟢 새로운 기능(다중 캡처, 모드 분리)을 위한 전역 변수들
+let analysisMainMode = 'single'; 
+let singleCropMode = 'single'; 
+let savedImagesBase64 = []; 
+let savedRects = []; 
+let freehandPoints = [];
+
 function shuffleArray(array) {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -73,12 +72,9 @@ function shuffleArray(array) {
     return array;
 }
 
-// 모달 설정
 async function openSettings() { 
-    // API 키를 넣기 전에도 반드시 로그인이 되어있어야 함
     const isLoggedIn = await checkLogin();
     if (!isLoggedIn) return;
-    
     document.getElementById('api-key-input').value = localStorage.getItem('gemini_api_key') || "";
     document.getElementById('settings-modal').style.display = 'flex'; 
 }
@@ -128,7 +124,7 @@ async function openAdminFeedback() {
 
     document.getElementById('admin-feedback-modal').style.display = 'flex';
     const listEl = document.getElementById('admin-feedback-list');
-    listEl.innerHTML = "<p style='text-align:center; padding: 2rem;'>의견 목록을 불러오는 중입니다...</p>";
+    listEl.innerHTML = "<p style='text-align:center; padding: 2rem;'>의견 목록을 불러오는 중...</p>";
     try {
         const snapshot = await db.collection('developer_feedback').orderBy('timestamp', 'desc').get();
         if(snapshot.empty) { listEl.innerHTML = "<p style='text-align:center; color:#64748b;'>아직 접수된 의견이 없습니다.</p>"; return; }
@@ -163,15 +159,7 @@ function handlePaste(event) {
     }
 }
 
-let cropRect = null;
-// 🟢 상태 관리 변수들 (새로운 기능)
-let analysisMainMode = 'single'; 
-let singleCropMode = 'single'; 
-let savedImagesBase64 = []; 
-let savedRects = []; 
-let freehandPoints = [];
-
-// 1. 상단 탭에서 모드를 선택했을 때 실행
+// 🟢 여기서부터 모드 전환 및 크롭(서클투서치) 기능들
 function openAnalysisMode(mode) {
     showSection('problem-analysis');
     analysisMainMode = mode;
@@ -189,7 +177,6 @@ function openAnalysisMode(mode) {
     }
 }
 
-// 2. 사진 업로드 완료 시 UI 분기
 function displayPreview(file) {
     if (!file) return;
     const reader = new FileReader();
@@ -214,7 +201,6 @@ function displayPreview(file) {
     reader.readAsDataURL(file);
 }
 
-// 3. 한 문제 모드 UI 제어
 function setAnalysisMode(mode) {
     singleCropMode = mode;
     const canvas = document.getElementById('crop-canvas');
@@ -233,7 +219,6 @@ function setAnalysisMode(mode) {
     }
 }
 
-// 4. 서클투서치 기능
 function initCropCanvas() {
     const imgEl = document.getElementById('image-preview');
     const canvas = document.getElementById('crop-canvas');
@@ -288,7 +273,6 @@ function initCropCanvas() {
     canvas.ontouchstart = startDraw; canvas.ontouchmove = draw; canvas.ontouchend = endDraw;
 }
 
-// 5. 화면 그리기 (다중 영역 초록 박스 유지)
 function drawOverlay(ctx, w, h, points) {
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; 
@@ -314,7 +298,6 @@ function drawOverlay(ctx, w, h, points) {
     }
 }
 
-// 6. 여러 문제 모드: 그은 영역 저장
 function saveCropArea() {
     if (!freehandPoints || freehandPoints.length === 0) return;
     const base64 = getCroppedBase64();
@@ -335,7 +318,6 @@ function saveCropArea() {
     drawOverlay(document.getElementById('crop-canvas').getContext('2d'), document.getElementById('crop-canvas').width, document.getElementById('crop-canvas').height, null);
 }
 
-// 7. 이미지 잘라내기
 function getCroppedBase64() {
     const imgEl = document.getElementById('image-preview');
     if (analysisMainMode === 'single' && singleCropMode === 'single') return imgEl.src.split(',')[1];
@@ -356,13 +338,12 @@ function getCroppedBase64() {
     return tempCanvas.toDataURL('image/jpeg', 0.9).split(',')[1];
 }
 
-// 8. 초기화
 function resetAnalysis() {
     document.getElementById('problem-image').value = "";
     document.getElementById('preview-container').style.display = 'none';
     document.getElementById('upload-placeholder').style.display = 'block';
-    document.getElementById('single-mode-ui').style.display = 'none';
-    document.getElementById('multi-mode-ui').style.display = 'none';
+    if(document.getElementById('single-mode-ui')) document.getElementById('single-mode-ui').style.display = 'none';
+    if(document.getElementById('multi-mode-ui')) document.getElementById('multi-mode-ui').style.display = 'none';
     if(document.getElementById('analyze-single-btn')) document.getElementById('analyze-single-btn').style.display = 'none';
     if(document.getElementById('analyze-multi-btn')) document.getElementById('analyze-multi-btn').style.display = 'none';
     document.getElementById('analysis-result').style.display = 'none';
@@ -371,18 +352,22 @@ function resetAnalysis() {
     
     savedImagesBase64 = []; savedRects = []; freehandPoints = [];
     if(document.getElementById('crop-count')) document.getElementById('crop-count').innerText = "0개 저장됨";
+    
+    if(document.getElementById('ai-chat-container')) {
+        document.getElementById('ai-chat-container').style.display = 'none';
+        document.getElementById('chat-history').innerHTML = "";
+        currentChatContext = ""; 
+    }
 }
 
-// 🟢 선생님의 기존 친절한 에러 처리 함수 완벽 보존
+// 🟢 선생님의 한글 에러 처리 함수
 async function checkApiError(response) {
     if (!response.ok) {
         let errMsg = "";
         try {
             const errData = await response.json();
             errMsg = errData.error?.message || "";
-        } catch(e) {
-            errMsg = response.statusText;
-        }
+        } catch(e) { errMsg = response.statusText; }
         
         let koreanError = "서버와 통신 중 알 수 없는 문제가 발생했습니다.";
         
@@ -400,35 +385,31 @@ async function checkApiError(response) {
     }
 }
 
-// 🟢 선생님의 기존 분석 로직 + 새로운 다중 분석 로직 완벽 결합
-async function analyzeProblem() {
-    // 1. 로그인 체크 (기존 기능 보존)
-    if (typeof checkLogin === 'function') {
-        const isLoggedIn = await checkLogin();
-        if (!isLoggedIn) return;
-    }
+// 🎯 대망의 완벽 통합된 분석 시작 함수
+async function executeAnalysis() {
+    const isLoggedIn = await checkLogin();
+    if (!isLoggedIn) return;
 
-    // 2. API 키 체크 (기존 기능 보존)
     const apiKey = localStorage.getItem('gemini_api_key');
     if (!apiKey) {
         alert("⚙️ 분석을 위해서는 구글 AI 스튜디오 API 키 연결이 필요합니다.");
-        if (typeof openSettings === 'function') openSettings();
+        openSettings();
         return;
     }
 
-    // 3. UI 변경 (로딩창 띄우기)
     if(document.getElementById('single-mode-ui')) document.getElementById('single-mode-ui').style.display = 'none';
     if(document.getElementById('multi-mode-ui')) document.getElementById('multi-mode-ui').style.display = 'none';
     document.getElementById('crop-canvas').style.display = 'none';
     
-    // 선생님이 만드신 멋진 로딩 상태창 띄우기!
-    if(document.getElementById('analysis-loading')) {
-        document.getElementById('analysis-loading').style.display = 'block';
-        document.getElementById('loading-status').innerText = "AI 교사가 문제를 정밀 분석 중입니다... ⏳";
-    }
+    const resultDiv = document.getElementById('analysis-result');
+    const resultText = document.getElementById('result-text');
+    resultDiv.style.display = 'block';
+    
+    // 로딩 화면 표시
+    resultText.innerHTML = '<div style="text-align:center; padding: 3rem; color: #3b82f6; font-weight: bold; font-size: 1.1rem;">AI 교사가 문제를 정밀 분석 중입니다... ⏳</div>';
+    resultDiv.scrollIntoView({ behavior: 'smooth' });
 
     try {
-        // 4. RAG 기능 (성취기준 데이터를 AI에게 주입 - 기존 기능 보존!)
         let standardsInfo = "";
         for (const key in subjectData) {
             if (subjectData[key].standards && subjectData[key].standards.length > 0) {
@@ -437,72 +418,12 @@ async function analyzeProblem() {
             }
         }
 
-        // 5. 프롬프트 및 데이터 조립 (단일 vs 다중 분기)
         let apiParts = [];
-        
-        if (analysisMainMode === 'single') {
+        let isSingleMode = (analysisMainMode === 'single');
+
+        if (isSingleMode) {
             const base64Image = getCroppedBase64();
-            apiParts.push({ text: `당신은 대한민국 최고의 고등학교 수학 교사입니다. 첨부된 1개의 수학 문제 이미지를 깊이 있게 분석하여 다음 항목을 마크다운 포맷으로 작성해주세요.\n\n[분석 항목]\n1. 과목 및 단원명 (2022 개정 교육과정 기준)\n2. 관련 성취기준 (코드 포함)\n3. 성취수준 (A/B/C/D/E) 및 판정 이유\n4. 문제 해결을 위한 핵심 개념\n5. 단계별 문제 풀이 과정\n\n[참고할 2022 개정 성취기준 데이터]\n${standardsInfo}` });
-            apiParts.push({ inlineData: { mimeType: "image/jpeg", data: base64Image } });
-        } else {
-            apiParts.push({ text: `당신은 대한민국 최고의 고등학교 수학 교사입니다. 첨부된 ${savedImagesBase64.length}개의 이미지들은 각각 서로 다른 수학 문제입니다. 각 문제별로 명확하게 구분선(---)을 긋고 [문항 1], [문항 2] 형식으로 제목을 달아주세요.\n각 문항마다 풀이과정은 생략하고 아래 항목만 간결하게 요약 제시하세요.\n\n[분석 항목]\n1. 과목 및 단원명 (2022 개정 교육과정 기준)\n2. 관련 성취기준 (코드 포함)\n3. 성취수준 (A/B/C/D/E) 및 판정 이유\n\n[참고할 2022 개정 성취기준 데이터]\n${standardsInfo}` });
-            
-            // 저장된 이미지 여러 개를 한 번에 Payload에 쑤셔넣기
-            savedImagesBase64.forEach(imgData => {
-                apiParts.push({ inlineData: { mimeType: "image/jpeg", data: imgData } });
-            });
-        }
-
-        // 6. 구글 AI 호출
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: apiParts }],
-                generationConfig: { temperature: 0.2 }
-            })
-        });
-
-        // 7. 한글 에러 처리 함수 실행!
-        await checkApiError(response);
-        
-        const data = await response.json();
-        
-        // 8. 성공 시 결과 렌더링
-        let rawText = data.candidates[0].content.parts[0].text;
-        rawText = rawText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
-        
-        // 로딩창 숨기고 결과창 띄우기
-        if(document.getElementById('analysis-loading')) document.getElementById('analysis-loading').style.display = 'none';
-        
-        const resultDiv = document.getElementById('analysis-result');
-        const resultText = document.getElementById('result-text');
-        
-        resultDiv.style.display = 'block';
-        resultText.innerHTML = `<div style="line-height: 1.6;">${rawText}</div>`;
-        
-        if (window.MathJax) {
-            MathJax.typesetPromise([resultText]);
-        }
-        
-        resultDiv.scrollIntoView({ behavior: 'smooth' });
-
-    } catch (error) {
-        console.error('API Error:', error);
-        if(document.getElementById('analysis-loading')) document.getElementById('analysis-loading').style.display = 'none';
-        
-        const resultDiv = document.getElementById('analysis-result');
-        const resultText = document.getElementById('result-text');
-        resultDiv.style.display = 'block';
-        
-        resultText.innerHTML = `<div style="padding: 15px; background-color: #fee2e2; border-left: 4px solid #ef4444; border-radius: 4px;">
-            <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0;">🚨 분석 실패</p>
-            <p style="margin: 0; color: #7f1d1d;">${error.message}</p>
-        </div>`;
-    }
-}       
-
-        const prompt = `당신은 대한민국 최고의 수학 교사입니다. 문항을 엄밀히 분석하여 아래 4가지 대괄호 태그를 '토씨 하나 틀리지 말고' 사용하여 답변하세요. 마크다운 볼드체(**)를 태그 이름에 절대 사용하지 마세요.
+            const prompt = `당신은 대한민국 최고의 수학 교사입니다. 문항을 엄밀히 분석하여 아래 4가지 대괄호 태그를 '토씨 하나 틀리지 말고' 사용하여 답변하세요. 마크다운 볼드체(**)를 태그 이름에 절대 사용하지 마세요.
 
 [교과 및 단원]: 해당 문제의 교과명과 단원명을 명시하세요.
 
@@ -520,52 +441,82 @@ ${standardsInfo}
 [상세 풀이]: 논리적 비약이나 생략 없이 가독성 좋은 단계별 풀이를 작성하세요. 반드시 '1단계:', '2단계:' 형식으로 문단을 시작하세요. 절대 '[상세 풀이]:' 라는 태그 이름을 변경하지 마세요.
 
 [중요 지침]: 모든 수식은 반드시 앞뒤로 $ 기호를 감싸서 LaTeX 문법으로 작성하세요.`;
+            apiParts.push({ text: prompt });
+            apiParts.push({ inlineData: { mimeType: "image/jpeg", data: base64Image } });
+        } else {
+            const prompt = `당신은 대한민국 최고의 수학 교사입니다. 첨부된 ${savedImagesBase64.length}개의 이미지들은 각각 서로 다른 수학 문제입니다. 
+각 문제별로 명확하게 구분선(---)을 긋고 [문항 1], [문항 2] 형식으로 제목을 달아주세요.
+각 문항마다 풀이과정은 생략하고 아래 항목만 간결하게 요약 제시하세요. 수식은 반드시 $ 기호로 감싸서 LaTeX 문법으로 작성하세요.
 
-        // 🟢 가장 안정적인 공식 모델명으로 완벽 복구
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+[분석 항목]
+1. 문항 내용 요약
+2. 과목 및 단원명 (2022 개정)
+3. 관련 성취기준 (코드 포함)
+4. 성취수준 (A/B/C/D/E) 및 판정 이유
+
+[참고할 2022 개정 성취기준 데이터]
+${standardsInfo}`;
+            apiParts.push({ text: prompt });
+            savedImagesBase64.forEach(imgData => {
+                apiParts.push({ inlineData: { mimeType: "image/jpeg", data: imgData } });
+            });
+        }
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: selectedFile.type, data: base64Image } }] }],
+                contents: [{ parts: apiParts }],
                 generationConfig: { temperature: 0.1, topP: 0.9, maxOutputTokens: 3072 }
             })
         });
 
-        await checkApiError(response); // 🟢 한글 에러 처리 함수 호출
+        await checkApiError(response);
+        const data = await response.json();
+        const analysisText = data.candidates[0].content.parts[0].text;
 
-        const result = await response.json();
-        const analysisText = result.candidates[0].content.parts[0].text;
+        if (isSingleMode) {
+            // 단일 분석은 선생님이 만든 예쁜 카드로 렌더링
+            renderSophisticatedResult(analysisText);
+            currentChatContext = analysisText; 
+            document.getElementById('ai-chat-container').style.display = 'block'; 
+            processAndSaveBackground(analysisText, apiKey);
+        } else {
+            // 다중 분석은 깔끔한 텍스트 뷰어로 렌더링 (챗봇은 숨김)
+            let rawText = analysisText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+            resultText.innerHTML = `<div style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); line-height: 1.8;">${rawText}</div>`;
+            document.getElementById('ai-chat-container').style.display = 'none'; 
+        }
 
-        renderSophisticatedResult(analysisText);
-
-        document.getElementById('analysis-loading').style.display = 'none';
-        document.getElementById('analysis-result').style.display = 'block';
-        
-        currentChatContext = analysisText; 
-        document.getElementById('ai-chat-container').style.display = 'block'; 
-        
         if (window.MathJax) {
             MathJax.typesetClear();
-            MathJax.typesetPromise([document.getElementById('analysis-result')]).catch(err => console.log(err));
+            MathJax.typesetPromise([resultDiv]).catch(err => console.log(err));
         }
-        processAndSaveBackground(analysisText, apiKey);
 
-} catch (error) {
+    } catch (error) {
+        console.error('API Error:', error);
         let finalMsg = error.message;
         if (error.name === 'TypeError' && finalMsg.includes('Failed to fetch')) {
             finalMsg = "인터넷 연결이 불안정하거나 방화벽에 의해 차단되었습니다. 네트워크를 확인해주세요.";
         }
-        alert("⚠️ 분석 안내:\n" + finalMsg);
-        document.getElementById('analysis-loading').style.display = 'none';
-        document.getElementById('analyze-btn').style.display = 'block';
+        
+        resultText.innerHTML = `<div style="padding: 15px; background-color: #fee2e2; border-left: 4px solid #ef4444; border-radius: 4px;">
+            <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0;">🚨 분석 실패</p>
+            <p style="margin: 0; color: #7f1d1d;">${finalMsg}</p>
+        </div>`;
+        
+        // 에러 났을 때 다시 시도할 수 있게 UI 복구
+        if (analysisMainMode === 'single') document.getElementById('single-mode-ui').style.display = 'block';
+        else {
+            document.getElementById('multi-mode-ui').style.display = 'block';
+            document.getElementById('crop-canvas').style.display = 'block';
+        }
     }
-} // 👈 이 중괄호가 analyzeProblem 함수 전체를 닫아주는 역할입니다. 실수로 지워지기 쉬우니 꼭 확인해 주세요!
+}
 
-
-
-// 🎯 글씨 잘림 완벽 방어 및 렌더링
+// 🎯 글씨 잘림 완벽 방어 및 렌더링 (단일 문제용)
 function renderSophisticatedResult(rawText) {
-    const container = document.getElementById('res-container');
+    const container = document.getElementById('result-text');
     container.innerHTML = "";
 
     let text = rawText.replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -629,12 +580,11 @@ function renderSophisticatedResult(rawText) {
     });
 }
 
-// 🎯 배경 저장 로직 (DB 저장)
 async function processAndSaveBackground(analysisText, apiKey) {
     try {
         const transformPrompt = "위 분석 결과를 바탕으로, 원본의 저작권을 침해하지 않게 숫자와 상황을 바꾼 '변형된 수학 문제' 1개를 생성하고 정답도 구하세요. \n\n반드시 아래 형식으로만 출력하세요:\n문제: [변형된 문제 내용]\n정답: [정답 내용]";
         
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: analysisText + "\n\n" + transformPrompt }] }] })
@@ -671,7 +621,6 @@ async function processAndSaveBackground(analysisText, apiKey) {
     } catch (e) { console.warn("Background Save Failed:", e); }
 }
 
-// 🟢 탭 이동 시 화면 덜컹거림(레이아웃 점프) 방지가 적용된 함수
 function showSection(id) {
     document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -680,11 +629,8 @@ function showSection(id) {
     const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(`'${id}'`));
     if (activeBtn) activeBtn.classList.add('active');
     
-    // 💡 삭제된 부분: if (id === 'quiz') initLevelQuiz(); (이놈이 범인이었습니다!)
-
-    // 과목 선택창과 부제목 요소를 가져옵니다.
     const subjectSelector = document.querySelector('.subject-selector');
-    const subTitle = document.getElementById('sub-title'); 
+    const subTitle = document.getElementById('main-subtitle'); 
 
     if (id === 'problem-analysis') {
         if (subjectSelector) subjectSelector.style.visibility = 'hidden';
@@ -700,9 +646,6 @@ function changeSubject() {
     const data = subjectData[currentSubject];
     if (data) { document.getElementById('main-subtitle').innerText = "[" + data.title + "] " + data.subtitle; }
     initDashboard(); 
-    
-    // 💡 삭제된 부분: initLevelQuiz(); 
-    
     initChecklist();
 }
 
@@ -714,32 +657,26 @@ function initDashboard() {
     subjectData[currentSubject].standards.forEach(std => {
         const card = document.createElement('div');
         card.className = 'card';
-        
-        // Flexbox의 복잡한 속성들을 빼고, 가장 안정적인 기본 블록(Block) 형태로 배치합니다.
         card.style.display = 'block';
         card.style.position = 'relative';
 
-        // 1. 텍스트 영역
         const textArea = document.createElement('div');
         textArea.style.cursor = 'pointer';
         textArea.innerHTML = `<h3 style="margin: 0 0 0.5rem 0; color: var(--primary);">${std.code}</h3><p style="margin: 0; color: var(--text-main); line-height: 1.6;">${std.desc}</p>`;
         textArea.onclick = () => openModal(std);
         
-        // 2. 버튼 영역 (아래쪽 우측 정렬)
         const btnArea = document.createElement('div');
         btnArea.style.textAlign = 'right';
-        btnArea.style.marginTop = '15px'; // 텍스트와 약간의 여백 띄우기
+        btnArea.style.marginTop = '15px'; 
         
         const quizBtn = document.createElement('button');
         quizBtn.className = 'save-btn'; 
-        
-        // 💡 핵심: 버튼이 거대해지는 것을 막고 텍스트 길이에 맞춰 컴팩트하게 조절
         quizBtn.style.display = 'inline-block';
-        quizBtn.style.width = 'auto'; // 화면을 100% 꽉 채우는 현상 방지!
+        quizBtn.style.width = 'auto'; 
         quizBtn.style.margin = '0';
-        quizBtn.style.padding = '0.5rem 1.2rem'; // 상하는 슬림하게, 좌우는 적당히
+        quizBtn.style.padding = '0.5rem 1.2rem'; 
         quizBtn.style.fontSize = '0.9rem';
-        quizBtn.style.borderRadius = '8px'; // 모서리를 둥글게
+        quizBtn.style.borderRadius = '8px'; 
         quizBtn.innerHTML = '📝 문항 매칭 연습';
         
         quizBtn.onclick = (e) => {
@@ -749,10 +686,8 @@ function initDashboard() {
         };
         
         btnArea.appendChild(quizBtn);
-        
         card.appendChild(textArea);
         card.appendChild(btnArea);
-
         container.appendChild(card);
     });
     
@@ -762,30 +697,10 @@ function initDashboard() {
     }
 }
 
-function initLevelQuiz() {
-    const container = document.getElementById('quiz-standard-list');
-    container.innerHTML = '';
-    if (!subjectData[currentSubject]) return;
-    const stds = subjectData[currentSubject].standards.filter(std => std.questions && std.questions.length > 0);
-    if (stds.length === 0) {
-        container.innerHTML = "<p style='text-align:center;'>이 과목에는 아직 문제가 없습니다.</p>";
-    } else {
-        stds.forEach(std => {
-            const btn = document.createElement('button');
-            btn.className = 'option-btn';
-            btn.innerHTML = `<strong>${std.code}</strong><br>${std.desc}`;
-            btn.onclick = () => startLevelMatching(std.code);
-            container.appendChild(btn);
-        });
-    }
-    backToStandardSelection();
-}
-
 async function startLevelMatching(code) {
     currentStandardCode = code; currentLevelQ = 0;
     const standard = subjectData[currentSubject].standards.find(s => s.code === code);
     
-    // 💡 에러 방지 핵심: 해당 성취기준에 문제가 없으면 빈 배열([])로 안전하게 시작
     let combinedQuestions = standard.questions ? [...standard.questions] : []; 
 
     try {
@@ -820,7 +735,6 @@ async function startLevelMatching(code) {
         <div class="guide-item"><strong>E (하)</strong> ${standard.levels.low}</div>
     `;
     
-    // 💡 변경점: 만약 데이터베이스에도, 기본 데이터에도 등록된 문제가 0개라면 안내 띄우기
     if (currentQuestions.length === 0) {
         document.getElementById('level-question-text').innerHTML = "<p style='text-align:center; margin-top:2rem;'>아직 이 성취기준에 등록된 문항이 없습니다.<br>문제 분석하기 기능을 통해 문항을 추가해 보세요!</p>";
         document.getElementById('level-options').innerHTML = '';
@@ -850,7 +764,6 @@ function loadLevelQuestion() {
     if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([qBox]); }
 }
 
-// 🟢 2. 문항 매칭 연습 오답 시 예제 출력 로직 복구
 function checkLevelAnswer(selectedLevel, btn) {
     const question = currentQuestions[currentLevelQ];
     const fb = document.getElementById('level-feedback');
@@ -864,9 +777,8 @@ function checkLevelAnswer(selectedLevel, btn) {
         fb.style.color = "#166534"; fb.style.backgroundColor = '#dcfce7';
         btn.style.border = '3px solid #166534'; btn.style.opacity = '1';
     } else {
-        // --- 복구된 오답 비교 로직 시작 ---
         const standard = subjectData[currentSubject].standards.find(s => s.code === currentStandardCode);
-        const wrongLevelExample = standard.questions.find(q => q.level === selectedLevel);
+        const wrongLevelExample = standard.questions ? standard.questions.find(q => q.level === selectedLevel) : null;
         let comparativeText = "";
         
         if (wrongLevelExample) {
@@ -880,7 +792,6 @@ function checkLevelAnswer(selectedLevel, btn) {
                                <em>* 현재 제시된 문항은 '${question.level}' 수준의 특징을 더 강하게 가지고 있습니다.</em>
                                </div>`;
         }
-        // --- 복구된 오답 비교 로직 끝 ---
 
         fb.innerHTML = `❌ <strong>오답입니다.</strong> 이 문항은 <strong>'${question.level}'</strong> 수준입니다.<br><br><strong>[이유]</strong> ${question.reason} ${answerHTML} ${comparativeText}`;
         fb.style.color = "#991b1b"; fb.style.backgroundColor = '#fee2e2';
@@ -902,7 +813,6 @@ function nextLevelQuestion() {
 function backToStandardSelection() {
     currentStandardCode = null; 
     currentQuestions = [];
-    // 기존 퀴즈 목록 화면을 띄우는 대신, 첫 번째 대시보드 탭으로 돌아갑니다.
     showSection('dashboard'); 
 }
 
@@ -912,7 +822,6 @@ async function initChecklist() {
     if (!subjectData[currentSubject]) return;
 
     let saved = {};
-    // 로그인이 되어 있다면 파이어베이스에서 기존 데이터를 불러옴
     if (auth.currentUser) {
         try {
             const doc = await db.collection('user_checklists').doc(auth.currentUser.uid).get();
@@ -932,7 +841,6 @@ async function initChecklist() {
 }
 
 async function saveChecklist() {
-    // 저장하기 전 로그인 체크 (로그인 안되어있으면 팝업 뜸)
     const isLoggedIn = await checkLogin();
     if (!isLoggedIn) return;
 
@@ -941,7 +849,6 @@ async function saveChecklist() {
         checks[input.id.replace('c-', '')] = input.checked;
     });
 
-    // 파이어베이스(클라우드)에 영구 저장
     try {
         await db.collection('user_checklists').doc(auth.currentUser.uid).set({
             [currentSubject]: checks
@@ -964,39 +871,17 @@ function openModal(std) {
     document.getElementById('level-modal').style.display = 'flex';
 }
 
-function resetAnalysis() {
-    document.getElementById('problem-image').value = "";
-    document.getElementById('preview-container').style.display = 'none';
-    document.getElementById('upload-placeholder').style.display = 'block';
-    document.getElementById('analyze-btn').style.display = 'none';
-    document.getElementById('analysis-result').style.display = 'none';
-    
-    if(document.getElementById('mode-selector')) {
-        document.getElementById('mode-selector').style.display = 'none';
-    }
-    // 🟢 리셋할 때 경고 문구도 같이 숨김
-    if(document.getElementById('analysis-warning')) {
-        document.getElementById('analysis-warning').style.display = 'none';
-    }
-    if(document.getElementById('crop-canvas')) {
-        document.getElementById('crop-canvas').style.display = 'none';
-    }
-    
-    if(document.getElementById('ai-chat-container')) {
-        document.getElementById('ai-chat-container').style.display = 'none';
-        document.getElementById('chat-history').innerHTML = "";
-        currentChatContext = ""; 
-    }
-}
-
 async function reAnalyzeWithChat() {
     const apiKey = localStorage.getItem('gemini_api_key');
     if (!apiKey) return;
     const chatHistory = document.getElementById('chat-history').innerText;
     if (!chatHistory) { alert("먼저 대화를 진행해주세요."); return; }
 
-    document.getElementById('analysis-result').style.display = 'none';
-    document.getElementById('analysis-loading').style.display = 'block';
+    const resultDiv = document.getElementById('analysis-result');
+    const resultText = document.getElementById('result-text');
+    
+    resultDiv.style.display = 'block';
+    resultText.innerHTML = '<div style="text-align:center; padding: 3rem; color: #3b82f6; font-weight: bold; font-size: 1.1rem;">AI 교사가 대화를 바탕으로 재분석 중입니다... ⏳</div>';
 
     try {
         const prompt = `당신은 대한민국 최고의 수학 교사입니다. 
@@ -1005,18 +890,15 @@ async function reAnalyzeWithChat() {
         
         대화를 깊이 분석하여 '최종 최적화 분석 결과'를 4가지 태그([교과 및 단원]:, [성취기준 및 수준]:, [핵심 개념]:, [상세 풀이]:)를 유지하여 답변하세요. 수식은 $ LaTeX를 사용하세요.`;
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
         
-        await checkApiError(response); // 🟢 한글 에러 확인 적용
+        await checkApiError(response); 
 
         const result = await response.json();
         renderSophisticatedResult(result.candidates[0].content.parts[0].text);
-        
-        document.getElementById('analysis-loading').style.display = 'none';
-        document.getElementById('analysis-result').style.display = 'block';
         if (window.MathJax) MathJax.typesetPromise();
     } catch (error) { alert("⚠️ 재분석 오류:\n" + error.message); }
 }
@@ -1035,12 +917,12 @@ async function sendChatMessage() {
     try {
         const prompt = `이전 분석: ${currentChatContext}\n교사의 의견: "${message}"\n\n[지침]: 수학 교사의 의견을 바탕으로 답변하세요. 가독성을 위해 적절한 단락 나누기, 글머리 기호(•), 마크다운 굵은 글씨(**)를 사용하세요. 수식은 $ LaTeX 문법을 사용하세요.`;
         
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
         
-        await checkApiError(response); // 🟢 한글 에러 확인 적용
+        await checkApiError(response); 
         
         const result = await response.json();
         const aiReply = result.candidates[0].content.parts[0].text;
@@ -1051,7 +933,6 @@ async function sendChatMessage() {
         if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([historyEl]); }
         historyEl.scrollTop = historyEl.scrollHeight;
     } catch(e) { 
-        // 🟢 채팅창 내부 에러도 한글로 예쁘게 출력
         historyEl.innerHTML += `<div style="text-align: left; margin-bottom: 12px;"><span style="color: #dc2626; background: #fee2e2; padding: 10px; border-radius: 8px; display: inline-block; font-size: 0.9rem;">⚠️ ${e.message}</span></div>`; 
         historyEl.scrollTop = historyEl.scrollHeight;
     }
@@ -1072,25 +953,21 @@ async function syncPendingFeedback() {
             remaining.push(item);
         }
     }
-
     localStorage.setItem('pending_feedback', JSON.stringify(remaining));
 }
 
-// 🟢 파이어베이스 DB에서 성취기준 데이터를 싹 다 가져오는 함수
 async function loadStandardsFromDB() {
     try {
         const snapshot = await db.collection('standards_2022').get();
-        if (snapshot.empty) return; // 만약 DB가 비어있으면 기존 data.js 사용
+        if (snapshot.empty) return; 
 
-        // 과목별로 담을 빈 바구니 준비
         const dbStandards = { common1: [], common2: [], algebra: [], calculus1: [], stats: [], calculus2: [], geometry: [], 'ai-math': [] };
 
-        // DB에서 꺼내서 바구니에 쏙쏙 넣기
         snapshot.forEach(doc => {
             const data = doc.data();
             if(dbStandards[data.subject]) {
                 dbStandards[data.subject].push({
-                    id: doc.id, // 나중에 수정을 위해 문서 고유 ID도 보관
+                    id: doc.id, 
                     code: data.code,
                     desc: data.desc,
                     levels: data.levels,
@@ -1099,10 +976,8 @@ async function loadStandardsFromDB() {
             }
         });
 
-        // 기존 subjectData(data.js)에 덮어쓰기!
         for (let subj in dbStandards) {
             if (dbStandards[subj].length > 0) {
-                // 단원 코드 순서대로 예쁘게 정렬 ([10공수2-01-01] 다음 02)
                 dbStandards[subj].sort((a, b) => a.code.localeCompare(b.code));
                 if(subjectData[subj]) {
                     subjectData[subj].standards = dbStandards[subj];
@@ -1115,28 +990,26 @@ async function loadStandardsFromDB() {
     }
 }
 
-// 🟢 사이트가 처음 켜질 때 실행되는 순서 변경
 window.onload = async () => {
-    await loadStandardsFromDB(); // 1. 화면 켜지자마자 DB에서 데이터부터 가져오기!
-    changeSubject();             // 2. 가져온 데이터로 화면 그리기
-    syncPendingFeedback();       // 3. 밀린 의견 보내기
+    await loadStandardsFromDB(); 
+    changeSubject();             
+    syncPendingFeedback();       
 };
 
-// 🟢 기능을 실행하기 전 로그인이 되어있는지 확인하고, 안 되어있으면 팝업을 띄우는 함수
 async function checkLogin() {
     if (!auth.currentUser) {
-        alert("이 기능을 사용하려면 진행 상황 저장을 위해 '구글 아이디로 시작' 로그인이 필요합니다.\n확인을 누르면 로그인 화면으로 이동합니다.");
+        alert("이 기능을 사용하려면 '구글 아이디로 시작' 로그인이 필요합니다.\n확인을 누르면 로그인 화면으로 이동합니다.");
         try {
             await auth.signInWithPopup(provider);
-            return true; // 로그인 성공
+            return true; 
         } catch (error) {
             console.error("로그인 취소 또는 실패", error);
-            return false; // 로그인 실패
+            return false; 
         }
     }
-    return true; // 이미 로그인 되어있음
+    return true; 
 }
-// 관리자 페이지 열기 (권한 체크 포함)
+
 function openAdminMode() {
     const user = auth.currentUser;
     if (user && user.email === "kthblacks11@gmail.com") {
@@ -1146,7 +1019,6 @@ function openAdminMode() {
     }
 }
 
-// 입력한 데이터를 Firestore에 저장하는 함수
 async function saveStandardToDB() {
     const subject = document.getElementById('admin-subject').value;
     const code = document.getElementById('admin-code').value.trim();
@@ -1171,16 +1043,16 @@ async function saveStandardToDB() {
             code: code,
             desc: desc,
             levels: levels,
-            questions: [] // 초기 문항은 빈 배열로 설정
+            questions: [] 
         });
         alert("🎉 새로운 성취기준이 DB에 성공적으로 저장되었습니다!");
-        location.reload(); // 새로고침하여 데이터 반영 확인
+        location.reload(); 
     } catch (error) {
         console.error("저장 실패:", error);
         alert("저장 중 오류가 발생했습니다: " + error.message);
     }
 }
-// 🟢 관리자 모드: 과목 선택 시 DB에서 해당 과목 성취기준 목록 불러오기
+
 async function loadStandardsForQuestion() {
     const subject = document.getElementById('admin-q-subject').value;
     const stdSelect = document.getElementById('admin-q-standard');
@@ -1196,7 +1068,6 @@ async function loadStandardsForQuestion() {
         let stds = [];
         snapshot.forEach(doc => stds.push({ id: doc.id, code: doc.data().code, desc: doc.data().desc }));
         
-        // 코드 순서대로 정렬
         stds.sort((a,b) => a.code.localeCompare(b.code));
 
         stdSelect.innerHTML = '<option value="">-- 문항을 추가할 성취기준 선택 --</option>';
@@ -1209,11 +1080,10 @@ async function loadStandardsForQuestion() {
     }
 }
 
-// 🟢 관리자 모드: 선택한 성취기준(문서) 안의 questions 배열에 문항 밀어넣기
 async function saveQuestionToDB() {
     const docId = document.getElementById('admin-q-standard').value;
     const qText = document.getElementById('admin-q-text').value.trim();
-    const qLevel = document.getElementById('admin-q-level').options[document.getElementById('admin-q-level').selectedIndex].text.charAt(0); // A, B, C, D, E 추출
+    const qLevel = document.getElementById('admin-q-level').options[document.getElementById('admin-q-level').selectedIndex].text.charAt(0); 
     const qReason = document.getElementById('admin-q-reason').value.trim();
 
     if (!docId || !qText || !qReason) {
@@ -1222,7 +1092,6 @@ async function saveQuestionToDB() {
     }
 
     try {
-        // 파이어베이스의 배열 추가 전용 명령어 사용
         await db.collection('standards_2022').doc(docId).update({
             questions: firebase.firestore.FieldValue.arrayUnion({
                 q: qText,
@@ -1232,10 +1101,9 @@ async function saveQuestionToDB() {
         });
         alert("✨ 문항이 성공적으로 추가되었습니다!");
         
-        // 입력창 비우기
         document.getElementById('admin-q-text').value = '';
         document.getElementById('admin-q-reason').value = '';
-        location.reload(); // 데이터 갱신을 위해 새로고침
+        location.reload(); 
     } catch (error) {
         console.error("문항 추가 실패:", error);
         alert("문항 추가 중 오류가 발생했습니다.");
