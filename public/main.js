@@ -57,12 +57,15 @@ let currentQuestions = [];
 let selectedFile = null;
 let currentChatContext = ""; 
 
-// 🟢 새로운 기능(다중 캡처, 모드 분리)을 위한 전역 변수들
+// 🟢 네모 박스 크롭 및 미세조정을 위한 단일 상태 변수들
 let analysisMainMode = 'single'; 
 let singleCropMode = 'single'; 
-let savedImagesBase64 = []; 
-let savedRects = []; 
-let freehandPoints = [];
+let cropBoxes = []; 
+let isInteracting = false; 
+let interactionType = null; 
+let activeBoxIndex = -1;
+let dragStartX = 0, dragStartY = 0;
+let initialBoxState = null;
 
 function shuffleArray(array) {
     for (let i = array.length - 1; i > 0; i--) {
@@ -159,16 +162,6 @@ function handlePaste(event) {
     }
 }
 
-// 🟢 네모 박스 크롭 및 미세조정을 위한 상태 변수들
-let analysisMainMode = 'single'; 
-let singleCropMode = 'single'; 
-let cropBoxes = []; // 네모 상자들을 담을 배열 {x, y, w, h}
-let isInteracting = false; 
-let interactionType = null; // 'create', 'move', 'resize_nw', 'resize_n', etc.
-let activeBoxIndex = -1;
-let dragStartX = 0, dragStartY = 0;
-let initialBoxState = null;
-
 function openAnalysisMode(mode) {
     showSection('problem-analysis');
     analysisMainMode = mode;
@@ -228,7 +221,6 @@ function setAnalysisMode(mode) {
     }
 }
 
-// 🟢 박스를 항상 정상적인 좌표(음수 넓이 방지)로 변환하는 마법 함수
 function normalizeBox(b) {
     return {
         x: b.w < 0 ? b.x + b.w : b.x,
@@ -238,9 +230,8 @@ function normalizeBox(b) {
     };
 }
 
-// 🟢 마우스 위치에 따라 테두리(핸들)를 잡았는지 확인하는 함수
 function checkHit(x, y) {
-    const TOLERANCE = 10; // 마우스 인식 범위
+    const TOLERANCE = 10; 
     for (let i = cropBoxes.length - 1; i >= 0; i--) {
         const b = normalizeBox(cropBoxes[i]);
         const nearL = Math.abs(x - b.x) < TOLERANCE;
@@ -263,7 +254,6 @@ function checkHit(x, y) {
     return null;
 }
 
-// 🎯 본격적인 네모 그리기 및 미세조정 에디터 로직
 function initCropCanvas() {
     const imgEl = document.getElementById('image-preview');
     const canvas = document.getElementById('crop-canvas');
@@ -286,14 +276,14 @@ function initCropCanvas() {
         const hit = checkHit(pos.x, pos.y);
         if(document.getElementById('crop-msg')) document.getElementById('crop-msg').style.display = 'none';
 
-        if (hit) { // 이미 그려진 상자를 클릭(미세조정 또는 이동)
+        if (hit) { 
             isInteracting = true;
             interactionType = hit.type;
             activeBoxIndex = hit.index;
             dragStartX = pos.x; dragStartY = pos.y;
             initialBoxState = { ...cropBoxes[activeBoxIndex] };
-        } else { // 빈 공간 클릭(새 상자 그리기 시작)
-            if (analysisMainMode === 'single') cropBoxes = []; // 한 문제 모드는 무조건 1개만
+        } else { 
+            if (analysisMainMode === 'single') cropBoxes = []; 
             const newBox = { x: pos.x, y: pos.y, w: 0, h: 0 };
             cropBoxes.push(newBox);
             activeBoxIndex = cropBoxes.length - 1;
@@ -308,7 +298,6 @@ function initCropCanvas() {
         e.preventDefault();
         const pos = getPos(e);
 
-        // 상호작용 중이 아닐 때는 마우스 모양(커서)만 변경
         if (!isInteracting) {
             const hit = checkHit(pos.x, pos.y);
             if (hit) {
@@ -325,7 +314,6 @@ function initCropCanvas() {
         const dy = pos.y - dragStartY;
         const box = cropBoxes[activeBoxIndex];
 
-        // 상호작용 실행 (생성, 이동, 크기조절)
         if (interactionType === 'create') {
             box.w = pos.x - box.x; box.h = pos.y - box.y;
         } else if (interactionType === 'move') {
@@ -343,10 +331,8 @@ function initCropCanvas() {
         if (!isInteracting) return;
         isInteracting = false;
         
-        // 너무 작게 클릭된(실수) 상자 제거 및 정상화
         cropBoxes = cropBoxes.map(normalizeBox).filter(b => b.w > 20 && b.h > 20);
         
-        // UI 버튼 제어
         if (cropBoxes.length > 0) {
             if (analysisMainMode === 'single') {
                 document.getElementById('analyze-single-btn').style.display = 'block';
@@ -365,35 +351,30 @@ function initCropCanvas() {
     };
 }
 
-// 🟢 화면에 어두운 배경, 네모 상자, 번호 배지 그리기
 function drawOverlay() {
     const canvas = document.getElementById('crop-canvas');
     if(!canvas) return;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // 전체 어둡게 덮기
     ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     cropBoxes.forEach((box, index) => {
         const nb = normalizeBox(box);
         
-        // 박스 안쪽 밝게 뚫기
         ctx.clearRect(nb.x, nb.y, nb.w, nb.h);
         
-        // 파란색 테두리
         ctx.strokeStyle = '#3b82f6'; 
         ctx.lineWidth = 3;
         ctx.strokeRect(nb.x, nb.y, nb.w, nb.h);
 
-        // 다중 모드일 때 우측 상단에 🔴 빨간색 원문자(배지) 그리기
         if (analysisMainMode === 'multi') {
             const badgeRadius = 14;
-            const badgeX = nb.x + nb.w; // 우측 모서리
-            const badgeY = nb.y;        // 상단 모서리
+            const badgeX = nb.x + nb.w; 
+            const badgeY = nb.y;        
             
-            ctx.fillStyle = '#ef4444'; // 빨간색
+            ctx.fillStyle = '#ef4444'; 
             ctx.beginPath();
             ctx.arc(badgeX, badgeY, badgeRadius, 0, 2 * Math.PI);
             ctx.fill();
@@ -407,10 +388,8 @@ function drawOverlay() {
     });
 }
 
-// 🟢 지정된 상자 영역만 잘라서 AI에게 보낼 이미지로 변환
 function getCroppedBase64(boxObj) {
     const imgEl = document.getElementById('image-preview');
-    // 상자가 없으면 전체 이미지 반환
     if (!boxObj) return imgEl.src.split(',')[1]; 
     
     const nb = normalizeBox(boxObj);
@@ -449,7 +428,32 @@ function resetAnalysis() {
     }
 }
 
-// 🎯 최종 AI 통신 및 분석 시작 함수 (중간 저장 없이 상자들 바로 전송)
+async function checkApiError(response) {
+    if (!response.ok) {
+        let errMsg = "";
+        try {
+            const errData = await response.json();
+            errMsg = errData.error?.message || "";
+        } catch(e) {
+            errMsg = response.statusText;
+        }
+        
+        let koreanError = "서버와 통신 중 알 수 없는 문제가 발생했습니다.";
+        
+        if (response.status === 400) {
+            if (errMsg.includes("API key not valid")) koreanError = "입력하신 API 키가 유효하지 않습니다. 키를 다시 확인해주세요.";
+            else koreanError = "이미지나 요청 형식이 잘못되었습니다. 다시 업로드해주세요.";
+        }
+        else if (response.status === 401 || response.status === 403) koreanError = "입력하신 API 키가 잘못되었거나 권한이 없습니다. API 키를 다시 확인해주세요!";
+        else if (response.status === 404) koreanError = "AI 모델 버전을 찾을 수 없습니다. (시스템 관리자에게 문의하세요)";
+        else if (response.status === 429 || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED")) koreanError = "무료 사용량(할당량) 한도를 초과했습니다! ⚙️설정에서 새로운 API 키를 발급받아 입력해주세요.";
+        else if (response.status === 500) koreanError = "구글 AI 서버 내부에서 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+        else if (response.status === 503 || errMsg.includes("high demand") || errMsg.includes("overloaded")) koreanError = "현재 구글 서버에 접속자가 너무 많아 일시적으로 바쁩니다! 10초만 기다렸다가 다시 눌러주세요.";
+
+        throw new Error(koreanError);
+    }
+}
+
 async function executeAnalysis() {
     const isLoggedIn = await checkLogin();
     if (!isLoggedIn) return;
@@ -485,7 +489,6 @@ async function executeAnalysis() {
         let isSingleMode = (analysisMainMode === 'single');
 
         if (isSingleMode) {
-            // 한 문제 모드: 그려진 1개의 상자(없으면 전체) 전송
             const box = (singleCropMode === 'multi' && cropBoxes.length > 0) ? cropBoxes[0] : null;
             const base64Image = getCroppedBase64(box);
             
@@ -510,7 +513,6 @@ ${standardsInfo}
             apiParts.push({ text: prompt });
             apiParts.push({ inlineData: { mimeType: "image/jpeg", data: base64Image } });
         } else {
-            // 다중 문제 모드: 화면에 그려진 모든 상자들을 추출해서 한 번에 전송
             const prompt = `당신은 대한민국 최고의 수학 교사입니다. 첨부된 ${cropBoxes.length}개의 이미지들은 각각 서로 다른 수학 문제입니다. 
 각 문제별로 명확하게 구분선(---)을 긋고 [문항 1], [문항 2] 형식으로 제목을 달아주세요.
 각 문항마다 풀이과정은 생략하고 아래 항목만 간결하게 요약 제시하세요. 수식은 반드시 $ 기호로 감싸서 LaTeX 문법으로 작성하세요.
@@ -525,7 +527,6 @@ ${standardsInfo}
 ${standardsInfo}`;
             apiParts.push({ text: prompt });
             
-            // 배열에 저장된 상자 좌표들을 순회하며 이미지를 잘라서 추가
             cropBoxes.forEach(box => {
                 apiParts.push({ inlineData: { mimeType: "image/jpeg", data: getCroppedBase64(box) } });
             });
@@ -580,7 +581,6 @@ ${standardsInfo}`;
     }
 }
 
-// 🎯 글씨 잘림 완벽 방어 및 렌더링 (단일 문제용)
 function renderSophisticatedResult(rawText) {
     const container = document.getElementById('result-text');
     container.innerHTML = "";
