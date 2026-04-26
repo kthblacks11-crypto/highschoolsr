@@ -164,73 +164,84 @@ function handlePaste(event) {
 }
 
 let cropRect = null;
-let analysisMode = 'single';
+// 🟢 상태 관리 변수들 (새로운 기능)
+let analysisMainMode = 'single'; 
+let singleCropMode = 'single'; 
+let savedImagesBase64 = []; 
+let savedRects = []; 
+let freehandPoints = [];
 
+// 1. 상단 탭에서 모드를 선택했을 때 실행
+function openAnalysisMode(mode) {
+    showSection('problem-analysis');
+    analysisMainMode = mode;
+    resetAnalysis(); 
+
+    const title = document.getElementById('analysis-title');
+    const summary = document.getElementById('service-summary');
+
+    if (mode === 'single') {
+        title.innerHTML = "🔍 한 문제 상세 분석";
+        summary.innerHTML = "<strong style='color: #2563eb;'>[상세 분석 제공 내용]</strong><br>과목, 단원명, 성취기준, 성취수준, 판정이유, 핵심개념, 단계별 문제풀이";
+    } else {
+        title.innerHTML = "📑 여러 문제 요약 분석";
+        summary.innerHTML = "<strong style='color: #8b5cf6;'>[요약 분석 제공 내용]</strong><br>문항별 과목, 단원명, 성취기준, 성취수준, 판정이유";
+    }
+}
+
+// 2. 사진 업로드 완료 시 UI 분기
 function displayPreview(file) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = function(e) {
         const imgEl = document.getElementById('image-preview');
         imgEl.src = e.target.result;
-        
         imgEl.onload = function() {
             document.getElementById('preview-container').style.display = 'block';
             document.getElementById('upload-placeholder').style.display = 'none';
-            document.getElementById('mode-selector').style.display = 'flex'; 
             
-            // 🟢 경고 문구 표시
-            if(document.getElementById('analysis-warning')) {
-                document.getElementById('analysis-warning').style.display = 'block'; 
-            }
-            
-            document.getElementById('analyze-btn').style.display = 'none'; 
-            document.getElementById('crop-canvas').style.display = 'none'; 
-            cropRect = null;
-
-            if(document.getElementById('ai-chat-container')) {
-                document.getElementById('ai-chat-container').style.display = 'none';
-                document.getElementById('chat-history').innerHTML = ""; 
-                currentChatContext = ""; 
+            if (analysisMainMode === 'single') {
+                document.getElementById('single-mode-ui').style.display = 'block';
+                document.getElementById('crop-canvas').style.display = 'none'; 
+            } else {
+                document.getElementById('multi-mode-ui').style.display = 'block';
+                document.getElementById('crop-canvas').style.display = 'block'; 
+                document.getElementById('crop-msg').style.display = 'block'; 
+                initCropCanvas();
             }
         }
     }
     reader.readAsDataURL(file);
 }
 
+// 3. 한 문제 모드 UI 제어
 function setAnalysisMode(mode) {
-    analysisMode = mode;
+    singleCropMode = mode;
     const canvas = document.getElementById('crop-canvas');
-    const analyzeBtn = document.getElementById('analyze-btn');
-    const warningTxt = document.getElementById('analysis-warning'); 
-    const cropMsg = document.getElementById('crop-msg'); // 🟢 안내 문구 가져오기
+    const analyzeBtn = document.getElementById('analyze-single-btn');
 
     if (mode === 'single') {
         canvas.style.display = 'none';
         analyzeBtn.style.display = 'block';
         analyzeBtn.innerText = "✨ 사진 전체 분석 시작";
-        if(warningTxt) warningTxt.style.display = 'none'; 
-        if(cropMsg) cropMsg.style.display = 'none'; // 한 문제 모드일 땐 문구 숨김
-        freehandPoints = []; 
+        freehandPoints = [];
     } else {
         canvas.style.display = 'block';
         analyzeBtn.style.display = 'none';
-        if(warningTxt) warningTxt.style.display = 'none'; 
         initCropCanvas();
-        // 🟢 기존의 성가신 alert() 창 제거하고 화면 위에 글씨 띄우기
-        if(cropMsg) cropMsg.style.display = 'block'; 
+        if(document.getElementById('crop-msg')) document.getElementById('crop-msg').style.display = 'block';
     }
 }
 
+// 4. 서클투서치 기능
 function initCropCanvas() {
     const imgEl = document.getElementById('image-preview');
     const canvas = document.getElementById('crop-canvas');
     const ctx = canvas.getContext('2d');
-
     canvas.width = imgEl.clientWidth;
     canvas.height = imgEl.clientHeight;
 
     drawOverlay(ctx, canvas.width, canvas.height, null);
-
     let isDrawing = false;
 
     function getPos(e) {
@@ -243,18 +254,15 @@ function initCropCanvas() {
     function startDraw(e) {
         e.preventDefault();
         isDrawing = true;
-        
-        // 🟢 그리기 시작하는 순간! 화면 중앙의 안내 문구 싹 지우기
-        if(document.getElementById('crop-msg')) document.getElementById('crop-msg').style.display = 'none'; 
-        
-        freehandPoints = [getPos(e)]; 
+        if(document.getElementById('crop-msg')) document.getElementById('crop-msg').style.display = 'none';
+        freehandPoints = [getPos(e)];
         drawOverlay(ctx, canvas.width, canvas.height, freehandPoints);
     }
 
     function draw(e) {
         if (!isDrawing) return;
         e.preventDefault();
-        freehandPoints.push(getPos(e)); 
+        freehandPoints.push(getPos(e));
         drawOverlay(ctx, canvas.width, canvas.height, freehandPoints);
     }
 
@@ -262,16 +270,17 @@ function initCropCanvas() {
         if (!isDrawing) return;
         isDrawing = false;
         
-        // 너무 짧게 점만 찍은 경우(실수) 초기화
         if (freehandPoints.length < 10) {
             freehandPoints = [];
             drawOverlay(ctx, canvas.width, canvas.height, null);
-            // 취소되었으니 다시 안내 문구 보여주기
             if(document.getElementById('crop-msg')) document.getElementById('crop-msg').style.display = 'block';
         } else {
-            const analyzeBtn = document.getElementById('analyze-btn');
-            analyzeBtn.style.display = 'block';
-            analyzeBtn.innerText = "🔍 선택 영역 분석 시작";
+            if (analysisMainMode === 'single') {
+                document.getElementById('analyze-single-btn').style.display = 'block';
+                document.getElementById('analyze-single-btn').innerText = "🔍 선택 영역 분석 시작";
+            } else {
+                document.getElementById('save-crop-btn').style.display = 'block';
+            }
         }
     }
 
@@ -279,64 +288,96 @@ function initCropCanvas() {
     canvas.ontouchstart = startDraw; canvas.ontouchmove = draw; canvas.ontouchend = endDraw;
 }
 
+// 5. 화면 그리기 (다중 영역 초록 박스 유지)
 function drawOverlay(ctx, w, h, points) {
     ctx.clearRect(0, 0, w, h);
-    // 🟢 핵심! 투명도를 0.6에서 0.3으로 낮춰서 뒤에 있는 다른 문제들이 잘 보이게 만듦
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'; 
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; 
     ctx.fillRect(0, 0, w, h);
 
+    if (analysisMainMode === 'multi') {
+        savedRects.forEach((rect, index) => {
+            ctx.clearRect(rect.x, rect.y, rect.w, rect.h);
+            ctx.strokeStyle = '#10b981'; ctx.lineWidth = 3;
+            ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+            ctx.fillStyle = '#10b981'; ctx.font = "bold 16px sans-serif";
+            ctx.fillText(`저장됨 ${index + 1}`, rect.x + 5, rect.y + 20);
+        });
+    }
+
     if (points && points.length > 0) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; i++) {
-            ctx.lineTo(points[i].x, points[i].y);
-        }
+        ctx.save(); ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
         ctx.closePath(); 
-
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.fillStyle = 'black';
-        ctx.fill();
-
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.strokeStyle = '#3b82f6';
-        ctx.lineWidth = 4;
-        ctx.lineJoin = 'round'; 
-        ctx.lineCap = 'round';
-        ctx.stroke();
-        ctx.restore();
+        ctx.globalCompositeOperation = 'destination-out'; ctx.fillStyle = 'black'; ctx.fill();
+        ctx.globalCompositeOperation = 'source-over'; ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 4;
+        ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke(); ctx.restore();
     }
 }
 
+// 6. 여러 문제 모드: 그은 영역 저장
+function saveCropArea() {
+    if (!freehandPoints || freehandPoints.length === 0) return;
+    const base64 = getCroppedBase64();
+    savedImagesBase64.push(base64);
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    freehandPoints.forEach(p => {
+        if (p.x < minX) minX = p.x; if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x; if (p.y > maxY) maxY = p.y;
+    });
+    savedRects.push({ x: minX, y: minY, w: maxX - minX, h: maxY - minY });
+
+    document.getElementById('crop-count').innerText = `${savedImagesBase64.length}개 저장됨`;
+    document.getElementById('analyze-multi-btn').style.display = 'block';
+    document.getElementById('save-crop-btn').style.display = 'none';
+
+    freehandPoints = [];
+    drawOverlay(document.getElementById('crop-canvas').getContext('2d'), document.getElementById('crop-canvas').width, document.getElementById('crop-canvas').height, null);
+}
+
+// 7. 이미지 잘라내기
 function getCroppedBase64() {
     const imgEl = document.getElementById('image-preview');
-    // 한 문항 전체 분석이거나 드래그를 안 했으면 원본 전송
-    if (!cropRect || analysisMode === 'single') return imgEl.src.split(',')[1]; 
+    if (analysisMainMode === 'single' && singleCropMode === 'single') return imgEl.src.split(',')[1];
+    
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    freehandPoints.forEach(p => {
+        if (p.x < minX) minX = p.x; if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x; if (p.y > maxY) maxY = p.y;
+    });
+    const boxW = maxX - minX; const boxH = maxY - minY;
+    if (boxW <= 0 || boxH <= 0) return imgEl.src.split(',')[1];
 
     const scaleX = imgEl.naturalWidth / imgEl.clientWidth;
     const scaleY = imgEl.naturalHeight / imgEl.clientHeight;
-
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = cropRect.w * scaleX;
-    tempCanvas.height = cropRect.h * scaleY;
-    const tCtx = tempCanvas.getContext('2d');
-
-    // 선택 영역만 잘라내기
-    tCtx.drawImage(
-        imgEl,
-        cropRect.x * scaleX, cropRect.y * scaleY, cropRect.w * scaleX, cropRect.h * scaleY, 
-        0, 0, tempCanvas.width, tempCanvas.height 
-    );
-
+    tempCanvas.width = boxW * scaleX; tempCanvas.height = boxH * scaleY;
+    tempCanvas.getContext('2d').drawImage(imgEl, minX * scaleX, minY * scaleY, boxW * scaleX, boxH * scaleY, 0, 0, tempCanvas.width, tempCanvas.height);
     return tempCanvas.toDataURL('image/jpeg', 0.9).split(',')[1];
 }
 
-// 🟢 1. 영어 에러를 친절한 한글로 바꿔주는 마법의 함수 (업그레이드)
+// 8. 초기화
+function resetAnalysis() {
+    document.getElementById('problem-image').value = "";
+    document.getElementById('preview-container').style.display = 'none';
+    document.getElementById('upload-placeholder').style.display = 'block';
+    document.getElementById('single-mode-ui').style.display = 'none';
+    document.getElementById('multi-mode-ui').style.display = 'none';
+    if(document.getElementById('analyze-single-btn')) document.getElementById('analyze-single-btn').style.display = 'none';
+    if(document.getElementById('analyze-multi-btn')) document.getElementById('analyze-multi-btn').style.display = 'none';
+    document.getElementById('analysis-result').style.display = 'none';
+    document.getElementById('crop-canvas').style.display = 'none';
+    if(document.getElementById('save-crop-btn')) document.getElementById('save-crop-btn').style.display = 'none';
+    
+    savedImagesBase64 = []; savedRects = []; freehandPoints = [];
+    if(document.getElementById('crop-count')) document.getElementById('crop-count').innerText = "0개 저장됨";
+}
+
+// 🟢 선생님의 기존 친절한 에러 처리 함수 완벽 보존
 async function checkApiError(response) {
     if (!response.ok) {
         let errMsg = "";
         try {
-            // 에러 메시지 추출 시도
             const errData = await response.json();
             errMsg = errData.error?.message || "";
         } catch(e) {
@@ -359,25 +400,35 @@ async function checkApiError(response) {
     }
 }
 
-// 🎯 분석 시작
+// 🟢 선생님의 기존 분석 로직 + 새로운 다중 분석 로직 완벽 결합
 async function analyzeProblem() {
-    // 분석을 시작하기 전에 로그인 체크
-    const isLoggedIn = await checkLogin();
-    if (!isLoggedIn) return;
+    // 1. 로그인 체크 (기존 기능 보존)
+    if (typeof checkLogin === 'function') {
+        const isLoggedIn = await checkLogin();
+        if (!isLoggedIn) return;
+    }
 
+    // 2. API 키 체크 (기존 기능 보존)
     const apiKey = localStorage.getItem('gemini_api_key');
     if (!apiKey) {
         alert("⚙️ 분석을 위해서는 구글 AI 스튜디오 API 키 연결이 필요합니다.");
-        openSettings();
+        if (typeof openSettings === 'function') openSettings();
         return;
     }
 
-    document.getElementById('analyze-btn').style.display = 'none';
-    document.getElementById('analysis-loading').style.display = 'block';
-    document.getElementById('loading-status').innerText = "AI 교사가 문제를 정밀 분석 및 시각화 중입니다...";
+    // 3. UI 변경 (로딩창 띄우기)
+    if(document.getElementById('single-mode-ui')) document.getElementById('single-mode-ui').style.display = 'none';
+    if(document.getElementById('multi-mode-ui')) document.getElementById('multi-mode-ui').style.display = 'none';
+    document.getElementById('crop-canvas').style.display = 'none';
+    
+    // 선생님이 만드신 멋진 로딩 상태창 띄우기!
+    if(document.getElementById('analysis-loading')) {
+        document.getElementById('analysis-loading').style.display = 'block';
+        document.getElementById('loading-status').innerText = "AI 교사가 문제를 정밀 분석 중입니다... ⏳";
+    }
 
     try {
-        const base64Image = getCroppedBase64();
+        // 4. RAG 기능 (성취기준 데이터를 AI에게 주입 - 기존 기능 보존!)
         let standardsInfo = "";
         for (const key in subjectData) {
             if (subjectData[key].standards && subjectData[key].standards.length > 0) {
@@ -385,7 +436,72 @@ async function analyzeProblem() {
                 standardsInfo += subjectData[key].standards.map(s => `${s.code} ${s.desc}`).join('\n');
             }
         }
+
+        // 5. 프롬프트 및 데이터 조립 (단일 vs 다중 분기)
+        let apiParts = [];
         
+        if (analysisMainMode === 'single') {
+            const base64Image = getCroppedBase64();
+            apiParts.push({ text: `당신은 대한민국 최고의 고등학교 수학 교사입니다. 첨부된 1개의 수학 문제 이미지를 깊이 있게 분석하여 다음 항목을 마크다운 포맷으로 작성해주세요.\n\n[분석 항목]\n1. 과목 및 단원명 (2022 개정 교육과정 기준)\n2. 관련 성취기준 (코드 포함)\n3. 성취수준 (A/B/C/D/E) 및 판정 이유\n4. 문제 해결을 위한 핵심 개념\n5. 단계별 문제 풀이 과정\n\n[참고할 2022 개정 성취기준 데이터]\n${standardsInfo}` });
+            apiParts.push({ inlineData: { mimeType: "image/jpeg", data: base64Image } });
+        } else {
+            apiParts.push({ text: `당신은 대한민국 최고의 고등학교 수학 교사입니다. 첨부된 ${savedImagesBase64.length}개의 이미지들은 각각 서로 다른 수학 문제입니다. 각 문제별로 명확하게 구분선(---)을 긋고 [문항 1], [문항 2] 형식으로 제목을 달아주세요.\n각 문항마다 풀이과정은 생략하고 아래 항목만 간결하게 요약 제시하세요.\n\n[분석 항목]\n1. 과목 및 단원명 (2022 개정 교육과정 기준)\n2. 관련 성취기준 (코드 포함)\n3. 성취수준 (A/B/C/D/E) 및 판정 이유\n\n[참고할 2022 개정 성취기준 데이터]\n${standardsInfo}` });
+            
+            // 저장된 이미지 여러 개를 한 번에 Payload에 쑤셔넣기
+            savedImagesBase64.forEach(imgData => {
+                apiParts.push({ inlineData: { mimeType: "image/jpeg", data: imgData } });
+            });
+        }
+
+        // 6. 구글 AI 호출
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: apiParts }],
+                generationConfig: { temperature: 0.2 }
+            })
+        });
+
+        // 7. 한글 에러 처리 함수 실행!
+        await checkApiError(response);
+        
+        const data = await response.json();
+        
+        // 8. 성공 시 결과 렌더링
+        let rawText = data.candidates[0].content.parts[0].text;
+        rawText = rawText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+        
+        // 로딩창 숨기고 결과창 띄우기
+        if(document.getElementById('analysis-loading')) document.getElementById('analysis-loading').style.display = 'none';
+        
+        const resultDiv = document.getElementById('analysis-result');
+        const resultText = document.getElementById('result-text');
+        
+        resultDiv.style.display = 'block';
+        resultText.innerHTML = `<div style="line-height: 1.6;">${rawText}</div>`;
+        
+        if (window.MathJax) {
+            MathJax.typesetPromise([resultText]);
+        }
+        
+        resultDiv.scrollIntoView({ behavior: 'smooth' });
+
+    } catch (error) {
+        console.error('API Error:', error);
+        if(document.getElementById('analysis-loading')) document.getElementById('analysis-loading').style.display = 'none';
+        
+        const resultDiv = document.getElementById('analysis-result');
+        const resultText = document.getElementById('result-text');
+        resultDiv.style.display = 'block';
+        
+        resultText.innerHTML = `<div style="padding: 15px; background-color: #fee2e2; border-left: 4px solid #ef4444; border-radius: 4px;">
+            <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0;">🚨 분석 실패</p>
+            <p style="margin: 0; color: #7f1d1d;">${error.message}</p>
+        </div>`;
+    }
+}       
+
         const prompt = `당신은 대한민국 최고의 수학 교사입니다. 문항을 엄밀히 분석하여 아래 4가지 대괄호 태그를 '토씨 하나 틀리지 말고' 사용하여 답변하세요. 마크다운 볼드체(**)를 태그 이름에 절대 사용하지 마세요.
 
 [교과 및 단원]: 해당 문제의 교과명과 단원명을 명시하세요.

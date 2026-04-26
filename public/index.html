@@ -64,7 +64,8 @@
     <div class="tabs">
         <button class="tab-btn active" onclick="showSection('dashboard')">성취기준과 성취수준</button>
         <button class="tab-btn" onclick="showSection('checklist')">📋 나의 체크리스트</button>
-        <button class="tab-btn" onclick="showSection('problem-analysis')">🔍 문제 분석하기</button>
+        <button class="tab-btn" onclick="openAnalysisMode('single')" style="color: #2563eb; font-weight: bold;">🔍 한 문제 상세분석</button>
+        <button class="tab-btn" onclick="openAnalysisMode('multi')" style="color: #8b5cf6; font-weight: bold;">📑 여러 문제 요약분석</button>
     </div>
 
     <div id="dashboard" class="section active">
@@ -195,12 +196,18 @@
         
         <div id="analysis-layout-wrapper" style="display: flex; gap: 1.5rem; align-items: flex-start;">
             <div class="quiz-container" style="flex: 1; min-width: 300px; margin: 0;">
+                <h2 id="analysis-title" style="margin-bottom: 1rem;">🔍 한 문제 상세 분석</h2>
+
                 <div id="upload-area" style="border: 2px dashed #cbd5e1; border-radius: 12px; padding: 2rem; text-align: center; margin-bottom: 1.5rem; cursor: pointer;" onclick="document.getElementById('problem-image').click()">
                     
                     <div id="upload-placeholder">
                         <span style="font-size: 3rem;">📸</span>
                         <p style="margin-top: 1rem; font-weight: bold; color: var(--primary);">사진 찍기, 업로드 또는 붙여넣기(Ctrl+V)</p>
                         <p style="font-size: 0.8rem; color: var(--text-light);">문제를 AI가 분석하여 성취기준과 연결해줍니다.</p>
+                        
+                        <div id="service-summary" style="margin-top: 15px; padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 0.85rem; text-align: left; color: #334155;">
+                            <strong style="color: #2563eb;">[상세 분석 제공 내용]</strong><br>과목, 단원명, 성취기준, 성취수준, 판정이유, 핵심개념, 단계별 문제풀이
+                        </div>
                     </div>
 
                     <div id="preview-container" style="display: none; margin-bottom: 1rem; text-align: center; touch-action: none;" onclick="event.stopPropagation()">
@@ -213,45 +220,37 @@
                             </div>
                         </div>
                     </div>
-                                        
                     <input type="file" id="problem-image" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
                 </div>
 
-                <div id="mode-selector" style="display: none; gap: 10px; margin-bottom: 0.5rem;">
-                    <button class="save-btn" onclick="setAnalysisMode('single')" style="background: #10b981; flex: 1; margin: 0;">✅ 한 문항만 있음</button>
-                    <button class="save-btn" onclick="setAnalysisMode('multi')" style="background: #f59e0b; flex: 1; margin: 0;">✂️ 영역 선택하기</button>
-                </div>
-
-                <p id="analysis-warning" style="display: none; margin: 0 0 1.5rem 0; font-size: 0.85rem; color: #dc2626; text-align: center; font-weight: bold; line-height: 1.5;">
-                    ⚠️ 여러 문제가 함께 찍히면 분석에 오류가 발생할 수 있습니다.<br>여러 문제일 경우 가급적 <span style="color:#f59e0b;">'✂️ 영역 선택하기'</span>를 이용해 한 문제만 지정해 주세요.
-                </p>
-
-                <button class="save-btn" id="analyze-btn" onclick="analyzeProblem()" style="display: none; width: 100%;">AI 분석 시작</button>
-
-                <div id="analysis-loading" style="display: none; text-align: center; padding: 2rem;">
-                    <div style="border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 1rem;"></div>
-                    <p id="loading-status">AI 교사가 문제를 정밀 분석 및 시각화 중입니다...</p>
-                    <p><small>(이미지 분석은 약 5-10초 소요됩니다)</small></p>
-                </div>
-
-                <div id="analysis-result" style="display: none; margin-top: 2rem; border-top: 2px solid #f1f5f9; padding-top: 1.5rem;">
-                    <div id="res-container"></div>
-                    <div id="copyright-notice" style="background: #f8fafc; padding: 1.2rem; border-radius: 12px; border: 1px solid #e2e8f0; margin-top: 1.5rem; display: flex; align-items: center; gap: 0.8rem;">
-                        <span style="font-size: 1.5rem;">🛡️</span>
-                        <p style="margin: 0; font-size: 0.85rem; color: #64748b; line-height: 1.5;">
-                            <strong>공지:</strong> 입력하신 문제는 저작권 보호를 위해 AI가 유사한 형태로 변형하였으며, 데이터베이스에 안전하게 저장되었습니다.
-                        </p>
+                <div id="single-mode-ui" style="display: none;">
+                    <div id="mode-selector" style="display: flex; gap: 10px; margin-bottom: 0.5rem;">
+                        <button class="save-btn" onclick="setAnalysisMode('single')" style="background: #10b981; flex: 1; margin: 0;">✅ 한 문항만 있음</button>
+                        <button class="save-btn" onclick="setAnalysisMode('multi')" style="background: #f59e0b; flex: 1; margin: 0;">✂️ 영역 선택하기</button>
                     </div>
-                    <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
-                        <button class="save-btn" onclick="reAnalyzeWithChat()" style="background: #2563eb; flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.8rem 0.5rem; font-size:0.9rem;">
-                            <span>✨</span> 대화 반영 재분석
-                        </button>
-                        <button class="save-btn" onclick="resetAnalysis()" style="background: #64748b; flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.8rem 0.5rem; font-size:0.9rem;">
-                            <span>📝</span> 다른 문제 분석
-                        </button>
-                    </div>
+                    <p id="analysis-warning" style="display: block; margin: 0 0 1.5rem 0; font-size: 0.85rem; color: #dc2626; text-align: center; font-weight: bold; line-height: 1.5;">
+                        ⚠️ 여러 문제가 함께 찍히면 분석에 오류가 발생할 수 있습니다.<br>여러 문제일 경우 가급적 <span style="color:#f59e0b;">'✂️ 영역 선택하기'</span>를 이용해 한 문제만 지정해 주세요.
+                    </p>
+                    <button class="save-btn" id="analyze-single-btn" onclick="executeAnalysis()" style="display: none; width: 100%; background: #2563eb;">✨ AI 한 문제 상세 분석 시작</button>
                 </div>
-            </div> 
+
+                <div id="multi-mode-ui" style="display: none;">
+                    <p style="margin: 0 0 1rem 0; font-size: 0.85rem; color: #ef4444; text-align: center; font-weight: bold;">
+                        ⚠️ 문제를 하나씩 둥글게 지정한 후 [➕ 저장]을 누르세요.<br>저장이 끝나면 [요약 분석 시작]을 누르세요.
+                    </p>
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 1rem;">
+                        <button class="save-btn" id="save-crop-btn" onclick="saveCropArea()" style="background: #10b981; margin: 0; display: none;">➕ 이 영역을 문제로 저장</button>
+                        <span id="crop-count" style="font-weight: bold; color: #ef4444; background: #fee2e2; padding: 8px 15px; border-radius: 20px;">0개 저장됨</span>
+                    </div>
+                    <button class="save-btn" id="analyze-multi-btn" onclick="executeAnalysis()" style="display: none; width: 100%; background: #8b5cf6;">🚀 저장된 모든 문제 요약 분석 시작</button>
+                </div>
+
+                <div id="analysis-result" style="display: none; margin-top: 2rem; padding: 1.5rem; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0;">
+                    <h3 style="color: var(--primary); margin-bottom: 1rem; border-bottom: 2px solid var(--primary); padding-bottom: 0.5rem;">🤖 AI 분석 결과</h3>
+                    <div id="result-text" style="font-size: 0.95rem; color: var(--text);"></div>
+                    <button class="save-btn" onclick="resetAnalysis()" style="margin-top: 1.5rem; width: 100%; background: var(--secondary);">📝 다른 사진 분석하기</button>
+                </div>
+            </div>
             
             <div id="ai-chat-container" style="display:none; flex: 0 0 400px; position: sticky; top: 1rem; padding: 1.5rem; background: #f8fafc; border-radius: 12px; border: 2px solid #e2e8f0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); box-sizing: border-box;">
                 <h3 style="margin-top:0; color: var(--primary); display:flex; align-items:center; gap:0.5rem; font-size:1.1rem;">
