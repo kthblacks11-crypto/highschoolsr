@@ -370,7 +370,8 @@ function drawOverlay() {
         ctx.strokeRect(nb.x, nb.y, nb.w, nb.h);
 
         if (analysisMainMode === 'multi') {
-            const badgeRadius = 14;
+            // 🟢 배지 크기 작게 축소 (반지름 14 -> 10, 글씨 16px -> 12px)
+            const badgeRadius = 10;
             const badgeX = nb.x + nb.w; 
             const badgeY = nb.y;        
             
@@ -380,7 +381,7 @@ function drawOverlay() {
             ctx.fill();
             
             ctx.fillStyle = 'white';
-            ctx.font = 'bold 16px Arial';
+            ctx.font = 'bold 12px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText((index + 1).toString(), badgeX, badgeY);
@@ -454,6 +455,9 @@ async function checkApiError(response) {
     }
 }
 
+// 🟢 챗봇 재분석 시 이미지를 유지하기 위한 전역 변수
+let lastAnalyzedSingleImage = null;
+
 async function executeAnalysis() {
     const isLoggedIn = await checkLogin();
     if (!isLoggedIn) return;
@@ -490,7 +494,7 @@ async function executeAnalysis() {
 
         if (isSingleMode) {
             const box = (singleCropMode === 'multi' && cropBoxes.length > 0) ? cropBoxes[0] : null;
-            const base64Image = getCroppedBase64(box);
+            lastAnalyzedSingleImage = getCroppedBase64(box); // 이미지 저장해두기
             
             const prompt = `당신은 대한민국 최고의 수학 교사입니다. 문항을 엄밀히 분석하여 아래 4가지 대괄호 태그를 '토씨 하나 틀리지 말고' 사용하여 답변하세요. 마크다운 볼드체(**)를 태그 이름에 절대 사용하지 마세요.
 
@@ -511,7 +515,7 @@ ${standardsInfo}
 
 [중요 지침]: 모든 수식은 반드시 앞뒤로 $ 기호를 감싸서 LaTeX 문법으로 작성하세요.`;
             apiParts.push({ text: prompt });
-            apiParts.push({ inlineData: { mimeType: "image/jpeg", data: base64Image } });
+            apiParts.push({ inlineData: { mimeType: "image/jpeg", data: lastAnalyzedSingleImage } });
         } else {
             const prompt = `당신은 대한민국 최고의 수학 교사입니다. 첨부된 ${cropBoxes.length}개의 이미지들은 각각 서로 다른 수학 문제입니다. 
 각 문제별로 명확하게 구분선(---)을 긋고 [문항 1], [문항 2] 형식으로 제목을 달아주세요.
@@ -532,7 +536,7 @@ ${standardsInfo}`;
             });
         }
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -544,16 +548,28 @@ ${standardsInfo}`;
         await checkApiError(response);
         const data = await response.json();
         const analysisText = data.candidates[0].content.parts[0].text;
+        
+        currentChatContext = analysisText; 
+        document.getElementById('ai-chat-container').style.display = 'block'; // 🟢 다중 모드에서도 챗봇 무조건 활성화!
 
         if (isSingleMode) {
-            renderSophisticatedResult(analysisText);
-            currentChatContext = analysisText; 
-            document.getElementById('ai-chat-container').style.display = 'block'; 
+            renderSophisticatedResult(analysisText, lastAnalyzedSingleImage);
             processAndSaveBackground(analysisText, apiKey);
         } else {
             let rawText = analysisText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
-            resultText.innerHTML = `<div style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); line-height: 1.8;">${rawText}</div>`;
-            document.getElementById('ai-chat-container').style.display = 'none'; 
+            
+            // 🟢 다중 문제 이미지 갤러리 렌더링
+            let imagesHtml = '<div style="display: flex; gap: 15px; overflow-x: auto; margin-bottom: 1.5rem; padding-bottom: 10px; border-bottom: 2px dashed #cbd5e1;">';
+            cropBoxes.forEach((box, i) => {
+                imagesHtml += `
+                    <div style="flex: 0 0 auto; text-align: center;">
+                        <span style="display: block; font-size: 0.85rem; font-weight: bold; color: #ef4444; margin-bottom: 5px;">[문항 ${i+1}]</span>
+                        <img src="data:image/jpeg;base64,${getCroppedBase64(box)}" style="height: 120px; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    </div>`;
+            });
+            imagesHtml += '</div>';
+
+            resultText.innerHTML = `<div style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); line-height: 1.8;">${imagesHtml}${rawText}</div>`;
         }
 
         if (window.MathJax) {
@@ -581,9 +597,19 @@ ${standardsInfo}`;
     }
 }
 
-function renderSophisticatedResult(rawText) {
+// 🎯 글씨 잘림 완벽 방어 및 렌더링 (단일 문제용 - 🟢 이미지 파라미터 추가)
+function renderSophisticatedResult(rawText, base64Image) {
     const container = document.getElementById('result-text');
     container.innerHTML = "";
+
+    // 🟢 상단에 원본 문제 이미지 띄워주기
+    if (base64Image) {
+        const imgDiv = document.createElement('div');
+        imgDiv.style.textAlign = 'center';
+        imgDiv.style.marginBottom = '1.5rem';
+        imgDiv.innerHTML = `<img src="data:image/jpeg;base64,${base64Image}" style="max-height: 200px; max-width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">`;
+        container.appendChild(imgDiv);
+    }
 
     let text = rawText.replace(/</g, "&lt;").replace(/>/g, "&gt;");
     text = text.replace(/(\*\*|#)/g, ''); 
@@ -646,11 +672,71 @@ function renderSophisticatedResult(rawText) {
     });
 }
 
+// 🟢 챗봇 재분석 로직 수정 (단일/다중 모드 분기 처리)
+async function reAnalyzeWithChat() {
+    const apiKey = localStorage.getItem('gemini_api_key');
+    if (!apiKey) return;
+    const chatHistory = document.getElementById('chat-history').innerText;
+    if (!chatHistory) { alert("먼저 대화를 진행해주세요."); return; }
+
+    const resultDiv = document.getElementById('analysis-result');
+    const resultText = document.getElementById('result-text');
+    
+    // 로딩 처리
+    const originalContent = resultText.innerHTML;
+    resultText.innerHTML = '<div style="text-align:center; padding: 3rem; color: #3b82f6; font-weight: bold; font-size: 1.1rem;">AI 교사가 대화를 바탕으로 재분석 중입니다... ⏳</div>';
+
+    try {
+        let prompt = "";
+        if (analysisMainMode === 'single') {
+            prompt = `당신은 대한민국 최고의 수학 교사입니다. \n처음 분석: ${currentChatContext}\n교사 대화 내역: ${chatHistory}\n\n대화를 깊이 분석하여 '최종 최적화 분석 결과'를 4가지 태그([교과 및 단원]:, [성취기준 및 수준]:, [핵심 개념]:, [상세 풀이]:)를 유지하여 답변하세요. 수식은 $ LaTeX를 사용하세요.`;
+        } else {
+            prompt = `당신은 대한민국 최고의 수학 교사입니다. \n처음 분석: ${currentChatContext}\n교사 대화 내역: ${chatHistory}\n\n대화를 깊이 분석하여 '최종 최적화 분석 결과'를 수정하여 답변하세요. 각 문항별로 명확하게 구분선(---)을 긋고 [문항 1], [문항 2] 형식으로 제목을 달아주세요. 수식은 $ LaTeX를 사용하세요.`;
+        }
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+        
+        await checkApiError(response); 
+
+        const result = await response.json();
+        const analysisText = result.candidates[0].content.parts[0].text;
+        currentChatContext = analysisText;
+
+        if (analysisMainMode === 'single') {
+            renderSophisticatedResult(analysisText, lastAnalyzedSingleImage);
+        } else {
+            let rawText = analysisText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+            
+            // 갤러리 다시 생성
+            let imagesHtml = '<div style="display: flex; gap: 15px; overflow-x: auto; margin-bottom: 1.5rem; padding-bottom: 10px; border-bottom: 2px dashed #cbd5e1;">';
+            cropBoxes.forEach((box, i) => {
+                imagesHtml += `
+                    <div style="flex: 0 0 auto; text-align: center;">
+                        <span style="display: block; font-size: 0.85rem; font-weight: bold; color: #ef4444; margin-bottom: 5px;">[문항 ${i+1}]</span>
+                        <img src="data:image/jpeg;base64,${getCroppedBase64(box)}" style="height: 120px; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    </div>`;
+            });
+            imagesHtml += '</div>';
+
+            resultText.innerHTML = `<div style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); line-height: 1.8;">${imagesHtml}${rawText}</div>`;
+        }
+
+        if (window.MathJax) MathJax.typesetPromise();
+    } catch (error) { 
+        alert("⚠️ 재분석 오류:\n" + error.message); 
+        resultText.innerHTML = originalContent; // 에러나면 원래 화면 복구
+    }
+}
+
+// 🎯 배경 저장 로직 (DB 저장)
 async function processAndSaveBackground(analysisText, apiKey) {
     try {
         const transformPrompt = "위 분석 결과를 바탕으로, 원본의 저작권을 침해하지 않게 숫자와 상황을 바꾼 '변형된 수학 문제' 1개를 생성하고 정답도 구하세요. \n\n반드시 아래 형식으로만 출력하세요:\n문제: [변형된 문제 내용]\n정답: [정답 내용]";
         
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: analysisText + "\n\n" + transformPrompt }] }] })
@@ -696,7 +782,7 @@ function showSection(id) {
     if (activeBtn) activeBtn.classList.add('active');
     
     const subjectSelector = document.querySelector('.subject-selector');
-    const subTitle = document.getElementById('main-subtitle'); 
+    const subTitle = document.getElementById('sub-title'); 
 
     if (id === 'problem-analysis') {
         if (subjectSelector) subjectSelector.style.visibility = 'hidden';
@@ -937,38 +1023,6 @@ function openModal(std) {
     document.getElementById('level-modal').style.display = 'flex';
 }
 
-async function reAnalyzeWithChat() {
-    const apiKey = localStorage.getItem('gemini_api_key');
-    if (!apiKey) return;
-    const chatHistory = document.getElementById('chat-history').innerText;
-    if (!chatHistory) { alert("먼저 대화를 진행해주세요."); return; }
-
-    const resultDiv = document.getElementById('analysis-result');
-    const resultText = document.getElementById('result-text');
-    
-    resultDiv.style.display = 'block';
-    resultText.innerHTML = '<div style="text-align:center; padding: 3rem; color: #3b82f6; font-weight: bold; font-size: 1.1rem;">AI 교사가 대화를 바탕으로 재분석 중입니다... ⏳</div>';
-
-    try {
-        const prompt = `당신은 대한민국 최고의 수학 교사입니다. 
-        처음 분석: ${currentChatContext}
-        교사 대화 내역: ${chatHistory}
-        
-        대화를 깊이 분석하여 '최종 최적화 분석 결과'를 4가지 태그([교과 및 단원]:, [성취기준 및 수준]:, [핵심 개념]:, [상세 풀이]:)를 유지하여 답변하세요. 수식은 $ LaTeX를 사용하세요.`;
-
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-        });
-        
-        await checkApiError(response); 
-
-        const result = await response.json();
-        renderSophisticatedResult(result.candidates[0].content.parts[0].text);
-        if (window.MathJax) MathJax.typesetPromise();
-    } catch (error) { alert("⚠️ 재분석 오류:\n" + error.message); }
-}
-
 async function sendChatMessage() {
     const inputEl = document.getElementById('chat-input');
     const message = inputEl.value.trim();
@@ -983,7 +1037,7 @@ async function sendChatMessage() {
     try {
         const prompt = `이전 분석: ${currentChatContext}\n교사의 의견: "${message}"\n\n[지침]: 수학 교사의 의견을 바탕으로 답변하세요. 가독성을 위해 적절한 단락 나누기, 글머리 기호(•), 마크다운 굵은 글씨(**)를 사용하세요. 수식은 $ LaTeX 문법을 사용하세요.`;
         
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
@@ -1001,177 +1055,5 @@ async function sendChatMessage() {
     } catch(e) { 
         historyEl.innerHTML += `<div style="text-align: left; margin-bottom: 12px;"><span style="color: #dc2626; background: #fee2e2; padding: 10px; border-radius: 8px; display: inline-block; font-size: 0.9rem;">⚠️ ${e.message}</span></div>`; 
         historyEl.scrollTop = historyEl.scrollHeight;
-    }
-}
-
-async function syncPendingFeedback() {
-    let pending = JSON.parse(localStorage.getItem('pending_feedback')) || [];
-    if (pending.length === 0) return; 
-
-    let remaining = [];
-    for (let item of pending) {
-        try {
-            await db.collection('developer_feedback').add({
-                text: "[지연 전송됨] " + item.text,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            });
-        } catch (e) {
-            remaining.push(item);
-        }
-    }
-    localStorage.setItem('pending_feedback', JSON.stringify(remaining));
-}
-
-async function loadStandardsFromDB() {
-    try {
-        const snapshot = await db.collection('standards_2022').get();
-        if (snapshot.empty) return; 
-
-        const dbStandards = { common1: [], common2: [], algebra: [], calculus1: [], stats: [], calculus2: [], geometry: [], 'ai-math': [] };
-
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            if(dbStandards[data.subject]) {
-                dbStandards[data.subject].push({
-                    id: doc.id, 
-                    code: data.code,
-                    desc: data.desc,
-                    levels: data.levels,
-                    questions: data.questions || []
-                });
-            }
-        });
-
-        for (let subj in dbStandards) {
-            if (dbStandards[subj].length > 0) {
-                dbStandards[subj].sort((a, b) => a.code.localeCompare(b.code));
-                if(subjectData[subj]) {
-                    subjectData[subj].standards = dbStandards[subj];
-                }
-            }
-        }
-        console.log("🔥 DB에서 성취기준 로드 완료!");
-    } catch(error) {
-        console.error("DB 로딩 에러:", error);
-    }
-}
-
-window.onload = async () => {
-    await loadStandardsFromDB(); 
-    changeSubject();             
-    syncPendingFeedback();       
-};
-
-async function checkLogin() {
-    if (!auth.currentUser) {
-        alert("이 기능을 사용하려면 '구글 아이디로 시작' 로그인이 필요합니다.\n확인을 누르면 로그인 화면으로 이동합니다.");
-        try {
-            await auth.signInWithPopup(provider);
-            return true; 
-        } catch (error) {
-            console.error("로그인 취소 또는 실패", error);
-            return false; 
-        }
-    }
-    return true; 
-}
-
-function openAdminMode() {
-    const user = auth.currentUser;
-    if (user && user.email === "kthblacks11@gmail.com") {
-        showSection('admin-dashboard');
-    } else {
-        alert("관리자만 접근 가능한 페이지입니다.");
-    }
-}
-
-async function saveStandardToDB() {
-    const subject = document.getElementById('admin-subject').value;
-    const code = document.getElementById('admin-code').value.trim();
-    const desc = document.getElementById('admin-desc').value.trim();
-    
-    const levels = {
-        high: document.getElementById('admin-level-high').value.trim(),
-        b: document.getElementById('admin-level-b').value.trim(),
-        mid: document.getElementById('admin-level-mid').value.trim(),
-        d: document.getElementById('admin-level-d').value.trim(),
-        low: document.getElementById('admin-level-low').value.trim()
-    };
-
-    if (!code || !desc || !levels.high) {
-        alert("성취기준 코드와 내용은 필수 입력 사항입니다.");
-        return;
-    }
-
-    try {
-        await db.collection('standards_2022').add({
-            subject: subject,
-            code: code,
-            desc: desc,
-            levels: levels,
-            questions: [] 
-        });
-        alert("🎉 새로운 성취기준이 DB에 성공적으로 저장되었습니다!");
-        location.reload(); 
-    } catch (error) {
-        console.error("저장 실패:", error);
-        alert("저장 중 오류가 발생했습니다: " + error.message);
-    }
-}
-
-async function loadStandardsForQuestion() {
-    const subject = document.getElementById('admin-q-subject').value;
-    const stdSelect = document.getElementById('admin-q-standard');
-    stdSelect.innerHTML = '<option value="">데이터를 불러오는 중입니다...</option>';
-
-    if (!subject) {
-        stdSelect.innerHTML = '<option value="">위에서 과목을 먼저 선택하세요</option>';
-        return;
-    }
-
-    try {
-        const snapshot = await db.collection('standards_2022').where('subject', '==', subject).get();
-        let stds = [];
-        snapshot.forEach(doc => stds.push({ id: doc.id, code: doc.data().code, desc: doc.data().desc }));
-        
-        stds.sort((a,b) => a.code.localeCompare(b.code));
-
-        stdSelect.innerHTML = '<option value="">-- 문항을 추가할 성취기준 선택 --</option>';
-        stds.forEach(std => {
-            stdSelect.innerHTML += `<option value="${std.id}">${std.code} ${std.desc.substring(0, 25)}...</option>`;
-        });
-    } catch (error) {
-        console.error("목록 불러오기 실패:", error);
-        stdSelect.innerHTML = '<option value="">불러오기 오류 발생</option>';
-    }
-}
-
-async function saveQuestionToDB() {
-    const docId = document.getElementById('admin-q-standard').value;
-    const qText = document.getElementById('admin-q-text').value.trim();
-    const qLevel = document.getElementById('admin-q-level').options[document.getElementById('admin-q-level').selectedIndex].text.charAt(0); 
-    const qReason = document.getElementById('admin-q-reason').value.trim();
-
-    if (!docId || !qText || !qReason) {
-        alert("성취기준 선택, 문항 내용, 판정 이유는 필수입니다!");
-        return;
-    }
-
-    try {
-        await db.collection('standards_2022').doc(docId).update({
-            questions: firebase.firestore.FieldValue.arrayUnion({
-                q: qText,
-                level: qLevel,
-                reason: qReason
-            })
-        });
-        alert("✨ 문항이 성공적으로 추가되었습니다!");
-        
-        document.getElementById('admin-q-text').value = '';
-        document.getElementById('admin-q-reason').value = '';
-        location.reload(); 
-    } catch (error) {
-        console.error("문항 추가 실패:", error);
-        alert("문항 추가 중 오류가 발생했습니다.");
     }
 }
