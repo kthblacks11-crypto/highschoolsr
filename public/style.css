@@ -55,8 +55,10 @@ header {
     position: absolute; /* 제목과 상관없이 우측 고정 */
     right: 1rem;
     display: flex;
-    gap: 0.5rem; /* 버튼 사이 간격 좁힘 */
-    align-items: center;
+    flex-wrap: wrap; /* 🟢 버튼이 많아지면 자동으로 다음 줄로 넘김 */
+    justify-content: flex-end; /* 오른쪽 정렬 */
+    gap: 0.5rem; 
+    max-width: 50%; /* 🟢 버튼 영역이 전체 화면의 절반(제목)을 넘지 못하게 방어 */
 }
 
 /* 버튼 크기를 전체적으로 작게 조절 */
