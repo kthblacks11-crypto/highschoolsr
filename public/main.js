@@ -16,24 +16,37 @@ auth.onAuthStateChanged((user) => {
     const loginBtn = document.getElementById('login-btn');
     const logoutBtn = document.getElementById('logout-btn');
     const userInfo = document.getElementById('user-info');
-    const adminBtn = document.getElementById('admin-btn'); 
+    
+    // 🟢 기존 admin-btn 대신 우리가 새로 만든 2개의 버튼 가져오기
+    const adminFeedbackBtn = document.getElementById('admin-feedback-btn'); 
+    const adminModeBtn = document.getElementById('admin-mode-btn'); 
 
     if (user) {
+        // 1. 일반 로그인 사용자 처리 (선생님 기존 코드 유지)
         loginBtn.style.display = 'none';
         logoutBtn.style.display = 'inline-block';
         userInfo.innerText = user.displayName + " 선생님";
-        initChecklist(); // 로그인 성공 시 체크리스트 데이터 불러오기
+        initChecklist(); 
+        
+        // 2. 관리자(선생님 본인)일 경우에만 버튼 2개 다 보여주기
         if (user.email === "kthblacks11@gmail.com") {
-            adminBtn.style.display = 'inline-block';
+            if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'inline-block';
+            if(adminModeBtn) adminModeBtn.style.display = 'inline-block';
         } else {
-            adminBtn.style.display = 'none';
+            if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'none';
+            if(adminModeBtn) adminModeBtn.style.display = 'none';
         }
     } else {
+        // 3. 로그아웃 상태 처리 (선생님 기존 코드 유지)
         loginBtn.style.display = 'inline-block';
         logoutBtn.style.display = 'none';
         userInfo.innerText = "";
-        if(adminBtn) adminBtn.style.display = 'none'; 
-        initChecklist(); // 로그아웃 시 화면 초기화
+        
+        // 로그아웃 시 관리자 버튼도 당연히 숨기기
+        if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'none'; 
+        if(adminModeBtn) adminModeBtn.style.display = 'none'; 
+        
+        initChecklist(); 
     }
 });
 
@@ -947,9 +960,50 @@ async function syncPendingFeedback() {
     localStorage.setItem('pending_feedback', JSON.stringify(remaining));
 }
 
-window.onload = () => {
-    changeSubject();
-    syncPendingFeedback(); 
+// 🟢 파이어베이스 DB에서 성취기준 데이터를 싹 다 가져오는 함수
+async function loadStandardsFromDB() {
+    try {
+        const snapshot = await db.collection('standards_2022').get();
+        if (snapshot.empty) return; // 만약 DB가 비어있으면 기존 data.js 사용
+
+        // 과목별로 담을 빈 바구니 준비
+        const dbStandards = { common1: [], common2: [], algebra: [], calculus1: [], stats: [], calculus2: [], geometry: [], 'ai-math': [] };
+
+        // DB에서 꺼내서 바구니에 쏙쏙 넣기
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            if(dbStandards[data.subject]) {
+                dbStandards[data.subject].push({
+                    id: doc.id, // 나중에 수정을 위해 문서 고유 ID도 보관
+                    code: data.code,
+                    desc: data.desc,
+                    levels: data.levels,
+                    questions: data.questions || []
+                });
+            }
+        });
+
+        // 기존 subjectData(data.js)에 덮어쓰기!
+        for (let subj in dbStandards) {
+            if (dbStandards[subj].length > 0) {
+                // 단원 코드 순서대로 예쁘게 정렬 ([10공수2-01-01] 다음 02)
+                dbStandards[subj].sort((a, b) => a.code.localeCompare(b.code));
+                if(subjectData[subj]) {
+                    subjectData[subj].standards = dbStandards[subj];
+                }
+            }
+        }
+        console.log("🔥 DB에서 성취기준 로드 완료!");
+    } catch(error) {
+        console.error("DB 로딩 에러:", error);
+    }
+}
+
+// 🟢 사이트가 처음 켜질 때 실행되는 순서 변경
+window.onload = async () => {
+    await loadStandardsFromDB(); // 1. 화면 켜지자마자 DB에서 데이터부터 가져오기!
+    changeSubject();             // 2. 가져온 데이터로 화면 그리기
+    syncPendingFeedback();       // 3. 밀린 의견 보내기
 };
 
 // 🟢 기능을 실행하기 전 로그인이 되어있는지 확인하고, 안 되어있으면 팝업을 띄우는 함수
@@ -965,4 +1019,109 @@ async function checkLogin() {
         }
     }
     return true; // 이미 로그인 되어있음
+}
+// 관리자 페이지 열기 (권한 체크 포함)
+function openAdminMode() {
+    const user = auth.currentUser;
+    if (user && user.email === "kthblacks11@gmail.com") {
+        showSection('admin-dashboard');
+    } else {
+        alert("관리자만 접근 가능한 페이지입니다.");
+    }
+}
+
+// 입력한 데이터를 Firestore에 저장하는 함수
+async function saveStandardToDB() {
+    const subject = document.getElementById('admin-subject').value;
+    const code = document.getElementById('admin-code').value.trim();
+    const desc = document.getElementById('admin-desc').value.trim();
+    
+    const levels = {
+        high: document.getElementById('admin-level-high').value.trim(),
+        b: document.getElementById('admin-level-b').value.trim(),
+        mid: document.getElementById('admin-level-mid').value.trim(),
+        d: document.getElementById('admin-level-d').value.trim(),
+        low: document.getElementById('admin-level-low').value.trim()
+    };
+
+    if (!code || !desc || !levels.high) {
+        alert("성취기준 코드와 내용은 필수 입력 사항입니다.");
+        return;
+    }
+
+    try {
+        await db.collection('standards_2022').add({
+            subject: subject,
+            code: code,
+            desc: desc,
+            levels: levels,
+            questions: [] // 초기 문항은 빈 배열로 설정
+        });
+        alert("🎉 새로운 성취기준이 DB에 성공적으로 저장되었습니다!");
+        location.reload(); // 새로고침하여 데이터 반영 확인
+    } catch (error) {
+        console.error("저장 실패:", error);
+        alert("저장 중 오류가 발생했습니다: " + error.message);
+    }
+}
+// 🟢 관리자 모드: 과목 선택 시 DB에서 해당 과목 성취기준 목록 불러오기
+async function loadStandardsForQuestion() {
+    const subject = document.getElementById('admin-q-subject').value;
+    const stdSelect = document.getElementById('admin-q-standard');
+    stdSelect.innerHTML = '<option value="">데이터를 불러오는 중입니다...</option>';
+
+    if (!subject) {
+        stdSelect.innerHTML = '<option value="">위에서 과목을 먼저 선택하세요</option>';
+        return;
+    }
+
+    try {
+        const snapshot = await db.collection('standards_2022').where('subject', '==', subject).get();
+        let stds = [];
+        snapshot.forEach(doc => stds.push({ id: doc.id, code: doc.data().code, desc: doc.data().desc }));
+        
+        // 코드 순서대로 정렬
+        stds.sort((a,b) => a.code.localeCompare(b.code));
+
+        stdSelect.innerHTML = '<option value="">-- 문항을 추가할 성취기준 선택 --</option>';
+        stds.forEach(std => {
+            stdSelect.innerHTML += `<option value="${std.id}">${std.code} ${std.desc.substring(0, 25)}...</option>`;
+        });
+    } catch (error) {
+        console.error("목록 불러오기 실패:", error);
+        stdSelect.innerHTML = '<option value="">불러오기 오류 발생</option>';
+    }
+}
+
+// 🟢 관리자 모드: 선택한 성취기준(문서) 안의 questions 배열에 문항 밀어넣기
+async function saveQuestionToDB() {
+    const docId = document.getElementById('admin-q-standard').value;
+    const qText = document.getElementById('admin-q-text').value.trim();
+    const qLevel = document.getElementById('admin-q-level').options[document.getElementById('admin-q-level').selectedIndex].text.charAt(0); // A, B, C, D, E 추출
+    const qReason = document.getElementById('admin-q-reason').value.trim();
+
+    if (!docId || !qText || !qReason) {
+        alert("성취기준 선택, 문항 내용, 판정 이유는 필수입니다!");
+        return;
+    }
+
+    try {
+        // 파이어베이스의 배열 추가 전용 명령어 사용
+        await db.collection('standards_2022').doc(docId).update({
+            questions: firebase.firestore.FieldValue.arrayUnion({
+                q: qText,
+                level: qLevel,
+                reason: qReason
+            })
+        });
+        alert("✨ 문항이 성공적으로 추가되었습니다!");
+        
+        // 입력창 비우기
+        document.getElementById('admin-q-text').value = '';
+        document.getElementById('admin-q-reason').value = '';
+        location.reload(); // 데이터 갱신을 위해 새로고침
+    } catch (error) {
+        console.error("문항 추가 실패:", error);
+        alert("문항 추가 중 오류가 발생했습니다.");
+    }
 }

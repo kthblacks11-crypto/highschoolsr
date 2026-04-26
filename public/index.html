@@ -30,7 +30,8 @@
                 <button id="login-btn" class="settings-btn" onclick="handleLogin()">🔑 구글 아이디로 시작</button>
                 <button id="logout-btn" class="settings-btn" onclick="handleLogout()" style="display:none;">로그아웃</button>
                 <button class="settings-btn feedback-btn" onclick="openFeedback()">💡 의견보내기</button>
-                <button id="admin-btn" class="settings-btn" onclick="openAdminFeedback()" style="display:none;">📥</button>
+                <button id="admin-feedback-btn" class="settings-btn" onclick="openAdminFeedback()" style="display:none;">📥 의견확인</button>
+                <button id="admin-mode-btn" class="settings-btn" onclick="openAdminMode()" style="display:none;">🛠️ 관리도구</button>
                 <button class="settings-btn" onclick="openSettings()">⚙️ API 가져오기</button>
             </div>
             <div style="position: absolute; bottom: -5px; right: 1rem; font-size: 0.8rem; color: #cbd5e1;">
@@ -99,6 +100,94 @@
         <h2>수업 진행 체크리스트</h2>
         <div id="checklist-container"></div>
         <button class="save-btn" onclick="saveChecklist()">진행 상황 저장하기</button>
+    </div>
+    <div id="admin-dashboard" class="section">
+        <h2>🛠️ 데이터 관리자 모드</h2>
+        <div class="quiz-container" style="max-width: 800px; margin: 0 auto;">
+            <div style="background: #fffbeb; padding: 1rem; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 1.5rem;">
+                <p style="margin: 0; font-size: 0.9rem; color: #92400e;">
+                    성취기준 정보를 입력하고 저장하면 즉시 <strong>Firestore DB</strong>에 반영됩니다.
+                </p>
+            </div>
+    
+            <div class="admin-form-group">
+                <label>과목 선택</label>
+                <select id="admin-subject" class="option-btn" style="text-align: left; padding: 0.8rem;">
+                    <option value="common1">공통수학1</option>
+                    <option value="common2">공통수학2</option>
+                    <option value="algebra">대수</option>
+                    <option value="calculus1">미적분Ⅰ</option>
+                    <option value="stats">확률과 통계</option>
+                </select>
+            </div>
+    
+            <div class="admin-form-group" style="margin-top: 1rem;">
+                <label>성취기준 코드</label>
+                <input type="text" id="admin-code" placeholder="예: [10공수2-01-01]" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;">
+            </div>
+    
+            <div class="admin-form-group" style="margin-top: 1rem;">
+                <label>성취기준 내용 (desc)</label>
+                <textarea id="admin-desc" rows="2" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;"></textarea>
+            </div>
+    
+            <h4 style="margin-top: 2rem; border-bottom: 2px solid var(--primary); padding-bottom: 0.5rem;">📊 성취수준 설명 (Levels)</h4>
+            <div style="display: grid; gap: 10px; margin-top: 1rem;">
+                <input type="text" id="admin-level-high" placeholder="A (상) 수준 설명">
+                <input type="text" id="admin-level-b" placeholder="B (우수) 수준 설명">
+                <input type="text" id="admin-level-mid" placeholder="C (중) 수준 설명">
+                <input type="text" id="admin-level-d" placeholder="D (미흡) 수준 설명">
+                <input type="text" id="admin-level-low" placeholder="E (하) 수준 설명">
+            </div>
+    
+            <button class="save-btn" onclick="saveStandardToDB()" style="background: #ef4444; margin-top: 2rem;">🚀 DB에 새로운 성취기준 저장하기</button>
+            <hr style="margin: 3rem 0; border: 1px dashed #cbd5e1;">
+
+        <h3 style="margin-bottom: 1rem; color: var(--primary);">📝 기존 성취기준에 '문항' 추가하기</h3>
+
+        <div class="admin-form-group">
+            <label>1. 과목 선택 (문항을 넣을 과목)</label>
+            <select id="admin-q-subject" class="option-btn" style="text-align: left; padding: 0.8rem;" onchange="loadStandardsForQuestion()">
+                <option value="">-- 과목을 먼저 선택하세요 --</option>
+                <option value="common1">공통수학1</option>
+                <option value="common2">공통수학2</option>
+                <option value="algebra">대수</option>
+                <option value="calculus1">미적분Ⅰ</option>
+                <option value="stats">확률과 통계</option>
+            </select>
+        </div>
+
+        <div class="admin-form-group" style="margin-top: 1rem;">
+            <label>2. 성취기준 선택</label>
+            <select id="admin-q-standard" class="option-btn" style="text-align: left; padding: 0.8rem;">
+                <option value="">위에서 과목을 선택하면 목록이 나타납니다</option>
+            </select>
+        </div>
+
+        <div class="admin-form-group" style="margin-top: 1rem;">
+            <label>3. 문항 내용 (수식은 $기호 사용)</label>
+            <textarea id="admin-q-text" rows="3" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;"></textarea>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 1rem;">
+            <div class="admin-form-group" style="flex: 1;">
+                <label>4. 판정 수준</label>
+                <select id="admin-q-level" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;">
+                    <option value="high">A (상)</option>
+                    <option value="b">B (우수)</option>
+                    <option value="mid">C (중)</option>
+                    <option value="d">D (미흡)</option>
+                    <option value="low">E (하)</option>
+                </select>
+            </div>
+            <div class="admin-form-group" style="flex: 3;">
+                <label>5. 판정 이유 (해설)</label>
+                <input type="text" id="admin-q-reason" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;">
+            </div>
+        </div>
+
+        <button class="save-btn" onclick="saveQuestionToDB()" style="background: #3b82f6; margin-top: 2rem;">➕ 선택한 성취기준에 문항 추가하기</button>
+        </div>
     </div>
 
     <div id="problem-analysis" class="section">
