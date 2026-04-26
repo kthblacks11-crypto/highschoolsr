@@ -456,6 +456,7 @@ async function checkApiError(response) {
 }
 
 // 🟢 AI 통신 및 분석 (gemini-3-flash-preview 고정)
+// 🟢 AI 통신 및 분석 (문항별 이미지 분리 배치 및 텍스트 추출 적용)
 async function executeAnalysis() {
     const isLoggedIn = await checkLogin();
     if (!isLoggedIn) return;
@@ -494,7 +495,9 @@ async function executeAnalysis() {
             const box = (singleCropMode === 'multi' && cropBoxes.length > 0) ? cropBoxes[0] : null;
             lastAnalyzedSingleImage = getCroppedBase64(box); 
             
-            const prompt = `당신은 대한민국 최고의 수학 교사입니다. 문항을 엄밀히 분석하여 아래 4가지 대괄호 태그를 '토씨 하나 틀리지 말고' 사용하여 답변하세요. 마크다운 볼드체(**)를 태그 이름에 절대 사용하지 마세요.
+            const prompt = `당신은 대한민국 최고의 수학 교사입니다. 문항을 엄밀히 분석하여 아래 대괄호 태그를 '토씨 하나 틀리지 말고' 사용하여 답변하세요. 마크다운 볼드체(**)를 태그 이름에 절대 사용하지 마세요.
+
+[원본 문제 추출]: 이미지에 있는 문제의 전체 텍스트와 수식을 추출하세요. (그래프/도형이 있다면 '[그림 및 그래프]' 라고 표기)
 
 [교과 및 단원]: 해당 문제의 교과명과 단원명을 명시하세요.
 
@@ -520,6 +523,7 @@ ${standardsInfo}
 각 문항마다 풀이과정은 생략하고 아래 항목만 간결하게 요약 제시하세요. 수식은 반드시 $ 기호로 감싸서 LaTeX 문법으로 작성하세요.
 
 [분석 항목]
+0. 원본 문제 텍스트 (수식은 LaTeX 적용, 복잡한 그래프/도형은 '[그림 및 그래프]' 로 표기)
 1. 문항 내용 요약
 2. 과목 및 단원명 (2022 개정)
 3. 관련 성취기준 (코드 포함)
@@ -534,7 +538,6 @@ ${standardsInfo}`;
             });
         }
 
-        // 🟢 gemini-3-flash-preview 모델 고정 적용
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -557,17 +560,26 @@ ${standardsInfo}`;
         } else {
             let rawText = analysisText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
             
-            let imagesHtml = '<div style="display: flex; gap: 15px; overflow-x: auto; margin-bottom: 1.5rem; padding-bottom: 10px; border-bottom: 2px dashed #cbd5e1;">';
-            cropBoxes.forEach((box, i) => {
-                imagesHtml += `
-                    <div style="flex: 0 0 auto; text-align: center;">
-                        <span style="display: block; font-size: 0.85rem; font-weight: bold; color: #ef4444; margin-bottom: 5px;">[문항 ${i+1}]</span>
-                        <img src="data:image/jpeg;base64,${getCroppedBase64(box)}" style="height: 120px; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                    </div>`;
+            // 🟢 정규식을 이용해 [문항 X] 태그를 찾고, 그 바로 아래에 해당 번호의 이미지를 삽입!
+            rawText = rawText.replace(/\[문항\s*(\d+)\]/g, (match, p1) => {
+                const idx = parseInt(p1) - 1; // [문항 1] 이면 cropBoxes[0] 을 가져옴
+                const imgBase64 = cropBoxes[idx] ? getCroppedBase64(cropBoxes[idx]) : null;
+                let imgHtml = '';
+                
+                // 해당 문항의 이미지가 있으면 카드 형태로 예쁘게 생성
+                if (imgBase64) {
+                    imgHtml = `<div style="margin: 15px 0; text-align: center; background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                                   <img src="data:image/jpeg;base64,${imgBase64}" style="max-height: 180px; max-width: 100%; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                               </div>`;
+                }
+                
+                // 첫 번째 문항은 상단 여백을 줄이고, 나머지는 점선으로 완벽히 구분
+                const borderTop = idx === 0 ? '' : 'border-top: 2px dashed #cbd5e1; margin-top: 2.5rem; padding-top: 1.5rem;';
+                return `<div style="${borderTop}"><strong style="font-size: 1.3rem; color: #ef4444; background: #fee2e2; padding: 4px 12px; border-radius: 20px;">${match}</strong></div>${imgHtml}`;
             });
-            imagesHtml += '</div>';
 
-            resultText.innerHTML = `<div style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); line-height: 1.8;">${imagesHtml}${rawText}</div>`;
+            // 갤러리가 없어지고 문항 사이사이에 이미지가 들어간 텍스트 출력
+            resultText.innerHTML = `<div style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); line-height: 1.8;">${rawText}</div>`;
         }
 
         if (window.MathJax) {
@@ -595,6 +607,7 @@ ${standardsInfo}`;
     }
 }
 
+// 🎯 글씨 잘림 완벽 방어 및 렌더링 (단일 문제용 - 원본 텍스트 추출 추가)
 function renderSophisticatedResult(rawText, base64Image) {
     const container = document.getElementById('result-text');
     container.innerHTML = "";
@@ -609,13 +622,16 @@ function renderSophisticatedResult(rawText, base64Image) {
 
     let text = rawText.replace(/</g, "&lt;").replace(/>/g, "&gt;");
     text = text.replace(/(\*\*|#)/g, ''); 
+    text = text.replace(/(?:\[)?\s*원본\s*문제\s*추출\s*(?:\])?\s*:?/g, '[원본 문제 추출]:'); // 🟢 새로 추가됨
     text = text.replace(/(?:\[)?\s*교과\s*및\s*단원\s*(?:\])?\s*:?/g, '[교과 및 단원]:');
     text = text.replace(/(?:\[)?\s*성취기준\s*및\s*수준\s*(?:\])?\s*:?/g, '[성취기준 및 수준]:');
     text = text.replace(/(?:\[)?\s*핵심\s*개념\s*(?:\])?\s*:?/g, '[핵심 개념]:');
     text = text.replace(/(?:\[)?\s*상세\s*풀이\s*(?:\])?\s*:?/g, '[상세 풀이]:');
     text = text.replace(/(?:\[)?\s*문제\s*풀이\s*(?:\])?\s*:?/g, '[상세 풀이]:'); 
     
+    // 🟢 0번 항목(원본 문제 추출) 추가
     const configs = [
+        { key: "[원본 문제 추출]:", title: "0. 추출된 원본 문제 텍스트", icon: "📝", bg: "#f8fafc", border: "#94a3b8" },
         { key: "[교과 및 단원]:", title: "1. 교과명 및 단원명", icon: "📚", bg: "#f3f4f6", border: "#64748b" },
         { key: "[성취기준 및 수준]:", title: "2. 성취기준과 성취수준", icon: "📍", bg: "#eff6ff", border: "#3b82f6" },
         { key: "[핵심 개념]:", title: "3. 엄밀한 핵심 개념", icon: "💡", bg: "#fffbeb", border: "#f59e0b" },
@@ -639,8 +655,12 @@ function renderSophisticatedResult(rawText, base64Image) {
             content = text.substring(contentStart, nextKeyIndex).trim();
         }
 
-        if (!content) content = "데이터를 분석 중이거나 형식이 일치하지 않습니다.";
+        // 해당 항목이 없으면 그리지 않고 넘어감 (하위 호환성)
+        if (!content) return;
 
+        if (conf.key === "[원본 문제 추출]:") {
+            content = content.replace(/\n/g, '<br>');
+        }
         if (conf.key === "[성취기준 및 수준]:") {
             content = content.replace(/\n/g, ' ')
                              .replace(/(성취기준:)/g, '<strong style="color:#2563eb; font-size: 1.05rem;">$1</strong>')
