@@ -1309,9 +1309,11 @@ async function loadStandardsForQuestion() {
     }
 }
 
+// 🟢 관리자 모드: 문항 저장 (정답 필드 추가됨)
 async function saveQuestionToDB() {
     const docId = document.getElementById('admin-q-standard').value;
     const qText = document.getElementById('admin-q-text').value.trim();
+    const qAnswer = document.getElementById('admin-q-answer').value.trim(); // 🟢 정답 가져오기
     const qLevel = document.getElementById('admin-q-level').options[document.getElementById('admin-q-level').selectedIndex].text.charAt(0); 
     const qReason = document.getElementById('admin-q-reason').value.trim();
 
@@ -1324,15 +1326,18 @@ async function saveQuestionToDB() {
         await db.collection('standards_2022').doc(docId).update({
             questions: firebase.firestore.FieldValue.arrayUnion({
                 q: qText,
+                answer: qAnswer || "정답 정보 없음", // 🟢 정답 저장
                 level: qLevel,
                 reason: qReason
             })
         });
         alert("✨ 문항이 성공적으로 추가되었습니다!");
         
+        // 입력칸 비워주기
         document.getElementById('admin-q-text').value = '';
+        document.getElementById('admin-q-answer').value = ''; 
         document.getElementById('admin-q-reason').value = '';
-        location.reload(); 
+        
     } catch (error) {
         console.error("문항 추가 실패:", error);
         alert("문항 추가 중 오류가 발생했습니다.");
