@@ -66,6 +66,7 @@
         <button class="tab-btn" onclick="showSection('checklist')">📋 나의 체크리스트</button>
         <button class="tab-btn" onclick="openAnalysisMode('single')" style="color: #2563eb; font-weight: bold;">🔍 한 문제 상세분석</button>
         <button class="tab-btn" onclick="openAnalysisMode('multi')" style="color: #8b5cf6; font-weight: bold;">📑 여러 문제 요약분석</button>
+        <button class="tab-btn" onclick="showSection('bookmark')" style="color: #10b981; font-weight: bold;">🔖 북마크 문항 보기</button>
     </div>
 
     <div id="dashboard" class="section active">
@@ -101,6 +102,43 @@
         <h2>수업 진행 체크리스트</h2>
         <div id="checklist-container"></div>
         <button class="save-btn" onclick="saveChecklist()">진행 상황 저장하기</button>
+    </div>
+    <!-- 👇 북마크 문항 보기 화면 추가 👇 -->
+    <div id="bookmark" class="section">
+        <h2>북마크 문항 모아보기</h2>
+        <div class="quiz-container">
+            <div style="background: #f0fdf4; padding: 1rem; border-radius: 8px; border-left: 4px solid #10b981; margin-bottom: 1.5rem;">
+                <p style="margin: 0; font-size: 0.9rem; color: #065f46;">
+                    과목과 성취수준을 선택하면, 데이터베이스에 등록된 모든 문항(선생님 등록/AI 변형)을 한눈에 모아볼 수 있습니다.
+                </p>
+            </div>
+
+            <div class="admin-form-group">
+                <label>과목 선택</label>
+                <select id="bookmark-subject" class="option-btn" style="text-align: left; padding: 0.8rem;" onchange="resetBookmarkView()">
+                    <option value="common1">공통수학1</option>
+                    <option value="common2">공통수학2</option>
+                    <option value="algebra">대수</option>
+                    <option value="calculus1">미적분Ⅰ</option>
+                    <option value="stats">확률과 통계</option>
+                </select>
+            </div>
+
+            <div style="margin-top: 1.5rem; text-align: center;">
+                <p style="font-weight: bold; margin-bottom: 1rem; color: var(--primary);">조회할 성취수준을 선택하세요</p>
+                <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                    <button class="level-badge bg-high" style="cursor:pointer; padding: 10px 25px; font-size: 1.2rem; border:none;" onclick="loadBookmark('A')">A</button>
+                    <button class="level-badge bg-high" style="cursor:pointer; padding: 10px 25px; font-size: 1.2rem; background:#f87171; border:none;" onclick="loadBookmark('B')">B</button>
+                    <button class="level-badge bg-mid" style="cursor:pointer; padding: 10px 25px; font-size: 1.2rem; border:none;" onclick="loadBookmark('C')">C</button>
+                    <button class="level-badge bg-low" style="cursor:pointer; padding: 10px 25px; font-size: 1.2rem; background:#4ade80; border:none;" onclick="loadBookmark('D')">D</button>
+                    <button class="level-badge bg-low" style="cursor:pointer; padding: 10px 25px; font-size: 1.2rem; border:none;" onclick="loadBookmark('E')">E</button>
+                </div>
+            </div>
+
+            <div id="bookmark-list" style="margin-top: 2rem; display: grid; gap: 10px;">
+                <!-- DB에서 불러온 문항 리스트가 나타납니다 -->
+            </div>
+        </div>
     </div>
     <div id="admin-dashboard" class="section">
         <h2>🛠️ 데이터 관리자 모드</h2>
@@ -351,7 +389,23 @@
         <div class="level-row"><span class="level-badge bg-low">E</span> <span id="level-low"></span></div>
     </div>
 </div>
+<!-- 👇 문항 상세 정보 팝업(모달) 👇 -->
+<div class="modal" id="bookmark-modal">
+    <div class="modal-content" style="max-width: 700px;">
+        <span class="close-btn" onclick="closeBookmarkModal()">&times;</span>
+        <h2 style="margin-top: 0; color: var(--primary);" id="bm-modal-title">문항 상세 정보</h2>
+        <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 1rem; font-size: 1.05rem;" id="bm-modal-q">
+        </div>
+        <div style="background: #f0fdf4; padding: 1.2rem; border-radius: 8px; border-left: 4px solid #10b981; margin-bottom: 1rem;">
+            <strong style="color: #047857;">[판정 이유]</strong>
+            <p id="bm-modal-reason" style="margin: 0.5rem 0 0 0; color: #166534; line-height: 1.6;"></p>
+        </div>
+        <div id="bm-modal-answer" style="background: #fffbeb; padding: 1.2rem; border-radius: 8px; border-left: 4px solid #f59e0b;">
+            <strong style="color: #b45309;">[정답 및 풀이]</strong>
+            <p id="bm-modal-answer-text" style="margin: 0.5rem 0 0 0; color: #92400e; line-height: 1.6;"></p>
+        </div>
+    </div>
+</div>
 
-<script src="data.js?v=3"></script>
 <script src="main.js?v=3"></script>
 </body>

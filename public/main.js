@@ -457,6 +457,7 @@ async function checkApiError(response) {
 
 // 🟢 AI 통신 및 분석 (gemini-3-flash-preview 고정)
 // 🟢 AI 통신 및 분석 (문항별 이미지 분리 배치 및 텍스트 추출 적용)
+// 🟢 AI 통신 및 분석 (Step 3: DB 루브릭 완벽 적용 및 2단계 판정)
 async function executeAnalysis() {
     const isLoggedIn = await checkLogin();
     if (!isLoggedIn) return;
@@ -476,7 +477,7 @@ async function executeAnalysis() {
     const resultText = document.getElementById('result-text');
     resultDiv.style.display = 'block';
     
-    resultText.innerHTML = '<div style="text-align:center; padding: 3rem; color: #3b82f6; font-weight: bold; font-size: 1.1rem;">AI 교사가 문제를 정밀 분석 중입니다... ⏳</div>';
+    resultText.innerHTML = '<div style="text-align:center; padding: 3rem; color: #3b82f6; font-weight: bold; font-size: 1.1rem;">AI 교사가 국가 수준 평가 루브릭을 바탕으로 정밀 분석 중입니다... ⏳</div>';
     resultDiv.scrollIntoView({ behavior: 'smooth' });
 
     try {
@@ -495,6 +496,7 @@ async function executeAnalysis() {
             const box = (singleCropMode === 'multi' && cropBoxes.length > 0) ? cropBoxes[0] : null;
             lastAnalyzedSingleImage = getCroppedBase64(box); 
             
+            // 🟢 [핵심] 프롬프트에 ${systemRubric} 변수를 투입하여 AI가 DB의 1차 기준을 숙지하게 만듭니다!
             const prompt = `당신은 대한민국 최고의 수학 교사입니다. 문항을 엄밀히 분석하여 아래 대괄호 태그를 '토씨 하나 틀리지 말고' 사용하여 답변하세요. 마크다운 볼드체(**)를 태그 이름에 절대 사용하지 마세요.
 
 [원본 문제 추출]: 이미지에 있는 문제의 전체 텍스트와 수식을 추출하세요. (그래프/도형이 있다면 '[그림 및 그래프]' 라고 표기)
@@ -502,13 +504,23 @@ async function executeAnalysis() {
 [교과 및 단원]: 해당 문제의 교과명과 단원명을 명시하세요.
 
 [성취기준 및 수준]: 
-아래 제공된 <과목별 성취기준 목록>에서 가장 적합한 것을 골라 반드시 아래의 3줄 형식으로 작성하세요.
+아래 제공된 <과목별 성취기준 목록>에서 가장 적합한 것을 고르세요. 
+성취수준 판정은 반드시 아래 제공된 <국가 수준 평가 루브릭>을 엄격하게 적용하여 다음 **2단계 하이브리드 방식**을 따르세요:
+- 1단계(1차 기준 적용): <국가 수준 평가 루브릭>의 교과 내용 요소별 특화 기준을 최우선 적용하고, 일반적 특성, 서술어, 수식어, MCP 판별 준거를 종합하여 1차 수준을 잡으세요.
+- 2단계(AI 자체 보완): 1차 기준만으로 명확한 판정이 어렵거나, 계산의 복잡성/사고의 도약 등 부가적인 요소가 있다면 AI의 수학적 추론을 추가로 반영하여 최종 A~E 수준을 확정하세요.
+
+반드시 아래의 3줄 형식으로 작성하세요.
 성취기준: [코드] 성취기준의 전체 내용
 성취수준: A~E 중 택 1
-판정 이유: 수학적 엄밀성과 사고 도약의 단계를 근거로 서술
+판정 이유: "<국가 수준 평가 루브릭>의 [어떤 세부 기준]에 부합하며, 추가로 [AI의 수학적 근거]를 고려하여 판단함" 형태로 구체적으로 서술
+
 <과목별 성취기준 목록>
 ${standardsInfo}
 </과목별 성취기준 목록>
+
+<국가 수준 평가 루브릭>
+${systemRubric}
+</국가 수준 평가 루브릭>
 
 [핵심 개념]: 문제 해결에 필요한 핵심 공식, 정리, 또는 수학적 원리를 글머리 기호(•)를 사용하여 2~3가지로 명확하고 깊이 있게 제시하세요.
 
@@ -527,10 +539,15 @@ ${standardsInfo}
 1. 문항 내용 요약
 2. 과목 및 단원명 (2022 개정)
 3. 관련 성취기준 (코드 포함)
-4. 성취수준 (A/B/C/D/E) 및 판정 이유
+4. 성취수준 (A/B/C/D/E) 및 판정 이유 (반드시 아래의 <국가 수준 평가 루브릭>을 먼저 대조한 후, 부족한 부분은 AI의 수학적 근거로 보완하여 서술하세요.)
 
-[참고할 2022 개정 성취기준 데이터]
-${standardsInfo}`;
+<과목별 성취기준 목록>
+${standardsInfo}
+</과목별 성취기준 목록>
+
+<국가 수준 평가 루브릭>
+${systemRubric}
+</국가 수준 평가 루브릭>`;
             apiParts.push({ text: prompt });
             
             cropBoxes.forEach(box => {
@@ -560,25 +577,21 @@ ${standardsInfo}`;
         } else {
             let rawText = analysisText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
             
-            // 🟢 정규식을 이용해 [문항 X] 태그를 찾고, 그 바로 아래에 해당 번호의 이미지를 삽입!
             rawText = rawText.replace(/\[문항\s*(\d+)\]/g, (match, p1) => {
-                const idx = parseInt(p1) - 1; // [문항 1] 이면 cropBoxes[0] 을 가져옴
+                const idx = parseInt(p1) - 1; 
                 const imgBase64 = cropBoxes[idx] ? getCroppedBase64(cropBoxes[idx]) : null;
                 let imgHtml = '';
                 
-                // 해당 문항의 이미지가 있으면 카드 형태로 예쁘게 생성
                 if (imgBase64) {
                     imgHtml = `<div style="margin: 15px 0; text-align: center; background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
                                    <img src="data:image/jpeg;base64,${imgBase64}" style="max-height: 180px; max-width: 100%; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
                                </div>`;
                 }
                 
-                // 첫 번째 문항은 상단 여백을 줄이고, 나머지는 점선으로 완벽히 구분
                 const borderTop = idx === 0 ? '' : 'border-top: 2px dashed #cbd5e1; margin-top: 2.5rem; padding-top: 1.5rem;';
                 return `<div style="${borderTop}"><strong style="font-size: 1.3rem; color: #ef4444; background: #fee2e2; padding: 4px 12px; border-radius: 20px;">${match}</strong></div>${imgHtml}`;
             });
 
-            // 갤러리가 없어지고 문항 사이사이에 이미지가 들어간 텍스트 출력
             resultText.innerHTML = `<div style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); line-height: 1.8;">${rawText}</div>`;
         }
 
@@ -757,6 +770,7 @@ function changeSubject() {
     initChecklist();
 }
 
+// 🟢 대시보드 성취기준 렌더링 - 수학 수식 깨짐 방지 타이밍 적용
 function initDashboard() {
     const container = document.getElementById('card-container');
     container.innerHTML = "";
@@ -799,10 +813,13 @@ function initDashboard() {
         container.appendChild(card);
     });
     
-    if (window.MathJax && window.MathJax.typesetPromise) { 
-        MathJax.typesetClear(); 
-        MathJax.typesetPromise([container]); 
-    }
+    // 🟢 [추가됨] DB 데이터가 너무 빨리 불러와져서 수식 번역기(MathJax)가 고장나는 것을 막기 위해 0.3초 대기 후 렌더링 실행
+    setTimeout(() => {
+        if (window.MathJax && window.MathJax.typesetPromise) { 
+            MathJax.typesetClear(); 
+            MathJax.typesetPromise([container]).catch(err => console.error("수식 렌더링 에러:", err)); 
+        }
+    }, 300);
 }
 
 async function startLevelMatching(code) {
@@ -968,15 +985,32 @@ async function saveChecklist() {
     }
 }
 
+// 🟢 모달창 오픈 및 수식 렌더링 추가
 function openModal(std) {
     document.getElementById('modal-title').innerText = std.code;
     document.getElementById('modal-desc').innerText = std.desc;
-    document.getElementById('level-high').innerText = std.levels.high;
-    document.getElementById('level-b').innerText = std.levels.b || std.levels.high.replace("이해하여 설명할 수 있으며", "설명할 수 있고");
-    document.getElementById('level-mid').innerText = std.levels.mid;
-    document.getElementById('level-d').innerText = std.levels.d || std.levels.mid.replace("이해하고", "알고");
-    document.getElementById('level-low').innerText = std.levels.low;
+    
+    // std.levels가 없을 경우를 대비한 안전 장치 추가
+    if (std.levels) {
+        document.getElementById('level-high').innerText = std.levels.high || "";
+        document.getElementById('level-b').innerText = std.levels.b || (std.levels.high ? std.levels.high.replace("이해하여 설명할 수 있으며", "설명할 수 있고") : "");
+        document.getElementById('level-mid').innerText = std.levels.mid || "";
+        document.getElementById('level-d').innerText = std.levels.d || (std.levels.mid ? std.levels.mid.replace("이해하고", "알고") : "");
+        document.getElementById('level-low').innerText = std.levels.low || "";
+    } else {
+        document.getElementById('level-high').innerText = "데이터 없음";
+        document.getElementById('level-b').innerText = "데이터 없음";
+        document.getElementById('level-mid').innerText = "데이터 없음";
+        document.getElementById('level-d').innerText = "데이터 없음";
+        document.getElementById('level-low').innerText = "데이터 없음";
+    }
+    
     document.getElementById('level-modal').style.display = 'flex';
+
+    // 🟢 [핵심 추가] 팝업창이 열릴 때 내부의 텍스트를 수학 수식으로 변환!
+    if (window.MathJax) {
+        MathJax.typesetPromise([document.getElementById('level-modal')]).catch(err => console.error(err));
+    }
 }
 
 // 🟢 챗봇 재분석 기능 (gemini-3-flash-preview 적용)
@@ -1089,18 +1123,35 @@ async function syncPendingFeedback() {
     localStorage.setItem('pending_feedback', JSON.stringify(remaining));
 }
 
+// 🟢 글로벌 변수 추가 (기존 코드 윗부분에 넣거나, 이대로 함수 위에 두셔도 됩니다)
+let subjectData = {}; // DB에서 불러온 과목과 성취기준이 담길 빈 바구니
+let systemRubric = ""; // DB에서 불러온 AI용 평가 루브릭(채점 기준표)
+
+// 🟢 [Step 2] 완벽하게 업그레이드된 DB 호출 함수
 async function loadStandardsFromDB() {
     try {
-        const snapshot = await db.collection('standards_2022').get();
-        if (snapshot.empty) return; 
+        console.log("⏳ DB에서 시스템 데이터를 불러옵니다...");
 
-        const dbStandards = { common1: [], common2: [], algebra: [], calculus1: [], stats: [], calculus2: [], geometry: [], 'ai-math': [] };
-
-        snapshot.forEach(doc => {
+        // 1. 과목 기본 정보 불러오기 (Step 1에서 넣은 subjects 컬렉션)
+        const subjectSnapshot = await db.collection('subjects').get();
+        subjectSnapshot.forEach(doc => {
             const data = doc.data();
-            if(dbStandards[data.subject]) {
-                dbStandards[data.subject].push({
-                    id: doc.id, 
+            subjectData[doc.id] = {
+                title: data.title,
+                subtitle: data.subtitle,
+                standards: [] // 성취기준을 담을 빈 배열 준비
+            };
+        });
+        console.log("✅ 1/3: 과목 뼈대 로드 완료");
+
+        // 2. 성취기준 및 등록된 문항 불러오기 (기존 standards_2022 컬렉션)
+        const standardsSnapshot = await db.collection('standards_2022').get();
+        standardsSnapshot.forEach(doc => {
+            const data = doc.data();
+            // 해당 과목 바구니가 존재하면 그 안에 쏙 넣기
+            if(subjectData[data.subject]) {
+                subjectData[data.subject].standards.push({
+                    id: doc.id,
                     code: data.code,
                     desc: data.desc,
                     levels: data.levels,
@@ -1109,15 +1160,60 @@ async function loadStandardsFromDB() {
             }
         });
 
-        for (let subj in dbStandards) {
-            if (dbStandards[subj].length > 0) {
-                dbStandards[subj].sort((a, b) => a.code.localeCompare(b.code));
-                if(subjectData[subj]) {
-                    subjectData[subj].standards = dbStandards[subj];
-                }
+        // 단원 코드 순서대로 정렬 (01-01 다음 01-02가 오도록)
+        for (let subj in subjectData) {
+            if (subjectData[subj].standards.length > 0) {
+                subjectData[subj].standards.sort((a, b) => a.code.localeCompare(b.code));
             }
         }
-        console.log("🔥 DB에서 성취기준 로드 완료!");
+        console.log("✅ 2/3: 성취기준 및 문항 로드 완료");
+
+        // 3. AI 1차 평가 루브릭 불러오기 (Step 1에서 넣은 영업비밀!)
+        const rubricDoc = await db.collection('system_config').doc('evaluation_rubric').get();
+        if (rubricDoc.exists) {
+            const rData = rubricDoc.data();
+            
+            // 🟢 AI 프롬프트에 그대로 꽂아 넣을 수 있도록 깔끔한 텍스트로 조립합니다.
+            systemRubric = `
+[1] 일반적 특성 및 인지적 복잡성
+- A수준: ${rData.general_characteristics.A}
+- B수준: ${rData.general_characteristics.B}
+- C수준: ${rData.general_characteristics.C}
+- D수준: ${rData.general_characteristics.D}
+- E수준: ${rData.general_characteristics.E}
+
+[2] 핵심 서술어 및 종결어미 패턴
+- A수준: 동사(${rData.verbs_and_endings.A.verbs.join(', ')}), 어미(${rData.verbs_and_endings.A.ending})
+- B수준: 동사(${rData.verbs_and_endings.B.verbs.join(', ')}), 어미(${rData.verbs_and_endings.B.ending})
+- C수준: 동사(${rData.verbs_and_endings.C.verbs.join(', ')}), 어미(${rData.verbs_and_endings.C.ending})
+- D수준: 동사(${rData.verbs_and_endings.D.verbs.join(', ')}), 어미(${rData.verbs_and_endings.D.ending})
+- E수준: 동사(${rData.verbs_and_endings.E.verbs.join(', ')}), 어미(${rData.verbs_and_endings.E.ending})
+
+[3] 수식어 및 부사어 결합 조건
+- A수준: ${rData.modifiers.A.join(', ')}
+- B수준: ${rData.modifiers.B.join(', ')}
+- C수준: ${rData.modifiers.C.join(', ')}
+- D수준: ${rData.modifiers.D.join(', ')}
+- E수준: ${rData.modifiers.E.join(', ')}
+
+[4] MCP(최소 능력자) 판별 준거
+- A수준: ${rData.mcp_guidelines.A}
+- B수준: ${rData.mcp_guidelines.B}
+- C수준: ${rData.mcp_guidelines.C}
+- D수준: ${rData.mcp_guidelines.D}
+- E수준: ${rData.mcp_guidelines.E}
+
+[5] 교과 내용 요소별 특화 기준
+- 다항식: A(${rData.domain_specifics.polynomial.A}) / C(${rData.domain_specifics.polynomial.C}) / E(${rData.domain_specifics.polynomial.E})
+- 방정식과 부등식: A,B(${rData.domain_specifics.equation_inequality.A_B}) / C(${rData.domain_specifics.equation_inequality.C}) / D,E(${rData.domain_specifics.equation_inequality.D_E})
+- 행렬: A(${rData.domain_specifics.matrix.A}) / C(${rData.domain_specifics.matrix.C}) / E(${rData.domain_specifics.matrix.E})
+- 경우의 수: A(${rData.domain_specifics.combinatorics.A}) / C(${rData.domain_specifics.combinatorics.C}) / E(${rData.domain_specifics.combinatorics.E})
+
+[적용 지침]: ${rData.instructions}
+`;
+        }
+        console.log("✅ 3/3: AI 평가 루브릭 셋업 완료!");
+        
     } catch(error) {
         console.error("DB 로딩 에러:", error);
     }
@@ -1241,4 +1337,120 @@ async function saveQuestionToDB() {
         console.error("문항 추가 실패:", error);
         alert("문항 추가 중 오류가 발생했습니다.");
     }
+}
+
+// 🟢 북마크(수준별 문항 모아보기) 전용 스크립트
+let currentBookmarkQuestions = [];
+
+function resetBookmarkView() {
+    document.getElementById('bookmark-list').innerHTML = "";
+}
+
+// 🟢 북마크(수준별 문항 모아보기) - 성취기준 정렬 기능 추가
+async function loadBookmark(level) {
+    const subject = document.getElementById('bookmark-subject').value;
+    const listContainer = document.getElementById('bookmark-list');
+    listContainer.innerHTML = "<p style='text-align:center; color:var(--primary); font-weight:bold;'>데이터베이스에서 문항을 불러오는 중입니다... ⏳</p>";
+
+    const data = subjectData[subject];
+    if (!data || !data.standards) {
+        listContainer.innerHTML = "<p style='text-align:center;'>해당 과목의 데이터가 없습니다.</p>";
+        return;
+    }
+
+    currentBookmarkQuestions = [];
+
+    // 1. 관리자(선생님)가 직접 등록한 성취기준 문항들 가져오기
+    data.standards.forEach(std => {
+        if (std.questions && std.questions.length > 0) {
+            std.questions.forEach(q => {
+                if (q.level === level) {
+                    currentBookmarkQuestions.push({
+                        code: std.code,
+                        q: q.q,
+                        reason: q.reason,
+                        answer: q.answer || "등록된 정답/풀이가 없습니다.",
+                        source: "선생님 등록 문항"
+                    });
+                }
+            });
+        }
+    });
+
+    // 2. AI가 생성한 변형 문항들 (transformed_bank) 가져오기
+    try {
+        const snapshot = await db.collection('transformed_bank').where('subject', '==', subject).get();
+        snapshot.forEach(doc => {
+            const d = doc.data();
+            let extractedLevel = d.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1];
+            if (extractedLevel === level) {
+                currentBookmarkQuestions.push({
+                    code: d.standard_code || "코드 없음",
+                    q: d.question,
+                    reason: "AI가 원본을 분석하고 변형하며 판정한 문항입니다.",
+                    answer: d.answer,
+                    source: "✨ AI 추가 문항"
+                });
+            }
+        });
+        
+        // 🟢 [추가됨] 데이터를 다 모은 후, 성취기준 코드(예: [10공수2-03-04]) 알파벳 순서대로 깔끔하게 정렬!
+        currentBookmarkQuestions.sort((a, b) => a.code.localeCompare(b.code));
+        
+        renderBookmarkList(level);
+    } catch (err) {
+        console.error("DB 로드 에러:", err);
+        renderBookmarkList(level); 
+    }
+}
+
+function renderBookmarkList(level) {
+    const listContainer = document.getElementById('bookmark-list');
+    if (currentBookmarkQuestions.length === 0) {
+        listContainer.innerHTML = `<p style='text-align:center; color: #64748b; padding: 2rem; background:white; border-radius:8px;'>선택하신 '${level}' 수준에 등록된 문항이 없습니다.</p>`;
+        return;
+    }
+
+    let html = `<p style="font-weight:bold; color:var(--primary); margin-bottom:10px;">🎉 총 ${currentBookmarkQuestions.length}개의 문항이 검색되었습니다.</p>`;
+    
+    currentBookmarkQuestions.forEach((item, index) => {
+        html += `
+            <div style="background: white; border: 1px solid var(--border); border-left: 4px solid var(--primary); padding: 1.2rem; border-radius: 8px; cursor: pointer; transition: 0.2s;" 
+                 onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='white'"
+                 onclick="openBookmarkModal(${index})">
+                <div style="display:flex; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="font-size: 0.85rem; font-weight: bold; color: #64748b;">${item.code}</span>
+                    <span style="font-size: 0.8rem; background: #e2e8f0; padding: 2px 8px; border-radius: 12px; color: #475569;">${item.source}</span>
+                </div>
+                <div style="font-size: 0.95rem; line-height: 1.5; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+                    ${item.q}
+                </div>
+            </div>
+        `;
+    });
+    listContainer.innerHTML = html;
+
+    if (window.MathJax) MathJax.typesetPromise([listContainer]);
+}
+
+function openBookmarkModal(index) {
+    const item = currentBookmarkQuestions[index];
+    document.getElementById('bm-modal-title').innerText = `[${item.code}] 문항 상세`;
+    document.getElementById('bm-modal-q').innerHTML = item.q;
+    document.getElementById('bm-modal-reason').innerHTML = item.reason;
+    
+    const ansDiv = document.getElementById('bm-modal-answer');
+    if (item.answer && item.answer !== "등록된 정답/풀이가 없습니다.") {
+        document.getElementById('bm-modal-answer-text').innerHTML = item.answer;
+        ansDiv.style.display = 'block';
+    } else {
+        ansDiv.style.display = 'none';
+    }
+
+    document.getElementById('bookmark-modal').style.display = 'flex';
+    if (window.MathJax) MathJax.typesetPromise([document.getElementById('bookmark-modal')]);
+}
+
+function closeBookmarkModal() {
+    document.getElementById('bookmark-modal').style.display = 'none';
 }
