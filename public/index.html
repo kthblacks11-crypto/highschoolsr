@@ -66,6 +66,7 @@
         <button class="tab-btn" onclick="openAnalysisMode('single')" style="color: #2563eb; font-weight: bold;">🔍 한 문제 상세분석</button>
         <button class="tab-btn" onclick="openAnalysisMode('multi')" style="color: #8b5cf6; font-weight: bold;">📑 여러 문제 요약분석</button>
         <button class="tab-btn" onclick="showSection('bookmark')" style="color: #10b981; font-weight: bold;">🔖 북마크 문항 보기</button>
+        <button class="tab-btn" onclick="showSection('cut-score')" style="color: #ea580c; font-weight: bold;">📊 분할점수 산출</button>
     </div>
 
     <div id="dashboard" class="section active">
@@ -129,14 +130,14 @@
                 <!-- DB에서 불러온 문항 리스트가 나타납니다 -->
             </div>
         </div>
-    </div>
+
 </div> <div id="cut-score" class="section">
     <h2>📊 성취평가제 분할점수 산출 (AI 마법사-모든 과목용)</h2>
     
     <div style="display: flex; justify-content: space-between; background: white; padding: 1rem 2rem; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 1.5rem; font-size: 0.95rem; font-weight: bold;">
         <div id="step1-indicator" style="color: var(--primary);">✅ 1. 평가 세팅</div>
-        <div id="step2-indicator" style="color: #cbd5e1;">▶ 2. 시험지 검수</div>
-        <div id="step3-indicator" style="color: #cbd5e1;">▶ 3. 배점 결합</div>
+        <div id="step2-indicator" style="color: #cbd5e1;">▶ 2. 문항 정보(배점) 입력</div>
+        <div id="step3-indicator" style="color: #cbd5e1;">▶ 3. 출제 문항 업로드 및 데이터화</div>
         <div id="step4-indicator" style="color: #cbd5e1;">▶ 4. 최종 산출</div>
     </div>
 
@@ -172,10 +173,15 @@
             </div>
         </div>
 
-        <button class="save-btn" onclick="goToCutScoreStep2()" style="margin-top: 2rem; background: #ea580c;">다음 2단계로 이동 (시험지 검수) ➡️</button>
-    </div>
+        <div style="margin-top: 2rem; display: flex; gap: 1rem;">
+            <button class="save-btn" onclick="startCutScore('before')" style="background: #64748b; flex: 1;">🛤️ 길 1: 평가 전 (사전 시뮬레이션)</button>
+            <button class="save-btn" onclick="startCutScore('after')" style="background: #ea580c; flex: 1;">🛤️ 길 2: 평가 후 (정밀 분석)</button>
+        </div>
     <div id="cut-score-step2" class="quiz-container" style="display: none; max-width: 100%;">
-        <h3 style="margin-top: 0; color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">2단계: 시험지 자동 분석 및 검수</h3>
+        <h3 style="margin-top: 0; color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">2단계: 문항 정보(배점) 입력</h3>
+        <div id="path1-guide" style="display:none; background: #f0fdf4; border-left: 4px solid #10b981; padding: 1rem; margin-bottom: 1rem; font-size: 0.9rem;">
+            <strong>💡 평가 전 모드:</strong> 배점과 함께 선생님이 생각하시는 <strong>문항별 성취수준</strong>을 선택해 주세요.
+        </div>
         
         <div id="exam-upload-zone" style="border: 2px dashed #cbd5e1; border-radius: 12px; padding: 3rem; text-align: center; margin-bottom: 1.5rem; cursor: pointer; background: #f8fafc;" onclick="document.getElementById('exam-file').click()">
             <span style="font-size: 3rem;">📄</span>
@@ -215,8 +221,8 @@
         </div>
 
         <div id="step2-actions" style="display: none; margin-top: 1.5rem; text-align: right;">
-            <button class="save-btn" onclick="backToStep1()" style="background: #64748b; width: auto; margin-right: 0.5rem;">◀ 이전으로</button>
-            <button class="save-btn" onclick="goToCutScoreStep3()" style="background: #ea580c; width: auto;">검수 완료! 3단계로 이동 ➡️</button>
+            <button class="save-btn" onclick="backToStep2From3()" style="background: #64748b; width: auto; margin-right: 0.5rem;">◀ 이전으로 (배점 수정)</button>
+            <button class="save-btn" onclick="goToCutScoreStep4()" style="background: #ea580c; width: auto;">검수 완료! 4단계로 이동 ➡️</button>
         </div>
     </div>
     <div id="cut-score-step3" class="quiz-container" style="display: none;">
@@ -236,7 +242,10 @@
                 <strong style="color: #334155;">📋 인식된 문항 및 배점: <span id="parsed-count-msg" style="color: #ea580c;">0개</span></strong>
                 <span id="match-status-msg" style="font-size: 0.85rem; font-weight: bold;"></span>
             </div>
-            <div id="excel-preview-table" style="background: #f8fafc; padding: 1rem; border: 1px solid var(--border); border-radius: 8px; max-height: 200px; overflow-y: auto; font-size: 0.95rem;"></div>
+            <div id="excel-preview-table"></div>
+        </div> <div style="margin-top: 1.5rem; text-align: right;">
+            <button id="btn-next-to-step3" class="save-btn" onclick="handleNextToStep3()" style="display:none; background: #ea580c; width: auto;"></button>
+        </div>
         </div>
 
         <div id="step3-actions" style="margin-top: 2rem; text-align: right;">
@@ -294,7 +303,7 @@
         </div>
     </div>
 </div>
-<div id="admin-dashboard" class="section">
+
     <div id="admin-dashboard" class="section">
         <h2>🛠️ 데이터 관리자 모드</h2>
         <div class="quiz-container" style="max-width: 800px; margin: 0 auto;">
