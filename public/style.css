@@ -1,5 +1,7 @@
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-
+html {
+    overflow-y: scroll;
+}
 :root {
     --primary: #1e3a8a;
     --primary-light: #3b82f6;
