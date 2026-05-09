@@ -185,3 +185,108 @@ header {
         width: auto;
     }
 }
+/* 📊 분할점수 산출 전용 독립 스타일 */
+.cut-score-card {
+    background: white;
+    border-radius: 15px;
+    padding: 2rem;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+    margin-bottom: 2rem;
+    border: 1px solid #cbd5e1;
+}
+.score-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+.score-table th {
+    background: #f1f5f9;
+    padding: 12px;
+    border: 1px solid #e2e8f0;
+    font-weight: bold;
+}
+.score-table td {
+    padding: 10px;
+    border: 1px solid #e2e8f0;
+    text-align: center;
+}
+.score-input {
+    width: 70px;
+    padding: 6px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    text-align: center;
+    font-weight: bold;
+    color: #ea580c;
+}
+.btn-step-prev {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+}
+/* 🤖 챗봇 창 크기 조절 손잡이 스타일 */
+#ai-chat-container {
+    position: relative;
+    min-width: 350px; /* 최소 너비 */
+    max-width: 800px; /* 최대 너비 */
+}
+
+.chat-resizer {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 6px;
+    height: 100%;
+    cursor: ew-resize; /* 좌우 화살표 커서 */
+    background: #fca5a5; /* 연한 빨간색 */
+    transition: background 0.2s;
+    z-index: 10;
+}
+
+.chat-resizer:hover {
+    background: #ef4444; /* 마우스 올리면 진한 빨간색 */
+}
+
+/* 크기 조절 안내 팁 */
+.resizer-guide {
+    position: absolute;
+    left: -100px;
+    top: 10px;
+    background: #ef4444;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    pointer-events: none;
+    opacity: 0.8;
+    display: none;
+}
+
+#ai-chat-container:hover .resizer-guide {
+    display: block; /* 마우스를 올리면 안내 문구 표시 */
+}
+/* ==========================================
+   🤖 챗봇 창 & 레이아웃 확장 (우측 여백 활용)
+   ========================================== */
+/* 메인 분석 레이아웃이 모니터 여백을 다 쓸 수 있도록 확장 */
+#analysis-layout-wrapper {
+    max-width: 1600px !important; 
+    margin: 0 auto;
+    width: 100%;
+}
+
+/* 문제 풀이(왼쪽) 영역이 챗봇에 밀려 찌그러지지 않도록 단단하게 고정 */
+#exam-viewer-left, 
+.left-panel { /* 클래스명은 선생님의 기존 구조에 맞춤 */
+    flex-shrink: 0 !important;
+    min-width: 60%; /* 최소 60%의 영역은 무조건 사수 */
+}
+
+/* 챗봇 크기 조절 손잡이를 왼쪽에서 끌 때 자연스럽게 늘어나도록 처리 */
+#ai-chat-container {
+    transition: width 0.1s ease-out;
+}

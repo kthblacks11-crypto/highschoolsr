@@ -1480,8 +1480,7 @@ function closeBookmarkModal() {
 }
 
 // ==========================================
-// 📊 분할점수 산출 (AI 마법사) 전용 스크립트 
-// (중복 및 찌꺼기 코드 완벽 제거본)
+// 📊 분할점수 산출 (AI 마법사) 전용 스크립트 (최신 통합본)
 // ==========================================
 
 let cutScoreMode = '';
@@ -1490,14 +1489,28 @@ let finalExamQuestions = [];
 let examImages = [];
 
 const levelMeanings = {
-    'A': '해당 성취기준을 완벽히 이해하고 응용할 수 있는 수준 (정답률 80% 이상 기대)',
-    'B': '성취기준의 핵심 내용을 이해하고 문제를 해결할 수 있는 수준 (정답률 60~80% 기대)',
-    'C': '성취기준의 기초적인 내용을 이해하고 있는 수준 (정답률 40~60% 기대)',
-    'D': '성취기준의 내용을 부분적으로만 이해하고 있는 수준 (정답률 20~40% 기대)',
-    'E': '성취기준에 도달하지 못해 보충 학습이 필요한 수준 (정답률 20% 미만 기대)'
+    'A': '성취기준을 포괄적으로 이해하고, 복잡한 문제 상황에서 수학적 개념을 융합하여 해결할 수 있는 수준',
+    'B': '성취기준에 대한 이해를 바탕으로, 일반적인 문제 상황에서 수학적 개념을 적용하여 해결할 수 있는 수준',
+    'C': '성취기준의 기본적인 개념, 원리, 법칙을 이해하고, 단순한 문제 상황에 적용할 수 있는 수준',
+    'D': '성취기준의 기초적인 개념과 원리를 부분적으로 이해하고 있는 수준',
+    'E': '성취기준에 대한 이해가 부족하여, 기초적인 수학적 지식에 대한 보충 학습이 필요한 수준'
 };
 
-// [1단계] 설정 로직
+// 🌟 [공통] 단계 이동 함수 (이전 단계, 다음 단계 통합 관리)
+function goToStep(stepNum) {
+    [1, 2, 3, 4].forEach(n => {
+        const step = document.getElementById(`cut-score-step${n}`);
+        if(step) step.style.display = 'none';
+        const indicator = document.getElementById(`step${n}-indicator`);
+        if(indicator) indicator.style.color = '#cbd5e1';
+    });
+    document.getElementById(`cut-score-step${stepNum}`).style.display = 'block';
+    document.getElementById(`step${stepNum}-indicator`).style.color = 'var(--primary)';
+}
+
+// ------------------------------------------
+// [1단계] 평가 세팅
+// ------------------------------------------
 function updateSubjectList() {
     const group = document.getElementById('cut-score-group').value;
     const subjectSelect = document.getElementById('cut-score-subject');
@@ -1581,86 +1594,114 @@ function startCutScore(mode) {
     const selectedStds = Array.from(document.querySelectorAll('.cut-score-std-cb:checked'));
     if (selectedStds.length === 0) { alert("출제 범위(성취기준)를 먼저 선택해 주세요."); return; }
 
-    document.getElementById('cut-score-step1').style.display = 'none';
-    document.getElementById('cut-score-step2').style.display = 'block';
-    document.getElementById('step1-indicator').style.color = '#10b981';
-    document.getElementById('step2-indicator').style.color = 'var(--primary)';
+    goToStep(2);
 
-    const nextBtn = document.getElementById('btn-next-to-step3');
     if(mode === 'before') {
         document.getElementById('path1-guide').style.display = 'block';
-        if(nextBtn) nextBtn.innerText = "시뮬레이션 결과 확인 ➡️";
     } else {
         document.getElementById('path1-guide').style.display = 'none';
-        if(nextBtn) nextBtn.innerText = "3단계: 문항 업로드로 이동 ➡️";
     }
 }
 
-// [2단계] 엑셀 배점 입력
-function parseExcelData() {
-    const rawText = document.getElementById('excel-paste-area').value.trim();
-    const previewContainer = document.getElementById('excel-preview-container');
-    const previewTable = document.getElementById('excel-preview-table');
-    const btnNext = document.getElementById('btn-next-to-step3');
+// ------------------------------------------
+// [2단계] 문항 번호 및 배점 입력 (표 자동생성 & 엑셀)
+// ------------------------------------------
+function generateEmptyScoreTable() {
+    const choiceCount = parseInt(document.getElementById('choice-count').value) || 0;
+    const shortCount = parseInt(document.getElementById('short-count').value) || 0;
+    const container = document.getElementById('score-table-container');
     
-    if (!rawText) {
-        previewContainer.style.display = 'none';
-        if(btnNext) btnNext.style.display = 'none';
-        return;
+    let html = `<table class="score-table">
+                <thead><tr><th>문항 번호</th><th>배점 (점)</th>
+                ${cutScoreMode === 'before' ? '<th>예상 성취수준</th>' : ''}
+                </tr></thead><tbody>`;
+    
+    let globalQNum = 1; // AI 인식용 실제 문항 순서 (1~마지막)
+    
+    // 객관식 생성
+    for(let i=1; i<=choiceCount; i++) {
+        html += `<tr>
+            <td>${i}</td>
+            <td><input type="number" step="0.1" class="score-input" data-num="${globalQNum}" placeholder="0.0"></td>
+            ${cutScoreMode === 'before' ? `<td><select onchange="showLevelTip(this)" style="padding:4px;"><option value="A">A</option><option value="B">B</option><option value="C" selected>C</option><option value="D">D</option><option value="E">E</option></select><div style="font-size:0.75rem; color:#64748b; margin-top:2px;">${levelMeanings['C']}</div></td>` : ''}
+        </tr>`;
+        globalQNum++;
     }
-
-    const rows = rawText.split('\n');
-    parsedScores = [];
     
-    let html = `<table style="width: 100%; border-collapse: collapse; text-align: center;">
-                <tr style="background: #e2e8f0;">
-                    <th style="padding: 8px;">번호</th><th style="padding: 8px;">배점</th>
-                    ${cutScoreMode === 'before' ? '<th>예상 성취수준</th>' : ''}
-                </tr>`;
-
-    rows.forEach(row => {
-        const cols = row.trim().split(/\t|\s{2,}/); 
-        if (cols.length >= 2) {
-            const num = parseInt(cols[0].replace(/[^0-9]/g, ''));
-            const score = parseFloat(cols[1].replace(/[^0-9.]/g, ''));
-            if (!isNaN(num) && !isNaN(score)) {
-                parsedScores.push({ num: num, score: score });
-                html += `<tr style="border-bottom: 1px solid #e2e8f0;">
-                            <td>${num}</td><td style="color:#ea580c; font-weight:bold;">${score}점</td>
-                            ${cutScoreMode === 'before' ? `
-                            <td>
-                                <select onchange="showLevelTip(this)" style="padding:4px;">
-                                    <option value="A">A</option><option value="B">B</option>
-                                    <option value="C" selected>C</option><option value="D">D</option><option value="E">E</option>
-                                </select>
-                                <div style="font-size:0.75rem; color:#64748b;">${levelMeanings['C']}</div>
-                            </td>` : ''}
-                         </tr>`;
-            }
-        }
-    });
-    html += `</table>`;
-    previewTable.innerHTML = html;
-    previewContainer.style.display = 'block';
-    if(btnNext) btnNext.style.display = 'inline-block';
+    // 서술형 생성 (보이는 건 서1, 서2지만 내부적인 데이터 순서는 이어짐)
+    for(let i=1; i<=shortCount; i++) {
+        html += `<tr style="background:#fff7ed;">
+            <td>서${i}</td>
+            <td><input type="number" step="0.1" class="score-input" data-num="${globalQNum}" placeholder="0.0"></td>
+            ${cutScoreMode === 'before' ? `<td><select onchange="showLevelTip(this)" style="padding:4px;"><option value="A">A</option><option value="B">B</option><option value="C" selected>C</option><option value="D">D</option><option value="E">E</option></select><div style="font-size:0.75rem; color:#64748b; margin-top:2px;">${levelMeanings['C']}</div></td>` : ''}
+        </tr>`;
+        globalQNum++;
+    }
+    
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+    document.getElementById('btn-next-to-step3').style.display = 'inline-block';
 }
 
 function showLevelTip(select) {
     select.nextElementSibling.innerText = levelMeanings[select.value];
 }
 
+function downloadScoreTemplate() {
+    const choiceCount = parseInt(document.getElementById('choice-count').value) || 0;
+    const shortCount = parseInt(document.getElementById('short-count').value) || 0;
+    let csv = "문항 번호,배점\n";
+    for(let i=1; i<=choiceCount; i++) csv += `${i},0\n`;
+    for(let i=1; i<=shortCount; i++) csv += `서${i},0\n`;
+    
+    const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "분할점수_배점양식.csv";
+    link.click();
+}
+
+function handleExcelUpload(event) {
+    const file = event.target.files[0];
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const text = e.target.result;
+        const rows = text.split('\n').slice(1); // 첫 번째 줄(제목) 제외
+        
+        generateEmptyScoreTable(); // 빈 표 먼저 만들기
+        const inputs = document.querySelectorAll('.score-input');
+        
+        rows.forEach((row, idx) => {
+            const cols = row.split(',');
+            if(cols[1] && inputs[idx]) {
+                inputs[idx].value = cols[1].trim();
+            }
+        });
+        alert("✅ 배점이 성공적으로 업로드되었습니다.");
+    };
+    reader.readAsText(file, 'euc-kr');
+}
+
 function handleNextToStep3() {
+    // 입력된 배점들을 컴퓨터 기억장치(배열)에 저장
+    parsedScores = [];
+    document.querySelectorAll('.score-input').forEach(input => {
+        parsedScores.push({ 
+            num: parseInt(input.getAttribute('data-num')), 
+            score: parseFloat(input.value) || 0 
+        });
+    });
+
     if(cutScoreMode === 'before') {
         alert("✅ 시뮬레이션 모드 연결 준비 중입니다!");
     } else {
-        document.getElementById('cut-score-step2').style.display = 'none';
-        document.getElementById('cut-score-step3').style.display = 'block';
-        document.getElementById('step2-indicator').style.color = '#10b981';
-        document.getElementById('step3-indicator').style.color = 'var(--primary)';
+        goToStep(3); // 3단계(시험지 업로드)로 이동
     }
 }
 
-// [3단계] 시험지 업로드 및 문항 추출
+// ------------------------------------------
+// [3단계] 시험지 업로드 및 문항 추출 (부분 캡처 포함)
+// ------------------------------------------
 function handleExamUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -1702,7 +1743,7 @@ async function startExamAiAnalysis(base64Data) {
     } finally {
         document.getElementById('exam-loading').style.display = 'none';
         document.getElementById('exam-inspector-wrapper').style.display = 'flex';
-        document.getElementById('step2-actions').style.display = 'block';
+        document.getElementById('step3-actions').style.display = 'block';
         document.getElementById('exam-img-display').src = examImages[0];
     }
 }
@@ -1714,10 +1755,10 @@ function renderExtractedQuestions(rawText) {
 
     questions.forEach((qText, idx) => {
         const qCard = document.createElement('div');
-        qCard.className = 'quiz-container';
         qCard.style.padding = '1rem';
         qCard.style.borderLeft = '4px solid #ea580c';
         qCard.style.background = 'white';
+        qCard.style.borderBottom = '1px solid #cbd5e1';
         qCard.innerHTML = `
             <div style="font-weight: bold; color: #ea580c; margin-bottom: 0.5rem;">[문항 ${idx + 1}]</div>
             <textarea class="q-edit-area" style="width: 100%; height: 100px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px; font-family: inherit;">${qText.trim()}</textarea>
@@ -1729,12 +1770,6 @@ function renderExtractedQuestions(rawText) {
         listContainer.appendChild(qCard);
     });
     if (window.MathJax) MathJax.typesetPromise([listContainer]);
-}
-
-function backToStep2From3() {
-    document.getElementById('cut-score-step3').style.display = 'none';
-    document.getElementById('cut-score-step2').style.display = 'block';
-    document.getElementById('step3-indicator').style.color = '#cbd5e1';
 }
 
 let isCapturing = false;
@@ -1828,7 +1863,9 @@ function cropAndInsertImage(x, y, w, h, qIdx) {
     container.appendChild(imgWrapper);
 }
 
-// [4단계] 최종 산출로 이동
+// ------------------------------------------
+// [4단계] 최종 분할점수 산출
+// ------------------------------------------
 function goToCutScoreStep4() {
     finalExamQuestions = [];
     const textAreas = document.querySelectorAll('.q-edit-area');
@@ -1851,10 +1888,7 @@ function goToCutScoreStep4() {
 }
 
 async function startFinalAiAnalysis() {
-    document.getElementById('cut-score-step3').style.display = 'none';
-    document.getElementById('cut-score-step4').style.display = 'block';
-    document.getElementById('step3-indicator').style.color = '#10b981';
-    document.getElementById('step4-indicator').style.color = 'var(--primary)';
+    goToStep(4);
     
     document.getElementById('final-ai-loading').style.display = 'block';
     document.getElementById('final-result-container').style.display = 'none';
@@ -1900,8 +1934,7 @@ async function startFinalAiAnalysis() {
     } catch (error) {
         console.error(error);
         alert("분석 중 오류가 발생했습니다. (AI가 JSON 형식을 어겼거나 네트워크 오류)\n" + error.message);
-        document.getElementById('cut-score-step4').style.display = 'none';
-        document.getElementById('cut-score-step3').style.display = 'block';
+        goToStep(3); // 실패 시 다시 3단계로
     } finally {
         document.getElementById('final-ai-loading').style.display = 'none';
     }
@@ -1919,9 +1952,9 @@ function renderFinalCutScoreTable(aiResults) {
 
         html += `
         <tr style="border-bottom: 1px solid #e2e8f0;" class="cut-score-row" data-score="${score}">
-            <td style="padding: 8px;"><strong>${q.num}</strong></td>
-            <td style="padding: 8px; color: #ea580c; font-weight: bold;">${score}</td>
-            <td style="padding: 8px;">
+            <td><strong>${q.num}</strong></td>
+            <td style="color: #ea580c; font-weight: bold;">${score}</td>
+            <td>
                 <select class="level-select" style="padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px;">
                     <option value="A" ${ai.level==='A'?'selected':''}>A</option>
                     <option value="B" ${ai.level==='B'?'selected':''}>B</option>
@@ -1930,11 +1963,11 @@ function renderFinalCutScoreTable(aiResults) {
                     <option value="E" ${ai.level==='E'?'selected':''}>E</option>
                 </select>
             </td>
-            <td style="padding: 8px;"><input type="number" class="pct-A" value="${ai.pct_A}" style="width: 50px; text-align: center; border: 1px solid #fca5a5; border-radius: 4px;" oninput="calculateTotalCutScores()"></td>
-            <td style="padding: 8px;"><input type="number" class="pct-B" value="${ai.pct_B}" style="width: 50px; text-align: center; border: 1px solid #fcd34d; border-radius: 4px;" oninput="calculateTotalCutScores()"></td>
-            <td style="padding: 8px;"><input type="number" class="pct-C" value="${ai.pct_C}" style="width: 50px; text-align: center; border: 1px solid #86efac; border-radius: 4px;" oninput="calculateTotalCutScores()"></td>
-            <td style="padding: 8px;"><input type="number" class="pct-D" value="${ai.pct_D}" style="width: 50px; text-align: center; border: 1px solid #93c5fd; border-radius: 4px;" oninput="calculateTotalCutScores()"></td>
-            <td style="padding: 8px;"><input type="number" class="pct-E" value="${ai.pct_E}" style="width: 50px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" oninput="calculateTotalCutScores()"></td>
+            <td><input type="number" class="pct-A score-input" value="${ai.pct_A}" oninput="calculateTotalCutScores()"></td>
+            <td><input type="number" class="pct-B score-input" value="${ai.pct_B}" oninput="calculateTotalCutScores()"></td>
+            <td><input type="number" class="pct-C score-input" value="${ai.pct_C}" oninput="calculateTotalCutScores()"></td>
+            <td><input type="number" class="pct-D score-input" value="${ai.pct_D}" oninput="calculateTotalCutScores()"></td>
+            <td><input type="number" class="pct-E score-input" value="${ai.pct_E}" oninput="calculateTotalCutScores()"></td>
         </tr>
         `;
     });
@@ -1971,3 +2004,57 @@ function calculateTotalCutScores() {
     `;
     document.getElementById('final-cut-score-boxes').innerHTML = boxHtml;
 }
+// 🤖 챗봇 창 크기 조절 로직
+let isResizingChat = false;
+
+function initChatResizer() {
+    const resizer = document.getElementById('chat-resizer');
+    const container = document.getElementById('ai-chat-container');
+    const wrapper = document.getElementById('analysis-layout-wrapper');
+
+    if(!resizer || !container) return;
+
+    resizer.addEventListener('mousedown', (e) => {
+        isResizingChat = true;
+        document.body.style.cursor = 'ew-resize';
+        document.body.style.userSelect = 'none'; // 드래그 중 텍스트 선택 방지
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizingChat) return;
+
+        // 마우스 위치에 따라 컨테이너 너비 계산 (오른쪽 정렬이므로)
+        const rect = wrapper.getBoundingClientRect();
+        const newWidth = rect.right - e.clientX;
+
+        if (newWidth > 350 && newWidth < 850) {
+            container.style.flex = 'none';
+            container.style.width = newWidth + 'px';
+        }
+    });
+
+    document.addEventListener('mouseup', () => {
+        isResizingChat = false;
+        document.body.style.cursor = 'default';
+        document.body.style.userSelect = 'auto';
+    });
+}
+
+// 🌟 기존 resetAnalysis() 함수 안에 아래 코드를 추가하여 크기를 초기화하세요
+function resetAnalysis() {
+    // ... 기존 코드들 ...
+    
+    // 챗봇 창 크기 초기화
+    const chatContainer = document.getElementById('ai-chat-container');
+    if(chatContainer) {
+        chatContainer.style.flex = '1';
+        chatContainer.style.width = 'auto';
+    }
+}
+
+// 페이지 로드 시 실행되도록 window.onload에 추가
+const originalOnload = window.onload;
+window.onload = async () => {
+    if(originalOnload) await originalOnload();
+    initChatResizer(); // 크기 조절 기능 활성화
+};
