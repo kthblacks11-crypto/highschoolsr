@@ -269,21 +269,7 @@ header {
 #ai-chat-container:hover .resizer-guide {
     display: block; /* 마우스를 올리면 안내 문구 표시 */
 }
-/* ==========================================
-   🚀 레이아웃 한계 해제 및 우측 챗봇 확장
-   ========================================== */
-   #analysis-layout-wrapper {
-    max-width: 1600px !important; /* 물리적 1200px 제한을 풀고 와이드 모니터 대응 */
-    width: 98% !important;
-    margin: 0 auto;
-    justify-content: flex-start; /* 왼쪽 정렬을 통해 우측 여백 확보 */
-}
 
-/* 왼쪽 문제풀이 창이 절대 찌그러지지 않도록 방어 */
-#exam-viewer-left, .left-panel {
-    flex-shrink: 0 !important;
-    min-width: 55%; 
-}
 
 /* 챗봇 우측 크기 조절 손잡이 */
 .chat-resizer-right {
@@ -297,6 +283,4 @@ header {
     z-index: 10;
     transition: background 0.2s;
 }
-.chat-resizer-right:hover {
-    background: #ef4444;
-}
+

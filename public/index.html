@@ -138,6 +138,22 @@
     <div id="dynamic-indicator-bar" style="display: none; justify-content: space-between; background: white; padding: 1rem 2rem; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 1.5rem; font-weight: bold;">
     </div>    
 
+    <div id="cut-score-dashboard" class="cut-score-card">
+        <h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem; display: flex; justify-content: space-between; align-items: center;">
+            <span>📂 나의 평가 프로젝트 (폴더)</span>
+            <button class="save-btn" onclick="createNewProject()" style="width: auto; margin: 0; padding: 0.5rem 1rem; font-size: 0.9rem; background: #2563eb;">+ 새 폴더 만들기</button>
+        </h3>
+        
+        <div style="margin-bottom: 1.5rem; background: #f0fdf4; padding: 1rem; border-radius: 8px; border-left: 4px solid #10b981;">
+            💡 <strong>학교별, 학기별로 폴더를 만들어보세요!</strong><br>
+            <span style="font-size: 0.9rem; color: #475569;">예: '2026학년도 1학기 A고' 폴더를 만들고, 그 안에 중간고사, 기말고사, 수행평가를 저장하여 최종 합산할 수 있습니다.</span>
+        </div>
+
+        <div id="project-folder-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem;">
+            <p style="color: #64748b; grid-column: 1 / -1; text-align: center; padding: 2rem;">폴더를 불러오는 중입니다... ⏳</p>
+        </div>
+    </div>
+    
     <div id="cut-score-step1" class="cut-score-card">
         <h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">1단계: 출제 범위 설정</h3>
         <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
@@ -241,7 +257,7 @@
                 </table>
             </div>
             <div id="final-cut-score-boxes" style="display: flex; gap: 10px; justify-content: space-around;"></div>
-            <div style="margin-top: 1.5rem;"><button class="btn-step-prev" onclick="goBackStep(4)">◀ 이전 단계로</button>
+            <div style="margin-top: 1.5rem;"><button class="btn-step-prev" onclick="goBackStep(4)">◀ 이전 단계로</button></div>
         </div>
     </div>
 </div>
@@ -287,7 +303,54 @@
     
             <button class="save-btn" onclick="saveStandardToDB()" style="background: #ef4444; margin-top: 2rem;">🚀 DB에 새로운 성취기준 저장하기</button>
             <hr style="margin: 3rem 0; border: 1px dashed #cbd5e1;">
-
+            <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: #10b981;">✏️ 기존 성취기준 수정 및 삭제하기</h3>
+            <div style="background: #f0fdf4; padding: 1.5rem; border-radius: 8px; border: 1px solid #86efac; margin-bottom: 3rem;">
+                
+                <div style="display: flex; gap: 10px; margin-bottom: 1rem;">
+                    <div style="flex: 1;">
+                        <label style="font-weight: bold; font-size: 0.9rem;">1. 과목 선택</label>
+                        <select id="admin-edit-subject" class="option-btn" style="text-align: left; padding: 0.8rem; width: 100%;" onchange="loadStandardsForEdit()">
+                            <option value="">-- 과목을 선택하세요 --</option>
+                            <option value="common1">공통수학1</option>
+                            <option value="common2">공통수학2</option>
+                            <option value="algebra">대수</option>
+                            <option value="calculus1">미적분Ⅰ</option>
+                            <option value="stats">확률과 통계</option>
+                        </select>
+                    </div>
+                    <div style="flex: 2;">
+                        <label style="font-weight: bold; font-size: 0.9rem;">2. 수정할 성취기준 불러오기</label>
+                        <select id="admin-edit-standard" class="option-btn" style="text-align: left; padding: 0.8rem; width: 100%;" onchange="populateEditFields()">
+                            <option value="">앞에서 과목을 먼저 선택해 주세요</option>
+                        </select>
+                    </div>
+                </div>
+    
+                <div id="admin-edit-fields" style="display: none; background: white; padding: 1rem; border-radius: 8px; border: 1px dashed #cbd5e1;">
+                    <div class="admin-form-group">
+                        <label>성취기준 코드</label>
+                        <input type="text" id="edit-code" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;">
+                    </div>
+                    <div class="admin-form-group" style="margin-top: 1rem;">
+                        <label>성취기준 내용 (desc)</label>
+                        <textarea id="edit-desc" rows="2" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;"></textarea>
+                    </div>
+                    
+                    <h4 style="margin-top: 1.5rem; border-bottom: 2px solid #10b981; padding-bottom: 0.5rem; color: #047857;">📊 성취수준 설명 수정</h4>
+                    <div style="display: grid; gap: 10px; margin-top: 1rem;">
+                        <input type="text" id="edit-level-high" placeholder="A (상) 수준 설명">
+                        <input type="text" id="edit-level-b" placeholder="B (우수) 수준 설명">
+                        <input type="text" id="edit-level-mid" placeholder="C (중) 수준 설명">
+                        <input type="text" id="edit-level-d" placeholder="D (미흡) 수준 설명">
+                        <input type="text" id="edit-level-low" placeholder="E (하) 수준 설명">
+                    </div>
+                    
+                    <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                        <button class="save-btn" onclick="updateStandardInDB()" style="background: #10b981; flex: 2; margin: 0;">💾 수정한 내용으로 덮어쓰기</button>
+                        <button class="save-btn" onclick="deleteStandardFromDB()" style="background: #ef4444; flex: 1; margin: 0;">🗑️ 이 성취기준 삭제</button>
+                    </div>
+                </div>
+            </div>
         <h3 style="margin-bottom: 1rem; color: var(--primary);">📝 기존 성취기준에 '문항' 추가하기</h3>
 
         <div class="admin-form-group">
@@ -338,7 +401,63 @@
         <button class="save-btn" onclick="saveQuestionToDB()" style="background: #3b82f6; margin-top: 2rem;">➕ 선택한 성취기준에 문항 추가하기</button>
         </div>
     </div>
+    <div style="max-width: 800px; margin: 0 auto;">    
+    <hr style="margin: 3rem 0; border: 1px dashed #cbd5e1;">
+    <h3 style="margin-bottom: 1rem; color: #3b82f6;">✏️ 등록된 '문항' 수정 및 삭제하기</h3>
+    <div class="admin-form-group">
+  
+        <label>1. 과목 및 성취기준 선택</label>
+        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+            <select id="admin-manage-q-subject" class="option-btn" style="flex: 1;" onchange="loadStandardsForManage()">
+                <option value="">-- 과목 선택 --</option>
+                <option value="common1">공통수학1</option>
+                <option value="common2">공통수학2</option>
+                <option value="algebra">대수</option>
+                <option value="calculus1">미적분Ⅰ</option>
+                <option value="stats">확률과 통계</option>
+            </select>
+            <select id="admin-manage-q-standard" class="option-btn" style="flex: 2;" onchange="loadQuestionsForEdit()">
+                <option value="">과목을 선택하세요</option>
+            </select>
+        </div>
+        
+        <label>2. 수정할 문항 선택</label>
+        <select id="admin-manage-q-list" class="option-btn" style="width: 100%; margin-bottom: 1rem;" onchange="populateQuestionEditFields()">
+            <option value="">성취기준을 선택하세요</option>
+        </select>
+    </div>
 
+    <div id="question-edit-fields" style="display: none; background: #f8fafc; padding: 1.2rem; border-radius: 8px; border: 1px solid #cbd5e1;">
+        <div class="admin-form-group">
+            <label>문항 내용 (수식 $ 사용)</label>
+            <textarea id="manage-q-text" rows="3" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;"></textarea>
+        </div>
+        <div class="admin-form-group" style="margin-top: 1rem;">
+            <label>정답</label>
+            <input type="text" id="manage-q-answer" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;">
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 1rem;">
+            <div style="flex: 1;">
+                <label>판정 수준</label>
+                <select id="manage-q-level" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;">
+                    <option value="A">A (상)</option>
+                    <option value="B">B (우수)</option>
+                    <option value="C">C (중)</option>
+                    <option value="D">D (미흡)</option>
+                    <option value="E">E (하)</option>
+                </select>
+            </div>
+            <div style="flex: 3;">
+                <label>판정 이유 (해설)</label>
+                <input type="text" id="manage-q-reason" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;">
+            </div>
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 1.5rem;">
+            <button class="save-btn" onclick="updateQuestionInDB()" style="background: #3b82f6; flex: 2; margin:0;">💾 문항 내용 수정 저장</button>
+            <button class="save-btn" onclick="deleteQuestionFromDB()" style="background: #ef4444; flex: 1; margin:0;">🗑️ 이 문항 삭제</button>
+        </div>
+    </div>   
+    </div> </div> </div>
     <div id="problem-analysis" class="section">
         <h2>문제 분석하기</h2>
         
@@ -519,5 +638,5 @@
     </div>
 </div>
 
-<script src="main.js?v=3"></script>
+<script src="main.js?v=4"></script>
 </body>

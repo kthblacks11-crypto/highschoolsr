@@ -756,6 +756,7 @@ function showSection(id) {
         if (subjectSelector) subjectSelector.style.visibility = 'visible';
         if (subTitle) subTitle.style.visibility = 'visible';
     }
+    if (id === 'cut-score') loadProjects();
 }
 
 function changeSubject() {
@@ -2090,36 +2091,50 @@ function calculateTotalCutScores() {
     document.getElementById('final-cut-score-boxes').innerHTML = boxHtml;
 }
 // ==========================================
-// 🤖 챗봇 창 크기 조절 로직 (당길 때만 창 전체가 늘어남)
+// 🤖 스마트 챗봇 창 크기 조절 (왼쪽은 얼음, 오른쪽 빈 공간으로만 확장)
 // ==========================================
 let isResizingChat = false;
 let chatStartX = 0;
 let chatStartWidth = 0;
+let leftPanelStartWidth = 0;
 
 function initChatResizer() {
-    const resizer = document.getElementById('chat-resizer-right'); // ID 정확히 매칭
-    const container = document.getElementById('ai-chat-container');
-    const mainSection = document.getElementById('analysis-layout-wrapper'); // 래퍼 기준으로 확장
+    const resizer = document.getElementById('chat-resizer-right');
+    const chatContainer = document.getElementById('ai-chat-container');
+    const leftPanel = document.querySelector('#analysis-layout-wrapper .quiz-container');
+    const mainContainer = document.querySelector('.container');
 
-    if(!resizer || !container) return;
+    if(!resizer || !chatContainer) return;
 
     resizer.addEventListener('mousedown', (e) => {
         isResizingChat = true;
         chatStartX = e.clientX;
-        chatStartWidth = container.getBoundingClientRect().width;
+        chatStartWidth = chatContainer.getBoundingClientRect().width;
+        
+        if (leftPanel) {
+            leftPanelStartWidth = leftPanel.getBoundingClientRect().width;
+            leftPanel.style.flex = 'none';
+            leftPanel.style.width = leftPanelStartWidth + 'px';
+            leftPanel.style.minWidth = leftPanelStartWidth + 'px';
+        }
+
+        if (mainContainer) {
+            const rect = mainContainer.getBoundingClientRect();
+            mainContainer.style.maxWidth = 'none'; 
+            mainContainer.style.marginLeft = rect.left + 'px'; 
+            mainContainer.style.marginRight = 'auto';
+        }
+
         document.body.style.cursor = 'ew-resize';
         document.body.style.userSelect = 'none';
     });
 
     document.addEventListener('mousemove', (e) => {
         if (!isResizingChat) return;
-        
-        // 오른쪽으로 당긴 만큼 너비 증가 (플러스로 변경)
         const newWidth = chatStartWidth + (e.clientX - chatStartX);
-        
-        if (newWidth > 350 && newWidth < 1200) { // 최대 너비 제한 완화
-            container.style.flex = 'none';
-            container.style.width = newWidth + 'px';
+        if (newWidth > 300 && newWidth < 900) { 
+            chatContainer.style.flex = 'none';
+            chatContainer.style.width = newWidth + 'px';
         }
     });
 
@@ -2132,7 +2147,6 @@ function initChatResizer() {
     });
 }
 
-// 🌟 다시 분석하기(초기화) 시 창 크기를 원래대로 복구
 function resetAnalysis() {
     document.getElementById('problem-image').value = "";
     document.getElementById('preview-container').style.display = 'none';
@@ -2143,165 +2157,31 @@ function resetAnalysis() {
     if(document.getElementById('analyze-multi-btn')) document.getElementById('analyze-multi-btn').style.display = 'none';
     document.getElementById('analysis-result').style.display = 'none';
     document.getElementById('crop-canvas').style.display = 'none';
+    
     cropBoxes = [];
     if(document.getElementById('crop-count')) document.getElementById('crop-count').innerText = "0개 영역 지정됨";
     
-    // 🌟 전체 창 크기 1200px 원상 복구
-    const mainSection = document.getElementById('problem-analysis');
-    if (mainSection) {
-        mainSection.style.maxWidth = ''; 
-        mainSection.style.width = '';
-    }
-    
-    // 🌟 챗봇 창 크기 원상 복구
     const chatContainer = document.getElementById('ai-chat-container');
     if(chatContainer) {
         chatContainer.style.display = 'none';
-        chatContainer.style.flex = '1';      
-        chatContainer.style.width = 'auto';  
+        chatContainer.style.flex = 'none';      
+        chatContainer.style.width = '350px';  
         document.getElementById('chat-history').innerHTML = "";
         currentChatContext = ""; 
     }
-}
 
-// ------------------------------------------
-// 📊 분할점수: 2단계 표 자동생성 및 엑셀 기능
-// ------------------------------------------
-function generateEmptyScoreTable() {
-    const choiceCount = parseInt(document.getElementById('choice-count').value) || 0;
-    const shortCount = parseInt(document.getElementById('short-count').value) || 0;
-    const container = document.getElementById('score-table-container');
-    
-    let html = `<table class="score-table">
-                <thead><tr><th>문항 번호</th><th>배점 (점)</th>
-                ${cutScoreMode === 'before' ? '<th>예상 성취수준</th>' : ''}
-                </tr></thead><tbody>`;
-    
-    let globalQNum = 1; 
-    
-    for(let i=1; i<=choiceCount; i++) {
-        html += `<tr><td>${i}</td>
-            <td><input type="number" step="0.1" class="score-input" data-num="${globalQNum}" placeholder="0.0"></td>
-            ${cutScoreMode === 'before' ? `<td><select class="level-select" onchange="showLevelTip(this)" style="padding:4px; font-weight:bold;"><option value="A">A</option><option value="B">B</option><option value="C" selected>C</option><option value="D">D</option><option value="E">E</option></select><div style="font-size:0.75rem; color:#64748b; margin-top:2px;">${levelMeanings['C']}</div></td>` : ''}
-        </tr>`;
-        globalQNum++;
+    const leftPanel = document.querySelector('#analysis-layout-wrapper .quiz-container');
+    if (leftPanel) {
+        leftPanel.style.flex = '1';
+        leftPanel.style.width = 'auto';
+        leftPanel.style.minWidth = '300px';
     }
     
-    for(let i=1; i<=shortCount; i++) {
-        html += `<tr style="background:#fff7ed;"><td>서${i}</td>
-            <td><input type="number" step="0.1" class="score-input" data-num="${globalQNum}" placeholder="0.0"></td>
-            ${cutScoreMode === 'before' ? `<td><select class="level-select" onchange="showLevelTip(this)" style="padding:4px; font-weight:bold;"><option value="A">A</option><option value="B">B</option><option value="C" selected>C</option><option value="D">D</option><option value="E">E</option></select><div style="font-size:0.75rem; color:#64748b; margin-top:2px;">${levelMeanings['C']}</div></td>` : ''}
-        </tr>`;
-        globalQNum++;
-    }
-    
-    html += `</tbody></table>`;
-    container.innerHTML = html;
-    document.getElementById('btn-next-to-step3').style.display = 'inline-block';
-}
-
-function showLevelTip(select) {
-    select.nextElementSibling.innerText = levelMeanings[select.value];
-}
-
-// 엑셀 다운로드 (길 1이면 성취수준 열 추가)
-function downloadScoreTemplate() {
-    const choiceCount = parseInt(document.getElementById('choice-count').value) || 0;
-    const shortCount = parseInt(document.getElementById('short-count').value) || 0;
-    let csv = cutScoreMode === 'before' ? "문항 번호,배점,성취수준\n" : "문항 번호,배점\n";
-    
-    for(let i=1; i<=choiceCount; i++) csv += cutScoreMode === 'before' ? `${i},0,C\n` : `${i},0\n`;
-    for(let i=1; i<=shortCount; i++) csv += cutScoreMode === 'before' ? `서${i},0,C\n` : `서${i},0\n`;
-    
-    const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "분할점수_배점양식.csv";
-    link.click();
-}
-
-// 엑셀 파일 직접 업로드 처리
-function handleExcelUpload(event) {
-    const file = event.target.files[0];
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const text = e.target.result;
-        const rows = text.split('\n').slice(1).map(r => r.split(','));
-        generateEmptyScoreTable(); 
-        fillTableWithData(rows);
-        alert("✅ 배점이 성공적으로 업로드되었습니다.");
-    };
-    reader.readAsText(file, 'euc-kr');
-}
-
-// 🌟 마법의 Ctrl+V (엑셀 붙여넣기) 향상된 감지 로직
-document.addEventListener('paste', (e) => {
-    const step2 = document.getElementById('cut-score-step2');
-    if(step2 && step2.style.display === 'block') {
-        const pastedData = (e.clipboardData || window.clipboardData).getData('Text');
-        if(pastedData && (pastedData.includes('\t') || pastedData.includes('\n'))) { 
-            const rows = pastedData.trim().split('\n').map(r => r.split(/\t/));
-            if(rows[0] && isNaN(parseInt(rows[0][0].replace(/[^0-9]/g, '')))) rows.shift(); // 헤더 제거
-            
-            generateEmptyScoreTable();
-            
-            const inputs = document.querySelectorAll('.score-input');
-            const selects = document.querySelectorAll('.level-select');
-            
-            rows.forEach((cols, idx) => {
-                // 배점 처리
-                if(cols[1] && inputs[idx]) {
-                    inputs[idx].value = cols[1].trim();
-                }
-                // 성취수준 처리 (대소문자 무시 로직)
-                if(cols[2] && selects[idx] && cutScoreMode === 'before') {
-                    const val = cols[2].trim().toUpperCase(); // 무조건 대문자로 변환하여 비교
-                    if(['A','B','C','D','E'].includes(val)) {
-                        selects[idx].value = val;
-                        showLevelTip(selects[idx]);
-                    }
-                }
-            });
-            e.preventDefault(); 
-            e.stopPropagation(); // 이미지 붙여넣기 등 다른 이벤트 충돌 방지
-            alert("✨ 엑셀 데이터가 표에 완벽하게 복사되었습니다!");
-        }
-    }
-});
-
-// 표에 데이터 꽂아 넣기 (공통 함수)
-function fillTableWithData(rows) {
-    const inputs = document.querySelectorAll('.score-input');
-    const selects = document.querySelectorAll('.level-select');
-    
-    rows.forEach((cols, idx) => {
-        if(cols[1] && inputs[idx]) {
-            inputs[idx].value = cols[1].trim();
-        }
-        // 길 1일 때 성취수준 3번째 열 처리 (대소문자 무시)
-        if(cols[2] && selects[idx] && cutScoreMode === 'before') {
-            const val = cols[2].trim().toUpperCase(); 
-            if(['A','B','C','D','E'].includes(val)) {
-                selects[idx].value = val;
-                showLevelTip(selects[idx]); // 설명 팁도 업데이트
-            }
-        }
-    });
-}
-
-function handleNextToStep3() {
-    parsedScores = [];
-    document.querySelectorAll('.score-input').forEach(input => {
-        parsedScores.push({ 
-            num: parseInt(input.getAttribute('data-num')), 
-            score: parseFloat(input.value) || 0 
-        });
-    });
-
-    if(cutScoreMode === 'before') {
-        alert("✅ 시뮬레이션 모드 연결 준비 중입니다!");
-    } else {
-        goToStep(3); 
+    const mainContainer = document.querySelector('.container');
+    if (mainContainer) {
+        mainContainer.style.maxWidth = '';
+        mainContainer.style.marginLeft = '';
+        mainContainer.style.marginRight = '';
     }
 }
 
@@ -2311,3 +2191,282 @@ window.onload = async () => {
     if(originalOnload) await originalOnload();
     initChatResizer(); 
 };
+// ==========================================
+// 🛠️ 관리자 모드: 기존 성취기준 수정 및 삭제 로직
+// ==========================================
+async function loadStandardsForEdit() {
+    const subject = document.getElementById('admin-edit-subject').value;
+    const stdSelect = document.getElementById('admin-edit-standard');
+    const editFields = document.getElementById('admin-edit-fields');
+    
+    stdSelect.innerHTML = '<option value="">데이터를 불러오는 중입니다...</option>';
+    editFields.style.display = 'none'; // 다른 과목 선택 시 창 숨기기
+
+    if (!subject) {
+        stdSelect.innerHTML = '<option value="">앞에서 과목을 먼저 선택해 주세요</option>';
+        return;
+    }
+
+    try {
+        const snapshot = await db.collection('standards_2022').where('subject', '==', subject).get();
+        let stds = [];
+        snapshot.forEach(doc => stds.push({ id: doc.id, ...doc.data() }));
+        stds.sort((a,b) => a.code.localeCompare(b.code));
+
+        stdSelect.innerHTML = '<option value="">-- 수정할 성취기준을 선택하세요 --</option>';
+        stds.forEach(std => {
+            const option = document.createElement('option');
+            option.value = std.id;
+            option.text = `${std.code} ${std.desc.substring(0, 20)}...`;
+            // 🌟 꿀팁: 선택 시 서버에 다시 요청하지 않도록 옵션 태그 안에 데이터를 숨겨둡니다.
+            option.dataset.code = std.code || '';
+            option.dataset.desc = std.desc || '';
+            option.dataset.l_high = std.levels?.high || '';
+            option.dataset.l_b = std.levels?.b || '';
+            option.dataset.l_mid = std.levels?.mid || '';
+            option.dataset.l_d = std.levels?.d || '';
+            option.dataset.l_low = std.levels?.low || '';
+            stdSelect.appendChild(option);
+        });
+    } catch (error) {
+        stdSelect.innerHTML = '<option value="">불러오기 오류 발생</option>';
+    }
+}
+
+function populateEditFields() {
+    const select = document.getElementById('admin-edit-standard');
+    const editFields = document.getElementById('admin-edit-fields');
+    const option = select.options[select.selectedIndex];
+
+    if (!option.value) {
+        editFields.style.display = 'none';
+        return;
+    }
+
+    // 숨겨둔 데이터를 꺼내어 입력칸(input)에 예쁘게 채워줍니다.
+    document.getElementById('edit-code').value = option.dataset.code;
+    document.getElementById('edit-desc').value = option.dataset.desc;
+    document.getElementById('edit-level-high').value = option.dataset.l_high;
+    document.getElementById('edit-level-b').value = option.dataset.l_b;
+    document.getElementById('edit-level-mid').value = option.dataset.l_mid;
+    document.getElementById('edit-level-d').value = option.dataset.l_d;
+    document.getElementById('edit-level-low').value = option.dataset.l_low;
+
+    editFields.style.display = 'block'; // 입력창 짠! 나타나기
+}
+
+async function updateStandardInDB() {
+    const docId = document.getElementById('admin-edit-standard').value;
+    if (!docId) return;
+
+    const updatedData = {
+        code: document.getElementById('edit-code').value.trim(),
+        desc: document.getElementById('edit-desc').value.trim(),
+        levels: {
+            high: document.getElementById('edit-level-high').value.trim(),
+            b: document.getElementById('edit-level-b').value.trim(),
+            mid: document.getElementById('edit-level-mid').value.trim(),
+            d: document.getElementById('edit-level-d').value.trim(),
+            low: document.getElementById('edit-level-low').value.trim()
+        }
+    };
+
+    if (!updatedData.code || !updatedData.desc) {
+        alert("성취기준 코드와 내용은 필수입니다!");
+        return;
+    }
+
+    if(confirm("이대로 덮어쓰시겠습니까? (기존 내용은 사라집니다)")) {
+        try {
+            await db.collection('standards_2022').doc(docId).update(updatedData);
+            alert("✅ 성공적으로 수정되었습니다!");
+            location.reload(); // 새로고침해서 최신 데이터 반영
+        } catch(e) { alert("수정 실패: " + e.message); }
+    }
+}
+
+async function deleteStandardFromDB() {
+    const docId = document.getElementById('admin-edit-standard').value;
+    if (!docId) return;
+
+    if(confirm("🚨 정말로 이 성취기준을 삭제하시겠습니까?\n한 번 삭제하면 되돌릴 수 없습니다!")) {
+        try {
+            await db.collection('standards_2022').doc(docId).delete();
+            alert("🗑️ 성취기준이 삭제되었습니다.");
+            location.reload();
+        } catch(e) { alert("삭제 실패: " + e.message); }
+    }
+}
+// ==========================================
+// 🛠️ 관리자 모드: 기존 문항(Question) 수정 및 삭제 로직
+// ==========================================
+let currentEditingAllQuestions = []; // 현재 선택된 성취기준의 모든 문항 임시 저장
+
+async function loadStandardsForManage() {
+    const subject = document.getElementById('admin-manage-q-subject').value;
+    const stdSelect = document.getElementById('admin-manage-q-standard');
+    stdSelect.innerHTML = '<option value="">로딩 중...</option>';
+    if (!subject) return;
+
+    const snapshot = await db.collection('standards_2022').where('subject', '==', subject).get();
+    let stds = [];
+    snapshot.forEach(doc => stds.push({ id: doc.id, code: doc.data().code, desc: doc.data().desc }));
+    stds.sort((a,b) => a.code.localeCompare(b.code));
+
+    stdSelect.innerHTML = '<option value="">-- 성취기준 선택 --</option>';
+    stds.forEach(std => {
+        stdSelect.innerHTML += `<option value="${std.id}">${std.code} ${std.desc.substring(0, 20)}...</option>`;
+    });
+}
+
+async function loadQuestionsForEdit() {
+    const docId = document.getElementById('admin-manage-q-standard').value;
+    const qSelect = document.getElementById('admin-manage-q-list');
+    const fields = document.getElementById('question-edit-fields');
+    fields.style.display = 'none';
+
+    if (!docId) return;
+
+    const doc = await db.collection('standards_2022').doc(docId).get();
+    currentEditingAllQuestions = doc.data().questions || [];
+
+    if (currentEditingAllQuestions.length === 0) {
+        qSelect.innerHTML = '<option value="">등록된 문항이 없습니다.</option>';
+        return;
+    }
+
+    qSelect.innerHTML = '<option value="">-- 수정할 문항 선택 --</option>';
+    currentEditingAllQuestions.forEach((q, idx) => {
+        qSelect.innerHTML += `<option value="${idx}">[${q.level}] ${q.q.substring(0, 30)}...</option>`;
+    });
+}
+
+function populateQuestionEditFields() {
+    const idx = document.getElementById('admin-manage-q-list').value;
+    const fields = document.getElementById('question-edit-fields');
+    if (idx === "") { fields.style.display = 'none'; return; }
+
+    const q = currentEditingAllQuestions[idx];
+    document.getElementById('manage-q-text').value = q.q;
+    document.getElementById('manage-q-answer').value = q.answer || "";
+    document.getElementById('manage-q-level').value = q.level;
+    document.getElementById('manage-q-reason').value = q.reason;
+    fields.style.display = 'block';
+}
+
+async function updateQuestionInDB() {
+    const docId = document.getElementById('admin-manage-q-standard').value;
+    const qIdx = document.getElementById('admin-manage-q-list').value;
+    if (!docId || qIdx === "") return;
+
+    // 현재 배열 복사 후 해당 인덱스 내용 수정
+    let updatedQuestions = [...currentEditingAllQuestions];
+    updatedQuestions[qIdx] = {
+        q: document.getElementById('manage-q-text').value.trim(),
+        answer: document.getElementById('manage-q-answer').value.trim(),
+        level: document.getElementById('manage-q-level').value,
+        reason: document.getElementById('manage-q-reason').value.trim()
+    };
+
+    if (confirm("문항 내용을 수정하시겠습니까?")) {
+        await db.collection('standards_2022').doc(docId).update({ questions: updatedQuestions });
+        alert("✅ 문항이 수정되었습니다!");
+        location.reload();
+    }
+}
+
+async function deleteQuestionFromDB() {
+    const docId = document.getElementById('admin-manage-q-standard').value;
+    const qIdx = document.getElementById('admin-manage-q-list').value;
+    if (!docId || qIdx === "") return;
+
+    if (confirm("🚨 정말로 이 문항을 삭제하시겠습니까?")) {
+        let updatedQuestions = [...currentEditingAllQuestions];
+        updatedQuestions.splice(qIdx, 1); // 해당 인덱스 문항 제거
+
+        await db.collection('standards_2022').doc(docId).update({ questions: updatedQuestions });
+        alert("🗑️ 문항이 삭제되었습니다.");
+        location.reload();
+    }
+}
+// ==========================================
+// 📂 사용자 폴더(프로젝트) 관리 시스템 (분할점수 산출용)
+// ==========================================
+let currentProjectId = null;
+
+// 1. 파이어베이스에서 내 폴더 불러오기
+async function loadProjects() {
+    const user = auth.currentUser;
+    const listEl = document.getElementById('project-folder-list');
+    
+    if(!user) {
+        listEl.innerHTML = '<p style="color:#ef4444; grid-column: 1 / -1; text-align: center;">⚠️ 폴더를 관리하려면 구글 로그인이 필요합니다.</p>';
+        return;
+    }
+
+    listEl.innerHTML = '<p style="color: #64748b; grid-column: 1 / -1; text-align: center;">폴더를 불러오는 중...</p>';
+
+    try {
+        const snapshot = await db.collection('user_projects')
+            .where('uid', '==', user.uid)
+            .orderBy('createdAt', 'desc')
+            .get();
+
+        if(snapshot.empty) {
+            listEl.innerHTML = '<p style="color:#64748b; grid-column: 1 / -1; text-align: center;">생성된 폴더가 없습니다. 우측 상단의 [+ 새 폴더 만들기]를 눌러보세요!</p>';
+            return;
+        }
+
+        let html = '';
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            const dateStr = data.createdAt ? data.createdAt.toDate().toLocaleDateString() : '최근';
+            
+            html += `
+            <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 1.5rem; background: white; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05);" 
+                 onmouseover="this.style.borderColor='#3b82f6'; this.style.transform='translateY(-3px)';" 
+                 onmouseout="this.style.borderColor='#cbd5e1'; this.style.transform='none';" 
+                 onclick="openProject('${doc.id}', '${data.name}')">
+                <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📁</div>
+                <h4 style="margin: 0 0 0.5rem 0; color: #1e293b; font-size: 1.1rem;">${data.name}</h4>
+                <p style="margin: 0; font-size: 0.8rem; color: #64748b;">생성일: ${dateStr}</p>
+            </div>`;
+        });
+        listEl.innerHTML = html;
+    } catch(e) {
+        console.error(e);
+        listEl.innerHTML = '<p style="color:red; grid-column: 1 / -1;">폴더를 불러오는데 실패했습니다.</p>';
+    }
+}
+
+// 2. 새 폴더 만들기 (DB에 저장)
+async function createNewProject() {
+    const user = auth.currentUser;
+    if(!user) { alert("로그인이 필요합니다."); return; }
+
+    const projectName = prompt("새로운 폴더 이름을 입력하세요.\n(예: 2026학년도 1학기 A고등학교)");
+    if(!projectName || projectName.trim() === "") return;
+
+    try {
+        await db.collection('user_projects').add({
+            uid: user.uid,
+            name: projectName.trim(),
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            assessments: [] // 나중에 1회고사, 수행평가 데이터가 들어갈 빈 바구니
+        });
+        alert("✨ 새 폴더가 생성되었습니다!");
+        loadProjects(); // 화면 새로고침
+    } catch(e) {
+        alert("폴더 생성 실패: " + e.message);
+    }
+}
+
+// 3. 폴더 클릭 시 열기 (다음 단계 준비용)
+function openProject(projectId, projectName) {
+    currentProjectId = projectId;
+    alert(`[${projectName}] 폴더가 열렸습니다!\n\n(다음 단계: 이 폴더 안에서 1회고사/2회고사를 추가하고, 합산하는 화면을 만들 예정입니다. 현재는 1단계 세팅 화면으로 임시 이동합니다.)`);
+    
+    // 임시로 원래 있던 1단계 평가 세팅 화면으로 넘어가게 해둡니다.
+    document.getElementById('cut-score-dashboard').style.display = 'none';
+    document.getElementById('cut-score-step1').style.display = 'block';
+}
