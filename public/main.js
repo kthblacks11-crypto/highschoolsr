@@ -2470,3 +2470,74 @@ function openProject(projectId, projectName) {
     document.getElementById('cut-score-dashboard').style.display = 'none';
     document.getElementById('cut-score-step1').style.display = 'block';
 }
+// 🌟 현재 계산된 컷오프 점수를 열려있는 폴더(Project)에 저장하는 함수
+async function saveAssessmentToProject() {
+    if (!currentProjectId) { alert("먼저 폴더를 선택하거나 생성해 주세요!"); return; }
+    
+    const name = document.getElementById('assessment-name').value.trim();
+    const weight = parseFloat(document.getElementById('assessment-weight').value) || 0;
+    
+    if (!name || weight <= 0) { alert("평가 명칭과 반영 비율을 정확히 입력해 주세요."); return; }
+
+    // 현재 화면에 표시된 컷오프 점수들 가져오기
+    const boxes = document.getElementById('final-cut-score-boxes').querySelectorAll('span');
+    const cutOffs = {
+        A: parseFloat(boxes[0].innerText),
+        B: parseFloat(boxes[1].innerText),
+        C: parseFloat(boxes[2].innerText),
+        D: parseFloat(boxes[3].innerText),
+        E: parseFloat(boxes[4].innerText)
+    };
+
+    try {
+        await db.collection('user_projects').doc(currentProjectId).update({
+            assessments: firebase.firestore.FieldValue.arrayUnion({
+                name: name,
+                weight: weight,
+                scores: cutOffs,
+                savedAt: new Date()
+            })
+        });
+        alert(`✅ [${name}] 데이터가 폴더에 안전하게 저장되었습니다!`);
+        document.getElementById('assessment-name').value = "";
+        document.getElementById('assessment-weight').value = "";
+    } catch(e) {
+        alert("저장 실패: " + e.message);
+    }
+}
+// 🌟 현재 계산된 컷오프 점수를 열려있는 폴더(Project)에 저장하는 함수
+async function saveAssessmentToProject() {
+    if (!currentProjectId) { alert("먼저 폴더를 선택하거나 생성해 주세요!"); return; }
+    
+    const name = document.getElementById('assessment-name').value.trim();
+    const weight = parseFloat(document.getElementById('assessment-weight').value) || 0;
+    
+    if (!name || weight <= 0) { alert("평가 명칭과 반영 비율을 정확히 입력해 주세요."); return; }
+
+    const boxes = document.getElementById('final-cut-score-boxes').querySelectorAll('span');
+    if (boxes.length < 5) { alert("점수 산출이 먼저 완료되어야 합니다."); return; }
+
+    const cutOffs = {
+        A: parseFloat(boxes[0].innerText),
+        B: parseFloat(boxes[1].innerText),
+        C: parseFloat(boxes[2].innerText),
+        D: parseFloat(boxes[3].innerText),
+        E: parseFloat(boxes[4].innerText)
+    };
+
+    try {
+        await db.collection('user_projects').doc(currentProjectId).update({
+            assessments: firebase.firestore.FieldValue.arrayUnion({
+                name: name,
+                weight: weight,
+                scores: cutOffs,
+                savedAt: new Date()
+            })
+        });
+        alert(`✅ [${name}] 데이터가 폴더에 안전하게 저장되었습니다!`);
+        document.getElementById('assessment-name').value = "";
+        document.getElementById('assessment-weight').value = "";
+    } catch(e) {
+        alert("저장 실패: " + e.message);
+    }
+}
