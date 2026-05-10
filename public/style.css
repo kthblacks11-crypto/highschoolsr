@@ -270,23 +270,33 @@ header {
     display: block; /* 마우스를 올리면 안내 문구 표시 */
 }
 /* ==========================================
-   🤖 챗봇 창 & 레이아웃 확장 (우측 여백 활용)
+   🚀 레이아웃 한계 해제 및 우측 챗봇 확장
    ========================================== */
-/* 메인 분석 레이아웃이 모니터 여백을 다 쓸 수 있도록 확장 */
-#analysis-layout-wrapper {
-    max-width: 1600px !important; 
+   #analysis-layout-wrapper {
+    max-width: 1600px !important; /* 물리적 1200px 제한을 풀고 와이드 모니터 대응 */
+    width: 98% !important;
     margin: 0 auto;
-    width: 100%;
+    justify-content: flex-start; /* 왼쪽 정렬을 통해 우측 여백 확보 */
 }
 
-/* 문제 풀이(왼쪽) 영역이 챗봇에 밀려 찌그러지지 않도록 단단하게 고정 */
-#exam-viewer-left, 
-.left-panel { /* 클래스명은 선생님의 기존 구조에 맞춤 */
+/* 왼쪽 문제풀이 창이 절대 찌그러지지 않도록 방어 */
+#exam-viewer-left, .left-panel {
     flex-shrink: 0 !important;
-    min-width: 60%; /* 최소 60%의 영역은 무조건 사수 */
+    min-width: 55%; 
 }
 
-/* 챗봇 크기 조절 손잡이를 왼쪽에서 끌 때 자연스럽게 늘어나도록 처리 */
-#ai-chat-container {
-    transition: width 0.1s ease-out;
+/* 챗봇 우측 크기 조절 손잡이 */
+.chat-resizer-right {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 8px;
+    height: 100%;
+    cursor: ew-resize;
+    background: #fca5a5;
+    z-index: 10;
+    transition: background 0.2s;
+}
+.chat-resizer-right:hover {
+    background: #ef4444;
 }
