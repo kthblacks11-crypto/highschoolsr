@@ -56,6 +56,7 @@
       <option value="geometry">기하</option>
       <option value="ai-math">인공지능 수학</option>
     </optgroup>
+    <option value="uncategorized">📦 미분류 보관함</option>
   </select>
 </div>
 
@@ -153,17 +154,42 @@
             <p style="color: #64748b; grid-column: 1 / -1; text-align: center; padding: 2rem;">폴더를 불러오는 중입니다... ⏳</p>
         </div>
     </div>
-    
+    <div id="project-detail-view" class="cut-score-card" style="display: none;">
+        <h3 id="project-detail-title" style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem; margin-top:0;">
+            프로젝트 상세
+        </h3>
+        <button class="btn-step-prev" onclick="backToProjectList()" style="margin-bottom: 1.5rem;">◀ 폴더 목록으로</button>
+
+        <div>
+            <h4 style="margin-bottom: 0.5rem; color: #334155;">📌 이 폴더에 등록된 평가 목록</h4>
+            <div id="project-assessment-list">
+                </div>
+        </div>
+
+        <div style="background: #f0fdf4; border: 2px solid #22c55e; border-radius: 8px; padding: 1.5rem; margin-top: 1.5rem; text-align: center;">
+            <h3 style="margin:0 0 1rem 0; color:#166534;">🏆 학기말 최종 예상 분할점수</h3>
+            <div id="project-final-cut-scores" style="display: flex; gap: 10px; justify-content: space-around; flex-wrap: wrap;">
+                </div>
+            <p id="weight-warning" style="color: #ef4444; font-weight: bold; margin-top: 15px; display: none; background: #fee2e2; padding: 10px; border-radius: 8px;">
+                ⚠️ 등록된 평가의 반영 비율 합계가 100%가 아닙니다. 점검해 주세요!
+            </p>
+        </div>
+
+        <div style="margin-top: 2rem; display: flex; gap: 1rem;">
+            <button class="save-btn" onclick="goToStep(1)" style="flex: 1; margin: 0; background: #ea580c;">📝 지필평가 (AI 분석) 추가</button>
+            <button class="save-btn" onclick="openManualAssessmentModal()" style="flex: 1; margin: 0; background: #8b5cf6;">✍️ 수행평가 (직접 입력) 추가</button>
+        </div>
+    </div>    
     <div id="cut-score-step1" class="cut-score-card">
-        <h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">1단계: 출제 범위 설정</h3>
-        <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+        <h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">1단계: 평가 세팅 및 분석 경로 선택</h3>
+        
+        <div style="display: flex; gap: 1rem; margin-bottom: 2rem;">
             <div style="flex: 1;">
                 <label style="font-weight: bold; color: #334155; display: block; margin-bottom: 0.5rem;">[1] 교과군 선택</label>
                 <select id="cut-score-group" class="option-btn" style="text-align: left; padding: 0.8rem; width: 100%;" onchange="updateSubjectList()">
                     <option value="">-- 선택 --</option>
                     <option value="math">수학</option><option value="korean">국어</option>
-                    <option value="english">영어</option><option value="social">사회</option>
-                    <option value="science">과학</option>
+                    <option value="english">영어</option><option value="social">사회</option><option value="science">과학</option>
                 </select>
             </div>
             <div style="flex: 1;">
@@ -173,23 +199,33 @@
                 </select>
             </div>
         </div>
-        <div style="margin-top: 2rem;">
-            <label style="font-weight: bold; color: #334155;">[3] 출제 성취기준 선택 <span style="font-weight: normal; font-size: 0.85rem; color: #ea580c;">(💡 Shift + 클릭으로 범위 선택)</span></label>
-            <div id="cut-score-standards-list" style="margin-top: 0.5rem; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; max-height: 250px; overflow-y: auto;">
-                <p style="color: #94a3b8; font-size: 0.95rem; margin: 0; text-align: center;">과목을 선택하면 성취기준 목록이 나타납니다.</p>
+
+        <div style="display: flex; gap: 1.5rem; margin-top: 1rem;">
+            <div style="flex: 1; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 1.5rem; text-align: center;">
+                <h4 style="color: #475569; margin-top: 0;">출제 전 / 이원목적분류표 기반</h4>
+                <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1.5rem;">성취기준 선택 없이, 이원목적분류표 상의 난이도(상/중/하) 배점만 입력하여 초고속으로 분할점수를 예측합니다.</p>
+                <button class="save-btn" onclick="startPath1()" style="background: #64748b; margin: 0;">🛤️ 길 1: 초간단 시뮬레이션 시작</button>
             </div>
-        </div>
-        <div style="margin-top: 2rem; display: flex; gap: 1rem;">
-            <button class="save-btn" onclick="startCutScore('before')" style="background: #64748b; flex: 1;">🛤️ 길 1: 평가 전 (사전 시뮬레이션)</button>
-            <button class="save-btn" onclick="startCutScore('after')" style="background: #ea580c; flex: 1;">🛤️ 길 2: 평가 후 (정밀 분석)</button>
+
+            <div style="flex: 1; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; padding: 1.5rem;">
+                <h4 style="color: #ea580c; margin-top: 0; text-align: center;">출제 후 / AI 시험지 정밀 분석</h4>
+                <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1rem; text-align: center;">출제 범위(성취기준)를 선택하고 시험지를 올리면, AI가 문항을 뜯어보고 정답률을 추정합니다.</p>
+                
+                <div id="cut-score-standards-list" style="background: white; border: 1px solid var(--border); border-radius: 8px; padding: 1rem; max-height: 150px; overflow-y: auto; margin-bottom: 1rem;">
+                    <p style="color: #94a3b8; font-size: 0.85rem; margin: 0; text-align: center;">과목을 선택하면 성취기준이 나타납니다.</p>
+                </div>
+                
+                <button class="save-btn" onclick="startPath2()" style="background: #ea580c; margin: 0;">🛤️ 길 2: AI 정밀 분석 시작</button>
+            </div>
         </div>
     </div>
 
     <div id="cut-score-step2" class="cut-score-card" style="display: none;">
-        <h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">2단계: 문항 정보(배점) 입력</h3>
-        <div id="path1-guide" style="display:none; background: #f0fdf4; border-left: 4px solid #10b981; padding: 1rem; margin-bottom: 1rem; font-size: 0.9rem;">
+        <h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">2단계: 이원목적분류표 배점 입력 (길 1)</h3>
+        
+        <div id="path1-guide" style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1rem; margin-bottom: 1rem; font-size: 0.9rem;">
             <strong style="font-size: 1rem;">💡 문항별 예상 성취수준 가이드</strong><br>
-            <span style="color:#475569; font-size:0.85rem;">엑셀표를 복사하여 화면에 <strong>Ctrl+V</strong> 하시면 표가 자동으로 채워집니다. (소문자 a,b,c 도 인식합니다)</span>
+            <span style="color:#475569; font-size:0.85rem;">각 난이도별 <strong>'배점 합계'</strong>만 입력해 주세요. (예: 쉬운 객관식이 6문제고 합쳐서 14점이면 14 입력)</span>
             <ul style="margin: 8px 0 0 0; padding-left: 20px; line-height: 1.6; color: #334155;">
                 <li><strong>A수준:</strong> 성취기준을 포괄적으로 이해하고, 복잡한 문제 상황에서 수학적 개념을 융합하여 해결할 수 있는 수준</li>
                 <li><strong>B수준:</strong> 성취기준에 대한 이해를 바탕으로, 일반적인 문제 상황에서 개념을 적용할 수 있는 수준</li>
@@ -198,27 +234,30 @@
                 <li><strong>E수준:</strong> 기초적인 수학적 지식에 대한 보충 학습이 필요한 수준</li>
             </ul>
         </div>
-        <div style="display: flex; gap: 15px; align-items: center; margin-bottom: 1.5rem; background: #f8fafc; padding: 1rem; border-radius: 10px;">
-            <div style="font-weight:bold;">객관식: <input type="number" id="choice-count" value="20" style="width:50px; text-align:center;"> 문항</div>
-            <div style="font-weight:bold;">서술형: <input type="number" id="short-count" value="5" style="width:50px; text-align:center;"> 문항</div>
-            <button class="btn-step-prev" onclick="generateEmptyScoreTable()" style="color:var(--primary); border-color:var(--primary);">✨ 표 자동 생성</button>
-            <div style="margin-left: auto;">
-                <button class="btn-step-prev" onclick="downloadScoreTemplate()">📥 양식 다운로드</button>
-                <button class="btn-step-prev" onclick="document.getElementById('excel-upload').click()" style="background:#10b981; color:white; border:none;">📤 엑셀 업로드</button>
-                <input type="file" id="excel-upload" accept=".csv" style="display:none;" onchange="handleExcelUpload(event)">
-            </div>
+        
+        <div style="overflow-x: auto; margin-bottom: 1.5rem;">
+            <table class="score-table">
+                <thead style="background: #f1f5f9;">
+                    <tr>
+                        <th rowspan="2">평가 유형</th><th rowspan="2">예상 난이도</th><th rowspan="2" style="color: #ea580c;">배점 합계</th>
+                        <th colspan="5">최소능력자의 예상 정답률 (%)</th>
+                    </tr>
+                    <tr>
+                        <th>A</th><th>B</th><th>C</th><th>D</th><th>E</th>
+                    </tr>
+                </thead>
+                <tbody id="path1-table-body">
+                    </tbody>
+            </table>
         </div>
-        <div id="score-table-container" style="max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 1.5rem;">
-            <p style="text-align:center; padding: 2rem; color: #94a3b8;">[표 자동 생성]을 누르거나 엑셀 파일을 업로드해주세요.</p>
-        </div>
+
         <div style="display: flex; justify-content: space-between;">
             <button class="btn-step-prev" onclick="goToStep(1)">◀ 이전 단계로</button>
-            <button id="btn-next-to-step3" class="save-btn" onclick="handleNextToStep3()" style="width: auto; background: #ea580c; display:none;">다음 단계로 이동 ➡️</button>
+            <button class="save-btn" onclick="calculatePath1Total()" style="width: auto; background: #2563eb;">결과 산출하기 ➡️</button>
         </div>
     </div>
-
     <div id="cut-score-step3" class="cut-score-card" style="display: none;">
-        <h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">3단계: 출제 문항 업로드 및 데이터화</h3>
+        <h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">2단계: 문항 업로드 및 정밀 설정</h3>
         <div id="exam-upload-zone" style="border: 2px dashed #cbd5e1; border-radius: 12px; padding: 3rem; text-align: center; margin-bottom: 1.5rem; cursor: pointer; background: #f8fafc;" onclick="document.getElementById('exam-file').click()">
             <span style="font-size: 3rem;">📄</span>
             <p style="margin-top: 1rem; font-weight: bold; color: var(--primary);">시험지 파일을 업로드하세요.</p>
@@ -243,7 +282,7 @@
     </div>
 
     <div id="cut-score-step4" class="cut-score-card" style="display: none;">
-        <h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">4단계: 최종 분할점수 산출</h3>
+        <h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">3단계: 최종 예상 분할점수 산출</h3>
         <div id="final-ai-loading" style="display: none; text-align: center; padding: 2rem;">
             <p style="font-weight: bold; color: #10b981;">최종 결과 산출 중... ⏳</p>
         </div>
@@ -647,4 +686,32 @@
 </div>
 
 <script src="main.js?v=4"></script>
+<div class="modal" id="manual-assessment-modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <span class="close-btn" onclick="closeManualAssessmentModal()">&times;</span>
+        <h2 style="margin-top: 0; color: #8b5cf6;">✍️ 수행평가 점수 직접 추가</h2>
+        
+        <div style="background: #f8fafc; padding: 1.2rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #cbd5e1; font-size: 0.9rem;">
+            <strong style="color: #334155;">💡 수행평가 입력 팁</strong><br>
+            수행평가 만점이 40점(반영비율 40%)이고, 교과협의회에서 A수준을 90%(36점)로 정했다면 A칸에 36을 입력하세요.
+        </div>
+
+        <label style="font-weight: bold; font-size: 0.9rem;">1. 평가 이름 및 반영 비율</label>
+        <div style="display: flex; gap: 10px; margin-bottom: 1.5rem; margin-top: 0.5rem;">
+            <input type="text" id="manual-assess-name" placeholder="예: 포트폴리오 평가" style="flex: 2; padding: 0.8rem; border: 1px solid #cbd5e1; border-radius: 8px;">
+            <input type="number" id="manual-assess-weight" placeholder="비율(%)" style="flex: 1; padding: 0.8rem; border: 1px solid #cbd5e1; border-radius: 8px;">
+        </div>
+
+        <label style="font-weight: bold; font-size: 0.9rem;">2. 성취수준별 컷오프 점수</label>
+        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 0.5rem; margin-bottom: 1.5rem;">
+            <div><div style="text-align:center; font-weight:bold; color:#ef4444; margin-bottom:5px;">A</div><input type="number" step="0.1" id="manual-a" placeholder="점수" style="width:100%; box-sizing:border-box; padding:0.8rem 0.2rem; text-align:center; border:1px solid #cbd5e1; border-radius:8px;"></div>
+            <div><div style="text-align:center; font-weight:bold; color:#f59e0b; margin-bottom:5px;">B</div><input type="number" step="0.1" id="manual-b" placeholder="점수" style="width:100%; box-sizing:border-box; padding:0.8rem 0.2rem; text-align:center; border:1px solid #cbd5e1; border-radius:8px;"></div>
+            <div><div style="text-align:center; font-weight:bold; color:#22c55e; margin-bottom:5px;">C</div><input type="number" step="0.1" id="manual-c" placeholder="점수" style="width:100%; box-sizing:border-box; padding:0.8rem 0.2rem; text-align:center; border:1px solid #cbd5e1; border-radius:8px;"></div>
+            <div><div style="text-align:center; font-weight:bold; color:#3b82f6; margin-bottom:5px;">D</div><input type="number" step="0.1" id="manual-d" placeholder="점수" style="width:100%; box-sizing:border-box; padding:0.8rem 0.2rem; text-align:center; border:1px solid #cbd5e1; border-radius:8px;"></div>
+            <div><div style="text-align:center; font-weight:bold; color:#64748b; margin-bottom:5px;">E</div><input type="number" step="0.1" id="manual-e" placeholder="점수" style="width:100%; box-sizing:border-box; padding:0.8rem 0.2rem; text-align:center; border:1px solid #cbd5e1; border-radius:8px;"></div>
+        </div>
+
+        <button class="save-btn" onclick="saveManualAssessment()" style="background: #8b5cf6; margin: 0;">➕ 프로젝트에 이 점수 합산하기</button>
+    </div>
+</div>
 </body>

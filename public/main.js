@@ -512,6 +512,7 @@ async function executeAnalysis() {
 성취기준: [코드] 성취기준의 전체 내용
 성취수준: A~E 중 택 1
 판정 이유: "<국가 수준 평가 루브릭>의 [어떤 세부 기준]에 부합하며, 추가로 [AI의 수학적 근거]를 고려하여 판단함" 형태로 구체적으로 서술
+💡 중요: 만약 제공된 <과목별 성취기준 목록>에서 적절한 성취기준을 찾을 수 없다면(예: 미적분, 기하 등), [판정 이유]의 맨 마지막 줄에 반드시 "AI 판단 과목: [선수학습 또는 미적분 등 과목명]" 이라고 명시해주세요.
 
 <과목별 성취기준 목록>
 ${standardsInfo}
@@ -559,7 +560,7 @@ ${systemRubric}
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ parts: apiParts }],
-                generationConfig: { temperature: 0.1, topP: 0.9, maxOutputTokens: 3072 }
+                generationConfig: { temperature: 0.1, topP: 0.9, maxOutputTokens: 8192 }
             })
         });
 
@@ -1376,47 +1377,79 @@ function resetBookmarkView() {
     document.getElementById('bookmark-list').innerHTML = "";
 }
 
+// 🟢 [수정됨] 미분류 탭을 완벽하게 지원하는 북마크 로직
 async function loadBookmark(level) {
-    const subject = currentSubject; 
+    // 선택된 과목이 없으면 기본값으로 uncategorized 설정
+    const subject = currentSubject || "uncategorized"; 
     const listContainer = document.getElementById('bookmark-list');
     listContainer.innerHTML = "<p style='text-align:center; color:var(--primary); font-weight:bold;'>데이터베이스에서 문항을 불러오는 중입니다... ⏳</p>";
 
-    const data = subjectData[subject];
-    if (!data || !data.standards) {
-        listContainer.innerHTML = "<p style='text-align:center;'>해당 과목의 데이터가 없습니다.</p>";
-        return;
-    }
-
     currentBookmarkQuestions = [];
 
-    data.standards.forEach(std => {
-        if (std.questions && std.questions.length > 0) {
-            std.questions.forEach(q => {
-                if (q.level === level) {
+    // 🌟 [신규] '미분류 보관함'을 선택했을 때의 작동 방식
+    if (subject === "uncategorized") {
+        try {
+            const snapshot = await db.collection('transformed_bank').get();
+            snapshot.forEach(doc => {
+                const d = doc.data();
+                let extractedLevel = d.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1];
+                
+                // 코드가 없거나 unknown인 문항만 쏙쏙 골라냅니다.
+                if (extractedLevel === level && (d.standard_code === "unknown" || d.standard_code === "코드없음")) {
+                    
+                    // AI가 프롬프트에 따라 적어준 'AI 판단 과목' 추출 (없으면 분석 당시 탭 이름)
+                    const aiSubjectMatch = d.original_analysis?.match(/AI 판단 과목:\s*([^\n]+)/);
+                    const displaySubject = aiSubjectMatch ? aiSubjectMatch[1].trim() : d.subject;
+
                     currentBookmarkQuestions.push({
-                        code: std.code,
-                        q: q.q,
-                        reason: q.reason,
-                        answer: q.answer || "등록된 정답/풀이가 없습니다.",
-                        source: "선생님 등록 문항"
+                        code: `📦 미분류 (${displaySubject})`,
+                        q: d.question,
+                        // 판정이유 부분만 잘라서 보여주기
+                        reason: d.original_analysis?.match(/판정 이유:[\s\S]*?(?=\[|$)/)?.[0] || "AI가 미분류 문항으로 판정하였습니다.",
+                        answer: d.answer,
+                        source: "✨ AI 분석 문항"
                     });
                 }
             });
+            currentBookmarkQuestions.sort((a, b) => a.code.localeCompare(b.code));
+            renderBookmarkList(level);
+            return; // 미분류 처리가 끝났으므로 함수 종료
+        } catch (err) {
+            console.error("미분류 DB 로드 에러:", err);
+            renderBookmarkList(level);
+            return;
         }
-    });
+    }
+
+    // 🌟 [기존 로직] 일반 과목(공통수학1 등)을 선택했을 때
+    const data = subjectData[subject];
+    if (data && data.standards) {
+        data.standards.forEach(std => {
+            if (std.questions && std.questions.length > 0) {
+                std.questions.forEach(q => {
+                    if (q.level === level) {
+                        currentBookmarkQuestions.push({
+                            code: std.code, q: q.q, reason: q.reason,
+                            answer: q.answer || "등록된 정답/풀이가 없습니다.",
+                            source: "선생님 등록 문항"
+                        });
+                    }
+                });
+            }
+        });
+    }
 
     try {
         const snapshot = await db.collection('transformed_bank').where('subject', '==', subject).get();
         snapshot.forEach(doc => {
             const d = doc.data();
             let extractedLevel = d.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1];
-            if (extractedLevel === level) {
+            // 코드가 정상적으로 있는 문항만 담습니다.
+            if (extractedLevel === level && d.standard_code !== "unknown" && d.standard_code !== "코드없음") {
                 currentBookmarkQuestions.push({
-                    code: d.standard_code || "코드 없음",
-                    q: d.question,
+                    code: d.standard_code, q: d.question,
                     reason: "AI가 원본을 분석하고 변형하며 판정한 문항입니다.",
-                    answer: d.answer,
-                    source: "✨ AI 추가 문항"
+                    answer: d.answer, source: "✨ AI 추가 문항"
                 });
             }
         });
@@ -1590,172 +1623,209 @@ function initShiftClick() {
     });
 }
 
-function startCutScore(mode) {
-    cutScoreMode = mode;
-    const selectedStds = Array.from(document.querySelectorAll('.cut-score-std-cb:checked'));
-    if (selectedStds.length === 0) { alert("출제 범위(성취기준)를 먼저 선택해 주세요."); return; }
+// ==========================================
+// 📊 분할점수 산출: 길 1 (출제 전 이원목적분류표 6줄 묶어치기)
+// ==========================================
+function startPath1() {
+    cutScoreMode = 'before';
+    const subject = document.getElementById('cut-score-subject').value;
+    if (!subject) { alert("과목을 선택해 주세요."); return; }
 
-    // 상단 인디케이터 동적 변경
     const indicatorBar = document.getElementById('dynamic-indicator-bar');
     indicatorBar.style.display = 'flex';
+    indicatorBar.innerHTML = `
+        <div id="step1-indicator" style="color: #cbd5e1;">1. 과목 선택</div>
+        <div id="step2-indicator" style="color: var(--primary);">2. 이원목적분류표 입력</div>
+        <div id="step4-indicator" style="color: #cbd5e1;">3. 결과 산출</div>
+    `;
     
-    if(mode === 'before') {
-        indicatorBar.innerHTML = `
-            <div id="step1-indicator" style="color: #cbd5e1;">1. 평가 세팅</div>
-            <div id="step2-indicator" style="color: var(--primary);">2. 배점 및 성취수준 입력</div>
-            <div id="step4-indicator" style="color: #cbd5e1;">3. 예상 분할점수 산출</div>
-        `;
-        document.getElementById('path1-guide').style.display = 'block';
-        goToStep(2); // 길 1은 바로 표 생성 단계로
-    } else {
-        indicatorBar.innerHTML = `
-            <div id="step1-indicator" style="color: #cbd5e1;">1. 평가 세팅</div>
-            <div id="step3-indicator" style="color: var(--primary);">2. 문항 업로드 및 정밀 설정</div>
-            <div id="step4-indicator" style="color: #cbd5e1;">3. 예상 분할점수 산출</div>
-        `;
-        document.getElementById('path1-guide').style.display = 'none';
-        goToStep(3); // 길 2는 바로 업로드 단계로
-    }
+    goToStep(2);
+    renderPath1Table();
 }
 
-// ------------------------------------------
-// [2단계] 문항 번호 및 배점 입력 (표 자동생성 & 엑셀)
-// ------------------------------------------
-function generateEmptyScoreTable() {
-    const choiceCount = parseInt(document.getElementById('choice-count').value) || 0;
-    const shortCount = parseInt(document.getElementById('short-count').value) || 0;
-    const container = document.getElementById('score-table-container');
-    
-    let html = `<table class="score-table">
-                <thead><tr><th>문항 번호</th><th>배점 (점)</th>
-                ${cutScoreMode === 'before' ? '<th>예상 성취수준</th>' : ''}
-                </tr></thead><tbody>`;
-    
-    let globalQNum = 1; // AI 인식용 실제 문항 순서 (1~마지막)
-    
-    // 객관식 생성
-    for(let i=1; i<=choiceCount; i++) {
-        html += `<tr>
-            <td>${i}</td>
-            <td><input type="number" step="0.1" class="score-input" data-num="${globalQNum}" placeholder="0.0"></td>
-            ${cutScoreMode === 'before' ? `<td><select onchange="showLevelTip(this)" style="padding:4px;"><option value="A">A</option><option value="B">B</option><option value="C" selected>C</option><option value="D">D</option><option value="E">E</option></select><div style="font-size:0.75rem; color:#64748b; margin-top:2px;">${levelMeanings['C']}</div></td>` : ''}
-        </tr>`;
-        globalQNum++;
-    }
-    
-    // 서술형 생성 (보이는 건 서1, 서2지만 내부적인 데이터 순서는 이어짐)
-    for(let i=1; i<=shortCount; i++) {
-        html += `<tr style="background:#fff7ed;">
-            <td>서${i}</td>
-            <td><input type="number" step="0.1" class="score-input" data-num="${globalQNum}" placeholder="0.0"></td>
-            ${cutScoreMode === 'before' ? `<td><select onchange="showLevelTip(this)" style="padding:4px;"><option value="A">A</option><option value="B">B</option><option value="C" selected>C</option><option value="D">D</option><option value="E">E</option></select><div style="font-size:0.75rem; color:#64748b; margin-top:2px;">${levelMeanings['C']}</div></td>` : ''}
-        </tr>`;
-        globalQNum++;
-    }
-    
-    html += `</tbody></table>`;
-    container.innerHTML = html;
-    document.getElementById('btn-next-to-step3').style.display = 'inline-block';
-}
-
-function showLevelTip(select) {
-    select.nextElementSibling.innerText = levelMeanings[select.value];
-}
-
-function downloadScoreTemplate() {
-    const choiceCount = parseInt(document.getElementById('choice-count').value) || 0;
-    const shortCount = parseInt(document.getElementById('short-count').value) || 0;
-    let csv = "문항 번호,배점\n";
-    for(let i=1; i<=choiceCount; i++) csv += `${i},0\n`;
-    for(let i=1; i<=shortCount; i++) csv += `서${i},0\n`;
-    
-    const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "분할점수_배점양식.csv";
-    link.click();
-}
-
-function handleExcelUpload(event) {
-    const file = event.target.files[0];
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const text = e.target.result;
-        const rows = text.split('\n').slice(1); // 첫 번째 줄(제목) 제외
-        
-        generateEmptyScoreTable(); // 빈 표 먼저 만들기
-        const inputs = document.querySelectorAll('.score-input');
-        
-        rows.forEach((row, idx) => {
-            const cols = row.split(',');
-            if(cols[1] && inputs[idx]) {
-                inputs[idx].value = cols[1].trim();
-            }
-        });
-        alert("✅ 배점이 성공적으로 업로드되었습니다.");
+function renderPath1Table() {
+    const tbody = document.getElementById('path1-table-body');
+    const defaultPcts = {
+        '쉬움':   { A: 95, B: 85, C: 75, D: 60, E: 45 },
+        '보통':   { A: 85, B: 70, C: 55, D: 40, E: 25 },
+        '어려움': { A: 75, B: 60, C: 45, D: 30, E: 15 }
     };
-    reader.readAsText(file, 'euc-kr');
+
+    const rows = [
+        { type: '선택형', diff: '쉬움' }, { type: '선택형', diff: '보통' }, { type: '선택형', diff: '어려움' },
+        { type: '서답형', diff: '쉬움' }, { type: '서답형', diff: '보통' }, { type: '서답형', diff: '어려움' }
+    ];
+
+    let html = '';
+    rows.forEach((row, idx) => {
+        const pct = defaultPcts[row.diff];
+        const typeCell = (idx === 0 || idx === 3) ? `<td rowspan="3" style="font-weight:bold; background:#f8fafc;">${row.type}</td>` : '';
+        const diffColor = row.diff === '쉬움' ? '#22c55e' : (row.diff === '보통' ? '#eab308' : '#ef4444');
+        
+        html += `
+        <tr class="path1-row">
+            ${typeCell}
+            <td style="font-weight:bold; color:${diffColor};">${row.diff}</td>
+            <td><input type="number" step="0.1" class="p1-score score-input" placeholder="0" style="width: 80px;"></td>
+            <td><input type="number" class="p1-pct-A score-input" value="${pct.A}"></td>
+            <td><input type="number" class="p1-pct-B score-input" value="${pct.B}"></td>
+            <td><input type="number" class="p1-pct-C score-input" value="${pct.C}"></td>
+            <td><input type="number" class="p1-pct-D score-input" value="${pct.D}"></td>
+            <td><input type="number" class="p1-pct-E score-input" value="${pct.E}"></td>
+        </tr>`;
+    });
+    tbody.innerHTML = html;
 }
 
-function handleNextToStep3() {
-    // 입력된 배점과 성취수준을 컴퓨터 기억장치(배열)에 저장
-    parsedScores = [];
-    const inputs = document.querySelectorAll('.score-input');
-    const selects = document.querySelectorAll('.level-select');
+function calculatePath1Total() {
+    let totalA = 0, totalB = 0, totalC = 0, totalD = 0, totalE = 0;
+    let totalScore = 0;
 
-    inputs.forEach((input, idx) => {
-        parsedScores.push({ 
-            num: parseInt(input.getAttribute('data-num')), 
-            score: parseFloat(input.value) || 0,
-            level: cutScoreMode === 'before' && selects[idx] ? selects[idx].value : 'C'
-        });
+    document.querySelectorAll('.path1-row').forEach(row => {
+        const score = parseFloat(row.querySelector('.p1-score').value) || 0;
+        totalScore += score;
+        
+        const pctA = (parseFloat(row.querySelector('.p1-pct-A').value) || 0) / 100;
+        const pctB = (parseFloat(row.querySelector('.p1-pct-B').value) || 0) / 100;
+        const pctC = (parseFloat(row.querySelector('.p1-pct-C').value) || 0) / 100;
+        const pctD = (parseFloat(row.querySelector('.p1-pct-D').value) || 0) / 100;
+        const pctE = (parseFloat(row.querySelector('.p1-pct-E').value) || 0) / 100;
+
+        totalA += score * pctA; totalB += score * pctB; totalC += score * pctC;
+        totalD += score * pctD; totalE += score * pctE;
     });
 
-    if(cutScoreMode === 'before') {
-        // 길 1: 3단계(시험지 업로드)를 건너뛰고 바로 4단계로 이동
-        goToStep(4);
-        renderPath1FinalResult();
-    } else {
-        // 길 2: 2단계에서 3단계(문항 업로드)로 이동
-        goToStep(3); 
-    }
+    if (totalScore === 0) { alert("배점 합계를 하나 이상 입력해 주세요."); return; }
+
+    // 결과를 보여주기 위해 4단계 뷰어 재활용 (표는 숨기고 결과 박스만 렌더링)
+    document.getElementById('cut-score-result-table').parentElement.style.display = 'none'; 
+    goToStep(4);
+    renderFinalScoreBoxes(totalA, totalB, totalC, totalD, totalE, totalScore);
 }
 
-// 🌟 길 1 전용: AI 분석 없이 입력한 데이터만으로 4단계 표를 그려주는 함수 (새로 추가)
-function renderPath1FinalResult() {
+// ==========================================
+// 📊 분할점수 산출: 길 2 (출제 후 AI 정밀 분석 및 M자 묶어치기)
+// ==========================================
+function startPath2() {
+    cutScoreMode = 'after';
+    const selectedStds = Array.from(document.querySelectorAll('.cut-score-std-cb:checked'));
+    if (selectedStds.length === 0) { alert("출제 범위(성취기준)를 반드시 하나 이상 선택해 주세요."); return; }
+
+    const indicatorBar = document.getElementById('dynamic-indicator-bar');
+    indicatorBar.style.display = 'flex';
+    indicatorBar.innerHTML = `
+        <div id="step1-indicator" style="color: #cbd5e1;">1. 평가 세팅</div>
+        <div id="step3-indicator" style="color: var(--primary);">2. 시험지 AI 분석</div>
+        <div id="step4-indicator" style="color: #cbd5e1;">3. 결과 산출</div>
+    `;
+    goToStep(3);
+}
+
+// 길 2 전용: AI 분석 데이터를 M자 방식(배점+수준)으로 묶어서 렌더링
+function renderFinalCutScoreTable(aiResults) {
     document.getElementById('final-result-container').style.display = 'block';
     document.getElementById('final-ai-loading').style.display = 'none';
     
-    const tbody = document.getElementById('cut-score-result-table');
-    let html = '';
+    // 테이블 헤더를 M자 방식에 맞게 동적 변경
+    const tableHead = document.querySelector('#cut-score-result-table').previousElementSibling;
+    if (tableHead) {
+        tableHead.innerHTML = `<tr><th>해당 문항 (개수)</th><th>배점</th><th>AI 판정 수준</th><th>A (%)</th><th>B (%)</th><th>C (%)</th><th>D (%)</th><th>E (%)</th></tr>`;
+        tableHead.parentElement.style.display = 'block'; // 길 1에서 숨겨졌을 수 있으므로 다시 표시
+    }
 
-    parsedScores.forEach(q => {
-        // 선택한 성취수준(A~E)에 따라 예상 정답률 기본값을 자동으로 세팅
-        let basePct = { A: 90, B: 75, C: 60, D: 40, E: 20 };
-        if(q.level === 'A') basePct = { A: 95, B: 80, C: 60, D: 40, E: 20 };
-        else if(q.level === 'D') basePct = { A: 90, B: 80, C: 70, D: 50, E: 30 };
-        else if(q.level === 'E') basePct = { A: 85, B: 75, C: 65, D: 55, E: 40 };
+    const tbody = document.getElementById('cut-score-result-table');
+    
+    // 배점(score)과 성취수준(level)을 기준으로 문항 그룹화 (M자 방식 핵심)
+    const groups = {};
+    
+    finalExamQuestions.forEach(q => {
+        const scoreObj = parsedScores.find(s => s.num === q.num) || { score: 0 };
+        const ai = aiResults.find(a => a.num === q.num) || { level: 'C', pct_A: 90, pct_B: 70, pct_C: 50, pct_D: 30, pct_E: 10 };
         
+        const key = `${scoreObj.score}_${ai.level}`;
+        if (!groups[key]) {
+            groups[key] = {
+                score: scoreObj.score,
+                level: ai.level,
+                count: 0,
+                qNums: [],
+                basePct: { A: ai.pct_A, B: ai.pct_B, C: ai.pct_C, D: ai.pct_D, E: ai.pct_E }
+            };
+        }
+        groups[key].count++;
+        groups[key].qNums.push(q.num);
+    });
+
+    let html = '';
+    // 배점 내림차순, 성취수준 오름차순으로 정렬하여 표시
+    Object.values(groups).sort((a,b) => b.score - a.score || a.level.localeCompare(b.level)).forEach(g => {
+        const levelColor = g.level === 'A' || g.level === 'B' ? '#ef4444' : g.level === 'C' ? '#eab308' : '#22c55e';
         html += `
-        <tr style="border-bottom: 1px solid #e2e8f0;" class="cut-score-row" data-score="${q.score}">
-            <td><strong>${q.num}</strong></td>
-            <td style="color: #ea580c; font-weight: bold;">${q.score}</td>
-            <td>
-                <select class="level-select" style="padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; background:#f1f5f9; cursor:not-allowed;" disabled>
-                    <option value="${q.level}" selected>${q.level}</option>
-                </select>
+        <tr style="border-bottom: 1px solid #e2e8f0;" class="cut-score-row" data-score="${g.score}" data-count="${g.count}">
+            <td style="text-align: left;">
+                <div style="font-size:0.8rem; color:#64748b; margin-bottom: 4px; word-break: keep-all;">${g.qNums.join(', ')}번</div>
+                <strong style="color: var(--primary);">총 ${g.count}문항</strong>
             </td>
-            <td><input type="number" class="pct-A score-input" value="${basePct.A}" oninput="calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-B score-input" value="${basePct.B}" oninput="calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-C score-input" value="${basePct.C}" oninput="calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-D score-input" value="${basePct.D}" oninput="calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-E score-input" value="${basePct.E}" oninput="calculateTotalCutScores()"></td>
+            <td style="color: #ea580c; font-weight: bold; font-size: 1.1rem;">${g.score}</td>
+            <td>
+                <span style="background:${levelColor}; color:white; padding: 4px 10px; border-radius: 4px; font-weight: bold;">${g.level}</span>
+            </td>
+            <td><input type="number" class="pct-A score-input" value="${g.basePct.A}" oninput="calculateTotalCutScores()"></td>
+            <td><input type="number" class="pct-B score-input" value="${g.basePct.B}" oninput="calculateTotalCutScores()"></td>
+            <td><input type="number" class="pct-C score-input" value="${g.basePct.C}" oninput="calculateTotalCutScores()"></td>
+            <td><input type="number" class="pct-D score-input" value="${g.basePct.D}" oninput="calculateTotalCutScores()"></td>
+            <td><input type="number" class="pct-E score-input" value="${g.basePct.E}" oninput="calculateTotalCutScores()"></td>
         </tr>
         `;
     });
 
     tbody.innerHTML = html;
     calculateTotalCutScores();
+}
+
+// 길 2 전용 합산 로직 (M자 묶어치기)
+function calculateTotalCutScores() {
+    let totalA = 0, totalB = 0, totalC = 0, totalD = 0, totalE = 0;
+    let totalScore = 0;
+
+    document.querySelectorAll('.cut-score-row').forEach(row => {
+        const score = parseFloat(row.getAttribute('data-score')) || 0;
+        const count = parseInt(row.getAttribute('data-count')) || 1;
+        const groupTotalPoints = score * count; 
+        totalScore += groupTotalPoints;
+        
+        const pctA = (parseFloat(row.querySelector('.pct-A').value) || 0) / 100;
+        const pctB = (parseFloat(row.querySelector('.pct-B').value) || 0) / 100;
+        const pctC = (parseFloat(row.querySelector('.pct-C').value) || 0) / 100;
+        const pctD = (parseFloat(row.querySelector('.pct-D').value) || 0) / 100;
+        const pctE = (parseFloat(row.querySelector('.pct-E').value) || 0) / 100;
+
+        totalA += groupTotalPoints * pctA;
+        totalB += groupTotalPoints * pctB;
+        totalC += groupTotalPoints * pctC;
+        totalD += groupTotalPoints * pctD;
+        totalE += groupTotalPoints * pctE;
+    });
+
+    renderFinalScoreBoxes(totalA, totalB, totalC, totalD, totalE, totalScore);
+}
+
+// ==========================================
+// 📊 공통 함수: 최종 점수 박스 렌더링
+// ==========================================
+function renderFinalScoreBoxes(A, B, C, D, E, totalScore) {
+    const boxHtml = `
+        <div style="width: 100%; text-align: center; margin-bottom: 10px; color: #64748b;">(입력된 총 배점: ${totalScore.toFixed(1)}점)</div>
+        <div style="flex:1; padding:15px; background:#fef2f2; border: 2px solid #ef4444; border-radius:8px;"><strong>A수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#ef4444;">${A.toFixed(2)}점</span></div>
+        <div style="flex:1; padding:15px; background:#fffbeb; border: 2px solid #f59e0b; border-radius:8px;"><strong>B수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#f59e0b;">${B.toFixed(2)}점</span></div>
+        <div style="flex:1; padding:15px; background:#f0fdf4; border: 2px solid #22c55e; border-radius:8px;"><strong>C수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#22c55e;">${C.toFixed(2)}점</span></div>
+        <div style="flex:1; padding:15px; background:#eff6ff; border: 2px solid #3b82f6; border-radius:8px;"><strong>D수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#3b82f6;">${D.toFixed(2)}점</span></div>
+        <div style="flex:1; padding:15px; background:#f8fafc; border: 2px solid #94a3b8; border-radius:8px;"><strong>E수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#64748b;">${E.toFixed(2)}점</span></div>
+    `;
+    document.getElementById('final-cut-score-boxes').innerHTML = boxHtml;
+    document.getElementById('final-result-container').style.display = 'block';
+    const aiLoading = document.getElementById('final-ai-loading');
+    if(aiLoading) aiLoading.style.display = 'none';
 }
 
 // 🌟 길 1, 2 공통: 뒤로 가기 흐름 제어 함수 (새로 추가)
@@ -1791,6 +1861,11 @@ async function startExamAiAnalysis(base64Data) {
     if (!apiKey) { alert("⚙️ 설정에서 구글 AI API 키를 먼저 입력해주세요."); return; }
 
     try {
+        // 🟢 [수정됨] 파일 형식(MIME Type) 동적 추출 (PDF, PNG 등 완벽 지원)
+        const mimeTypeMatch = base64Data.match(/data:(.*?);base64/);
+        const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : "image/jpeg";
+        const base64Clean = base64Data.split(',')[1];
+
         const prompt = `이 파일은 시험지입니다. 1번 문항부터 마지막 문항까지 번호를 인식하여 텍스트와 수식($ LaTeX 사용)을 추출해 주세요. 
         문항 사이에 그림이나 도표가 있다면 반드시 [🖼️ 그림/도표 영역] 이라고 표시해 주세요.
         결과는 반드시 각 문항별로 구분선(---)을 사용하여 출력해 주세요.`;
@@ -1799,15 +1874,18 @@ async function startExamAiAnalysis(base64Data) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: "image/jpeg", data: base64Data.split(',')[1] } }] }]
+                contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: mimeType, data: base64Clean } }] }]
             })
         });
+
+        // 🟢 [추가됨] 에러 통신 확인 로직 추가
+        await checkApiError(response);
 
         const data = await response.json();
         const fullText = data.candidates[0].content.parts[0].text;
         renderExtractedQuestions(fullText);
     } catch (error) {
-        alert("분석 중 오류가 발생했습니다. 다시 시도해주세요.");
+        alert("분석 중 오류가 발생했습니다.\n" + error.message);
         document.getElementById('exam-upload-zone').style.display = 'block';
     } finally {
         document.getElementById('exam-loading').style.display = 'none';
@@ -1828,8 +1906,21 @@ function renderExtractedQuestions(rawText) {
         qCard.style.borderLeft = '4px solid #ea580c';
         qCard.style.background = 'white';
         qCard.style.borderBottom = '1px solid #cbd5e1';
+        qCard.style.marginBottom = '1rem'; // 카드 간격 추가
+
+        // 🟢 [수정됨] 문항 텍스트 영역 위에 배점 및 성취수준 입력칸 추가
         qCard.innerHTML = `
-            <div style="font-weight: bold; color: #ea580c; margin-bottom: 0.5rem;">[문항 ${idx + 1}]</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; flex-wrap: wrap; gap: 10px;">
+                <div style="font-weight: bold; color: #ea580c; font-size: 1.1rem;">[문항 ${idx + 1}]</div>
+                <div style="display: flex; gap: 10px; align-items: center; background: #f8fafc; padding: 5px 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                    <label style="font-size: 0.9rem; font-weight: bold; color: #334155;">배점:</label>
+                    <input type="number" step="0.1" class="path2-score-input" placeholder="0.0" style="width: 60px; padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: bold; color: #ea580c; text-align: center;">
+                    <label style="font-size: 0.9rem; font-weight: bold; margin-left: 5px; color: #334155;">성취수준:</label>
+                    <select class="path2-level-select" style="padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: bold;">
+                        <option value="A">A</option><option value="B">B</option><option value="C" selected>C</option><option value="D">D</option><option value="E">E</option>
+                    </select>
+                </div>
+            </div>
             <textarea class="q-edit-area" style="width: 100%; height: 100px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px; font-family: inherit;">${qText.trim()}</textarea>
             <div style="margin-top: 0.5rem; text-align: right;">
                 <button onclick="startPartialCapture(${idx})" style="font-size: 0.8rem; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 4px 8px; border-radius: 4px; cursor: pointer;">✂️ 그림 추가</button>
@@ -1934,12 +2025,14 @@ function cropAndInsertImage(x, y, w, h, qIdx) {
 
 function goToCutScoreStep4() {
     finalExamQuestions = [];
-    parsedScores = []; // 길 2를 위한 배점 데이터 초기화
+    parsedScores = []; 
 
     const textAreas = document.querySelectorAll('.q-edit-area');
     const scoreInputs = document.querySelectorAll('.path2-score-input');
     const levelSelects = document.querySelectorAll('.path2-level-select');
     
+    let hasError = false; // 🟢 배점 누락 체크용 변수
+
     textAreas.forEach((ta, idx) => {
         let qText = ta.value.trim();
         const imgContainer = document.getElementById(`q-image-container-${idx}`);
@@ -1950,9 +2043,11 @@ function goToCutScoreStep4() {
         let level = 'C';
 
         if(cutScoreMode === 'after') {
-            score = parseFloat(scoreInputs[idx].value) || 0;
+            score = parseFloat(scoreInputs[idx].value);
+            // 🟢 [추가됨] 배점이 비어있거나 0 이하인지 체크
+            if (isNaN(score) || score <= 0) { hasError = true; }
             level = levelSelects[idx].value;
-            // 길 2의 경우 여기서 parsedScores에 강제로 집어넣어 4단계 표에서 호환되게 만듭니다.
+            
             parsedScores.push({ num: idx + 1, score: score, level: level });
         }
         
@@ -1964,12 +2059,23 @@ function goToCutScoreStep4() {
         return;
     }
 
-    // 길 1에서 넘어왔을 때를 위한 라우팅 처리
+    // 🟢 [추가됨] 배점을 입력하지 않은 경우 차단
+    if (cutScoreMode === 'after' && hasError) {
+        alert("모든 문항의 배점을 정확히 입력해 주세요.");
+        return;
+    }
+
+    // 🟢 [수정됨] 상단 인디케이터 색상 변경 (2단계 완료 -> 3단계 활성화)
+    const ind3 = document.getElementById('step3-indicator');
+    const ind4 = document.getElementById('step4-indicator');
+    if(ind3) ind3.style.color = '#cbd5e1';
+    if(ind4) ind4.style.color = 'var(--primary)';
+
     if(cutScoreMode === 'before') {
         goToStep(4);
-        renderFinalCutScoreTable([]); // 길 1은 텍스트 분석 없이 기존 배점/수준으로 렌더링
+        renderFinalCutScoreTable([]); 
     } else {
-        startFinalAiAnalysis(); // 길 2는 텍스트 기반 AI 정밀 분석 시작
+        startFinalAiAnalysis(); 
     }
 }
 
@@ -2461,51 +2567,185 @@ async function createNewProject() {
     }
 }
 
-// 3. 폴더 클릭 시 열기 (다음 단계 준비용)
-function openProject(projectId, projectName) {
-    currentProjectId = projectId;
-    alert(`[${projectName}] 폴더가 열렸습니다!\n\n(다음 단계: 이 폴더 안에서 1회고사/2회고사를 추가하고, 합산하는 화면을 만들 예정입니다. 현재는 1단계 세팅 화면으로 임시 이동합니다.)`);
-    
-    // 임시로 원래 있던 1단계 평가 세팅 화면으로 넘어가게 해둡니다.
-    document.getElementById('cut-score-dashboard').style.display = 'none';
-    document.getElementById('cut-score-step1').style.display = 'block';
-}
-// 🌟 현재 계산된 컷오프 점수를 열려있는 폴더(Project)에 저장하는 함수
-async function saveAssessmentToProject() {
-    if (!currentProjectId) { alert("먼저 폴더를 선택하거나 생성해 주세요!"); return; }
-    
-    const name = document.getElementById('assessment-name').value.trim();
-    const weight = parseFloat(document.getElementById('assessment-weight').value) || 0;
-    
-    if (!name || weight <= 0) { alert("평가 명칭과 반영 비율을 정확히 입력해 주세요."); return; }
+// 🟢 [수정됨] 공통 단계 이동 함수 (프로젝트 뷰 끄기 기능 추가)
+function goToStep(stepNum) {
+    const projectDetail = document.getElementById('project-detail-view');
+    if(projectDetail) projectDetail.style.display = 'none';
 
-    // 현재 화면에 표시된 컷오프 점수들 가져오기
-    const boxes = document.getElementById('final-cut-score-boxes').querySelectorAll('span');
-    const cutOffs = {
-        A: parseFloat(boxes[0].innerText),
-        B: parseFloat(boxes[1].innerText),
-        C: parseFloat(boxes[2].innerText),
-        D: parseFloat(boxes[3].innerText),
-        E: parseFloat(boxes[4].innerText)
-    };
+    [1, 2, 3, 4].forEach(n => {
+        const step = document.getElementById(`cut-score-step${n}`);
+        if(step) step.style.display = 'none';
+        const indicator = document.getElementById(`step${n}-indicator`);
+        if(indicator) indicator.style.color = '#cbd5e1';
+    });
+    
+    document.getElementById(`cut-score-step${stepNum}`).style.display = 'block';
+    const indicatorTarget = document.getElementById(`step${stepNum}-indicator`);
+    if(indicatorTarget) indicatorTarget.style.color = 'var(--primary)';
+}
+
+// 🟢 [수정됨] 폴더 클릭 시 열기 (상세 화면으로 이동)
+async function openProject(projectId, projectName) {
+    currentProjectId = projectId;
+    
+    // 대시보드와 기존 단계별 화면 숨기기
+    document.getElementById('cut-score-dashboard').style.display = 'none';
+    [1, 2, 3, 4].forEach(n => {
+        const step = document.getElementById(`cut-score-step${n}`);
+        if(step) step.style.display = 'none';
+    });
+    document.getElementById('dynamic-indicator-bar').style.display = 'none';
+
+    // 프로젝트 상세 화면 띄우기
+    document.getElementById('project-detail-title').innerText = `📂 ${projectName}`;
+    document.getElementById('project-detail-view').style.display = 'block';
+
+    await loadProjectDetails();
+}
+
+function backToProjectList() {
+    currentProjectId = null;
+    document.getElementById('project-detail-view').style.display = 'none';
+    document.getElementById('cut-score-dashboard').style.display = 'block';
+    loadProjects();
+}
+
+// 🟢 [신규] 프로젝트 내역(1회고사, 수행 등) 불러오기 및 렌더링
+async function loadProjectDetails() {
+    const listEl = document.getElementById('project-assessment-list');
+    listEl.innerHTML = '<p style="text-align:center; padding: 1rem;">데이터를 계산 중입니다... ⏳</p>';
+    
+    try {
+        const doc = await db.collection('user_projects').doc(currentProjectId).get();
+        if(doc.exists) {
+            renderProjectAssessments(doc.data().assessments || []);
+        }
+    } catch(e) {
+        listEl.innerHTML = '<p style="color:red; text-align:center;">데이터를 불러오는 데 실패했습니다.</p>';
+    }
+}
+
+function renderProjectAssessments(assessments) {
+    const listEl = document.getElementById('project-assessment-list');
+    const finalBoxes = document.getElementById('project-final-cut-scores');
+    const warning = document.getElementById('weight-warning');
+    
+    if(!assessments || assessments.length === 0) {
+        listEl.innerHTML = '<div style="text-align:center; background: #f8fafc; padding: 2rem; border-radius: 8px; border: 1px dashed #cbd5e1; color: #64748b;">아직 등록된 평가가 없습니다. 아래 버튼을 눌러 평가를 추가하세요.</div>';
+        finalBoxes.innerHTML = '<p style="color: #64748b; font-size: 0.9rem;">평가를 추가하면 최종 점수가 이곳에 계산됩니다.</p>';
+        warning.style.display = 'none';
+        return;
+    }
+
+    let html = `<table class="score-table">
+        <thead style="background: #f1f5f9;">
+            <tr><th>평가명</th><th>반영 비율</th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>관리</th></tr>
+        </thead>
+        <tbody>`;
+    
+    let totalWeight = 0;
+    let totals = { A: 0, B: 0, C: 0, D: 0, E: 0 };
+
+    assessments.forEach((asm, idx) => {
+        totalWeight += asm.weight;
+        totals.A += asm.scores.A;
+        totals.B += asm.scores.B;
+        totals.C += asm.scores.C;
+        totals.D += asm.scores.D;
+        totals.E += asm.scores.E;
+
+        html += `<tr>
+            <td><strong>${asm.name}</strong></td>
+            <td style="color: #ea580c; font-weight: bold;">${asm.weight}%</td>
+            <td>${asm.scores.A.toFixed(2)}</td>
+            <td>${asm.scores.B.toFixed(2)}</td>
+            <td>${asm.scores.C.toFixed(2)}</td>
+            <td>${asm.scores.D.toFixed(2)}</td>
+            <td>${asm.scores.E.toFixed(2)}</td>
+            <td><button onclick="deleteAssessment(${idx})" style="background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">삭제</button></td>
+        </tr>`;
+    });
+
+    html += `</tbody>
+        <tfoot style="background:#fffbeb; font-weight:bold;">
+            <tr>
+                <td style="text-align:center;">합계</td>
+                <td style="color:${totalWeight === 100 ? '#10b981' : '#ef4444'}">${totalWeight}%</td>
+                <td>${totals.A.toFixed(2)}</td>
+                <td>${totals.B.toFixed(2)}</td>
+                <td>${totals.C.toFixed(2)}</td>
+                <td>${totals.D.toFixed(2)}</td>
+                <td>${totals.E.toFixed(2)}</td>
+                <td></td>
+            </tr>
+        </tfoot>
+    </table>`;
+
+    listEl.innerHTML = html;
+
+    // 최종 산출 박스 업데이트
+    finalBoxes.innerHTML = `
+        <div style="flex:1; min-width: 100px; padding:15px; background:white; border: 2px solid #ef4444; border-radius:8px;"><strong>A 컷오프</strong><br><span style="font-size:1.6rem; font-weight:bold; color:#ef4444;">${totals.A.toFixed(2)}</span></div>
+        <div style="flex:1; min-width: 100px; padding:15px; background:white; border: 2px solid #f59e0b; border-radius:8px;"><strong>B 컷오프</strong><br><span style="font-size:1.6rem; font-weight:bold; color:#f59e0b;">${totals.B.toFixed(2)}</span></div>
+        <div style="flex:1; min-width: 100px; padding:15px; background:white; border: 2px solid #22c55e; border-radius:8px;"><strong>C 컷오프</strong><br><span style="font-size:1.6rem; font-weight:bold; color:#22c55e;">${totals.C.toFixed(2)}</span></div>
+        <div style="flex:1; min-width: 100px; padding:15px; background:white; border: 2px solid #3b82f6; border-radius:8px;"><strong>D 컷오프</strong><br><span style="font-size:1.6rem; font-weight:bold; color:#3b82f6;">${totals.D.toFixed(2)}</span></div>
+        <div style="flex:1; min-width: 100px; padding:15px; background:white; border: 2px solid #94a3b8; border-radius:8px;"><strong>E 컷오프</strong><br><span style="font-size:1.6rem; font-weight:bold; color:#64748b;">${totals.E.toFixed(2)}</span></div>
+    `;
+
+    // 100%가 아닐 경우 경고창
+    warning.style.display = totalWeight !== 100 ? 'block' : 'none';
+}
+
+async function deleteAssessment(index) {
+    if(!confirm("이 평가 내역을 삭제하시겠습니까? (삭제 후 합산 점수가 재계산됩니다)")) return;
+    try {
+        const docRef = db.collection('user_projects').doc(currentProjectId);
+        const doc = await docRef.get();
+        if(doc.exists) {
+            let assessments = doc.data().assessments || [];
+            assessments.splice(index, 1);
+            await docRef.update({ assessments: assessments });
+            loadProjectDetails();
+        }
+    } catch(e) { alert("삭제 실패: " + e.message); }
+}
+
+// 🟢 [신규] 수행평가 수동 입력 로직
+function openManualAssessmentModal() { document.getElementById('manual-assessment-modal').style.display = 'flex'; }
+function closeManualAssessmentModal() { document.getElementById('manual-assessment-modal').style.display = 'none'; }
+
+async function saveManualAssessment() {
+    const name = document.getElementById('manual-assess-name').value.trim();
+    const weight = parseFloat(document.getElementById('manual-assess-weight').value) || 0;
+    const a = parseFloat(document.getElementById('manual-a').value) || 0;
+    const b = parseFloat(document.getElementById('manual-b').value) || 0;
+    const c = parseFloat(document.getElementById('manual-c').value) || 0;
+    const d = parseFloat(document.getElementById('manual-d').value) || 0;
+    const e = parseFloat(document.getElementById('manual-e').value) || 0;
+
+    if(!name || weight <= 0) {
+        alert("평가명과 반영 비율을 정확히 입력하세요.");
+        return;
+    }
 
     try {
         await db.collection('user_projects').doc(currentProjectId).update({
             assessments: firebase.firestore.FieldValue.arrayUnion({
-                name: name,
-                weight: weight,
-                scores: cutOffs,
+                name: name, weight: weight,
+                scores: { A: a, B: b, C: c, D: d, E: e },
                 savedAt: new Date()
             })
         });
-        alert(`✅ [${name}] 데이터가 폴더에 안전하게 저장되었습니다!`);
-        document.getElementById('assessment-name').value = "";
-        document.getElementById('assessment-weight').value = "";
-    } catch(e) {
-        alert("저장 실패: " + e.message);
-    }
+        alert("✅ 수행평가가 성공적으로 추가되었습니다!");
+        
+        // 필드 초기화
+        document.querySelectorAll('#manual-assessment-modal input').forEach(input => input.value = '');
+        closeManualAssessmentModal();
+        loadProjectDetails(); // 합산표 재계산
+    } catch(err) { alert("저장 실패: " + err.message); }
 }
-// 🌟 현재 계산된 컷오프 점수를 열려있는 폴더(Project)에 저장하는 함수
+
+// 🟢 [수정됨] 4단계 지필평가 저장 완료 시 프로젝트 뷰로 복귀
 async function saveAssessmentToProject() {
     if (!currentProjectId) { alert("먼저 폴더를 선택하거나 생성해 주세요!"); return; }
     
@@ -2518,26 +2758,27 @@ async function saveAssessmentToProject() {
     if (boxes.length < 5) { alert("점수 산출이 먼저 완료되어야 합니다."); return; }
 
     const cutOffs = {
-        A: parseFloat(boxes[0].innerText),
-        B: parseFloat(boxes[1].innerText),
-        C: parseFloat(boxes[2].innerText),
-        D: parseFloat(boxes[3].innerText),
-        E: parseFloat(boxes[4].innerText)
+        A: parseFloat(boxes[0].innerText.replace('점','')),
+        B: parseFloat(boxes[1].innerText.replace('점','')),
+        C: parseFloat(boxes[2].innerText.replace('점','')),
+        D: parseFloat(boxes[3].innerText.replace('점','')),
+        E: parseFloat(boxes[4].innerText.replace('점',''))
     };
 
     try {
         await db.collection('user_projects').doc(currentProjectId).update({
             assessments: firebase.firestore.FieldValue.arrayUnion({
-                name: name,
-                weight: weight,
-                scores: cutOffs,
-                savedAt: new Date()
+                name: name, weight: weight, scores: cutOffs, savedAt: new Date()
             })
         });
         alert(`✅ [${name}] 데이터가 폴더에 안전하게 저장되었습니다!`);
+        
         document.getElementById('assessment-name').value = "";
         document.getElementById('assessment-weight').value = "";
-    } catch(e) {
-        alert("저장 실패: " + e.message);
-    }
+        
+        // 지필평가 화면을 닫고 프로젝트 합산 화면으로 이동
+        goToStep(-1); // 모든 스텝 가리기
+        document.getElementById('project-detail-view').style.display = 'block';
+        loadProjectDetails();
+    } catch(e) { alert("저장 실패: " + e.message); }
 }
