@@ -247,24 +247,7 @@
             <button id="btn-next-to-step3" class="save-btn" onclick="handleNextToPath1Result()" style="width: auto; background: #ea580c; display:none;">결과 산출하기 (자동 묶어치기) ➡️</button>
         </div>
     </div>
-    <button class="btn-step-prev" onclick="document.getElementById('excel-upload').click()" style="background:#10b981; color:white; border:none;">📤 엑셀 업로드</button>
-    <input type="file" id="excel-upload" accept=".csv, .xlsx, .xls" style="display:none;" onchange="handleExcelUpload(event)">
-</div>
 
-<div style="background: #fffbeb; border: 2px solid #f59e0b; padding: 8px 15px; border-radius: 8px; font-weight: bold; color: #92400e; font-size: 1.1rem;">
-    현재 총 배점: <span id="step2-total-score" style="font-size: 1.3rem; color: #ea580c;">0.0</span> 점
-</div>
-</div>
-
-<div id="score-table-container" style="max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 1.5rem;">
-<p style="text-align:center; padding: 2rem; color: #94a3b8;">[표 자동 생성]을 누르거나 엑셀 파일을 업로드해주세요.</p>
-</div>
-
-<div style="display: flex; justify-content: space-between;">
-<button class="btn-step-prev" onclick="goToStep(1)">◀ 이전 단계로</button>
-<button id="btn-next-to-step3" class="save-btn" onclick="handleNextToPath1Result()" style="width: auto; background: #ea580c; display:none;">결과 산출하기 (자동 묶어치기) ➡️</button>
-</div>
-</div>
 
 <div id="cut-score-step3" class="cut-score-card" style="display: none;">
 <h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">2단계: 출제 범위(성취기준) 선택 및 시험지 분석</h3>
@@ -704,32 +687,27 @@
 </div>
 
 <script src="main.js?v=4"></script>
-<div class="modal" id="manual-assessment-modal">
+<div class="modal" id="written-assessment-modal">
     <div class="modal-content" style="max-width: 500px;">
-        <span class="close-btn" onclick="closeManualAssessmentModal()">&times;</span>
-        <h2 style="margin-top: 0; color: #8b5cf6;">✍️ 수행평가 점수 직접 추가</h2>
-        
+        <span class="close-btn" onclick="document.getElementById('written-assessment-modal').style.display='none'">&times;</span>
+        <h2 style="margin-top: 0; color: #ea580c;">📝 지필평가 (AI 분석) 껍데기 생성</h2>
         <div style="background: #f8fafc; padding: 1.2rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #cbd5e1; font-size: 0.9rem;">
-            <strong style="color: #334155;">💡 수행평가 입력 팁</strong><br>
-            수행평가 만점이 40점(반영비율 40%)이고, 교과협의회에서 A수준을 90%(36점)로 정했다면 A칸에 36을 입력하세요.
+            <strong style="color: #334155;">💡 지필평가 추가 안내</strong><br>
+            평가 이름과 반영 비율만 먼저 만들고, 목록에서 '산출/수정' 버튼을 눌러 문항 분석을 시작하세요.
         </div>
-
-        <label style="font-weight: bold; font-size: 0.9rem;">1. 평가 이름 및 반영 비율</label>
-        <div style="display: flex; gap: 10px; margin-bottom: 1.5rem; margin-top: 0.5rem;">
-            <input type="text" id="manual-assess-name" placeholder="예: 포트폴리오 평가" style="flex: 2; padding: 0.8rem; border: 1px solid #cbd5e1; border-radius: 8px;">
-            <input type="number" id="manual-assess-weight" placeholder="비율(%)" style="flex: 1; padding: 0.8rem; border: 1px solid #cbd5e1; border-radius: 8px;">
+        <div style="display: flex; gap: 10px; margin-bottom: 1.5rem;">
+            <input type="text" id="written-assess-name" placeholder="예: 1회 고사" style="flex: 2; padding: 0.8rem; border: 1px solid #cbd5e1; border-radius: 8px;">
+            <input type="number" id="written-assess-weight" placeholder="비율(%)" style="flex: 1; padding: 0.8rem; border: 1px solid #cbd5e1; border-radius: 8px;">
         </div>
-
-        <label style="font-weight: bold; font-size: 0.9rem;">2. 성취수준별 컷오프 점수</label>
-        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 0.5rem; margin-bottom: 1.5rem;">
-            <div><div style="text-align:center; font-weight:bold; color:#ef4444; margin-bottom:5px;">A</div><input type="number" step="0.1" id="manual-a" placeholder="점수" style="width:100%; box-sizing:border-box; padding:0.8rem 0.2rem; text-align:center; border:1px solid #cbd5e1; border-radius:8px;"></div>
-            <div><div style="text-align:center; font-weight:bold; color:#f59e0b; margin-bottom:5px;">B</div><input type="number" step="0.1" id="manual-b" placeholder="점수" style="width:100%; box-sizing:border-box; padding:0.8rem 0.2rem; text-align:center; border:1px solid #cbd5e1; border-radius:8px;"></div>
-            <div><div style="text-align:center; font-weight:bold; color:#22c55e; margin-bottom:5px;">C</div><input type="number" step="0.1" id="manual-c" placeholder="점수" style="width:100%; box-sizing:border-box; padding:0.8rem 0.2rem; text-align:center; border:1px solid #cbd5e1; border-radius:8px;"></div>
-            <div><div style="text-align:center; font-weight:bold; color:#3b82f6; margin-bottom:5px;">D</div><input type="number" step="0.1" id="manual-d" placeholder="점수" style="width:100%; box-sizing:border-box; padding:0.8rem 0.2rem; text-align:center; border:1px solid #cbd5e1; border-radius:8px;"></div>
-            <div><div style="text-align:center; font-weight:bold; color:#64748b; margin-bottom:5px;">E</div><input type="number" step="0.1" id="manual-e" placeholder="점수" style="width:100%; box-sizing:border-box; padding:0.8rem 0.2rem; text-align:center; border:1px solid #cbd5e1; border-radius:8px;"></div>
-        </div>
-
-        <button class="save-btn" onclick="saveManualAssessment()" style="background: #8b5cf6; margin: 0;">➕ 프로젝트에 이 점수 합산하기</button>
+        <button class="save-btn" onclick="saveWrittenAssessmentShell()" style="background: #ea580c; margin: 0;">➕ 목록에 추가하기</button>
     </div>
+</div>
+
+<button class="save-btn" onclick="document.getElementById('written-assessment-modal').style.display='flex'" style="flex: 1; margin: 0; background: #ea580c;">📝 지필평가 (AI 분석) 추가</button>
+
+<div id="save-to-project-zone" style="margin-top: 2rem; padding: 1.5rem; background: #fffbeb; border-radius: 12px; border: 1px solid #fde68a; text-align: center;">
+    <p style="font-weight: bold; color: #92400e; margin-bottom: 1rem;">✨ 산출된 분할점수를 프로젝트에 업데이트 하시겠습니까?</p>
+    <button class="save-btn" onclick="saveAssessmentToProject()" style="width: 100%; max-width: 300px; margin: 0 auto; background: #ea580c;">💾 현재 산출 결과 업데이트</button>
+</div>
 </div>
 </body>

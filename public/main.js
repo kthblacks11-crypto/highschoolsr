@@ -1,3 +1,5 @@
+let currentEditingAssessmentIndex = -1;
+
 const firebaseConfig = {
     apiKey: "AIzaSyDq5c9_BMx-zoYHUAGAp8B3jbvi3tj8HXo",
     authDomain: "math-asa-project-2026.firebaseapp.com",
@@ -1248,11 +1250,7 @@ async function loadStandardsFromDB() {
     }
 }
 
-window.onload = async () => {
-    await loadStandardsFromDB(); 
-    changeSubject();             
-    syncPendingFeedback();       
-};
+
 
 async function checkLogin() {
     if (!auth.currentUser) {
@@ -1749,12 +1747,23 @@ function handleExcelUpload(e) {
     reader.readAsArrayBuffer(file);
 }
 
-// 🟢 성취수준별 기본 정답률 (길 1 전용)
-function getBasePct(level) {
-    let basePct = { A: 90, B: 75, C: 60, D: 40, E: 20 };
-    if(level === 'A') basePct = { A: 95, B: 80, C: 60, D: 40, E: 20 };
-    else if(level === 'D') basePct = { A: 90, B: 80, C: 70, D: 50, E: 30 };
-    else if(level === 'E') basePct = { A: 85, B: 75, C: 65, D: 55, E: 40 };
+function getBasePct(level, isShortAnswer) {
+    // 요청하신 기준: 객관식 65%, 서답형 50%
+    const baseC = isShortAnswer ? 50 : 65; 
+    
+    // C수준을 기준으로 다른 수준들의 간격을 유동적으로 조정합니다.
+    let basePct = { 
+        A: Math.min(100, baseC + 25), 
+        B: Math.min(100, baseC + 15), 
+        C: baseC, 
+        D: Math.max(0, baseC - 15), 
+        E: Math.max(0, baseC - 30) 
+    };
+
+    if(level === 'A') return { A: Math.min(100, baseC + 30), B: baseC + 20, C: baseC + 5, D: baseC - 10, E: baseC - 20 };
+    else if(level === 'D') return { A: baseC + 20, B: baseC + 10, C: baseC - 5, D: baseC - 15, E: baseC - 25 };
+    else if(level === 'E') return { A: baseC + 15, B: baseC + 5, C: baseC - 10, D: baseC - 20, E: baseC - 30 };
+    
     return basePct;
 }
 
@@ -1787,9 +1796,10 @@ function handleNextToPath1Result() {
 
     goToStep(4);
     
-    // 길 1은 수동 입력 데이터를 그대로 넘겨 M자로 그룹화
     const mergedData = parsedScores.map(q => {
-        const pcts = getBasePct(q.level);
+        // 문항 번호(num)에 '서'라는 글자가 포함되어 있으면 서답형으로 간주
+        const isShortAnswer = String(q.num).includes('서');
+        const pcts = getBasePct(q.level, isShortAnswer);
         return { num: q.num, score: q.score, level: q.level, pcts: pcts };
     });
 
@@ -2477,10 +2487,7 @@ function resetAnalysis() {
 
 // 페이지 로드 시 크기 조절 기능 활성화
 const originalOnload = window.onload;
-window.onload = async () => {
-    if(originalOnload) await originalOnload();
-    initChatResizer(); 
-};
+
 // ==========================================
 // 🛠️ 관리자 모드: 기존 성취기준 수정 및 삭제 로직
 // ==========================================
@@ -2704,31 +2711,39 @@ async function loadProjects() {
             .orderBy('createdAt', 'desc')
             .get();
 
-        if(snapshot.empty) {
-            listEl.innerHTML = '<p style="color:#64748b; grid-column: 1 / -1; text-align: center;">생성된 폴더가 없습니다. 우측 상단의 [+ 새 폴더 만들기]를 눌러보세요!</p>';
-            return;
-        }
-
-        let html = '';
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            const dateStr = data.createdAt ? data.createdAt.toDate().toLocaleDateString() : '최근';
-            
-            html += `
-            <div style="position: relative; border: 1px solid #cbd5e1; border-radius: 8px; padding: 1.5rem; background: white; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05);" 
-                 onmouseover="this.style.borderColor='#3b82f6'; this.style.transform='translateY(-3px)';" 
-                 onmouseout="this.style.borderColor='#cbd5e1'; this.style.transform='none';">
-                 
-                <button onclick="deleteProject('${doc.id}', event)" style="position: absolute; top: 10px; right: 10px; background: #fee2e2; color: #ef4444; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.8rem; z-index: 10;">삭제</button>
+            if(snapshot.empty) {
+                listEl.innerHTML = '<p style="color:#64748b; grid-column: 1 / -1; text-align: center;">생성된 폴더가 없습니다. 우측 상단의 [+ 새 폴더 만들기]를 눌러보세요!</p>';
+                return;
+            }
+    
+            let html = '';
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                const dateStr = data.createdAt ? data.createdAt.toDate().toLocaleDateString() : "방금 전";
+                let badges = '';
                 
-                <div onclick="openProject('${doc.id}', '${data.name}')">
-                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📁</div>
-                    <h4 style="margin: 0 0 0.5rem 0; color: #1e293b; font-size: 1.1rem;">${data.name}</h4>
-                    <p style="margin: 0; font-size: 0.8rem; color: #64748b;">생성일: ${dateStr}</p>
-                </div>
-            </div>`;
-        });
-        listEl.innerHTML = html;
+                if(data.assessments && data.assessments.length > 0) {
+                    badges = data.assessments.map(a => `<span style="display:inline-block; background:#e2e8f0; color:#475569; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-right:4px; margin-top:4px;">${a.name}</span>`).join('');
+                } else {
+                    badges = '<span style="font-size: 0.75rem; color: #94a3b8;">평가 내역 없음</span>';
+                }
+    
+                html += `
+                <div style="position: relative; border: 1px solid #cbd5e1; border-radius: 8px; padding: 1.5rem; background: white; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05);" 
+                     onmouseover="this.style.borderColor='#3b82f6'; this.style.transform='translateY(-3px)';" 
+                     onmouseout="this.style.borderColor='#cbd5e1'; this.style.transform='none';">
+                     
+                    <button onclick="deleteProject('${doc.id}', event)" style="position: absolute; top: 10px; right: 10px; background: #fee2e2; color: #ef4444; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.8rem; z-index: 10;">삭제</button>
+                    
+                    <div onclick="openProject('${doc.id}', '${data.name}')">
+                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📁</div>
+                        <h4 style="margin: 0 0 0.5rem 0; color: #1e293b; font-size: 1.1rem;">${data.name}</h4>
+                        <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; color: #64748b;">생성일: ${dateStr}</p>
+                        <div style="border-top: 1px dashed #cbd5e1; padding-top: 0.5rem;">${badges}</div>
+                    </div>
+                </div>`;
+            });
+            listEl.innerHTML = html;
     } catch(e) {
         console.error(e);
         listEl.innerHTML = '<p style="color:red; grid-column: 1 / -1;">폴더를 불러오는데 실패했습니다.</p>';
@@ -2852,21 +2867,29 @@ function renderProjectAssessments(assessments) {
 
     assessments.forEach((asm, idx) => {
         totalWeight += asm.weight;
-        totals.A += asm.scores.A;
-        totals.B += asm.scores.B;
-        totals.C += asm.scores.C;
-        totals.D += asm.scores.D;
-        totals.E += asm.scores.E;
+        totals.A += (asm.scores?.A || 0);
+        totals.B += (asm.scores?.B || 0);
+        totals.C += (asm.scores?.C || 0);
+        totals.D += (asm.scores?.D || 0);
+        totals.E += (asm.scores?.E || 0);
+
+        // type이 'written'이면 산출/수정 버튼 표시
+        const editBtn = asm.type === 'written' 
+            ? `<button onclick="startEditAssessment(${idx})" style="background:#3b82f6; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; margin-right:5px;">산출/수정</button>` 
+            : '';
 
         html += `<tr>
             <td><strong>${asm.name}</strong></td>
             <td style="color: #ea580c; font-weight: bold;">${asm.weight}%</td>
-            <td>${asm.scores.A.toFixed(2)}</td>
-            <td>${asm.scores.B.toFixed(2)}</td>
-            <td>${asm.scores.C.toFixed(2)}</td>
-            <td>${asm.scores.D.toFixed(2)}</td>
-            <td>${asm.scores.E.toFixed(2)}</td>
-            <td><button onclick="deleteAssessment(${idx})" style="background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">삭제</button></td>
+            <td>${(asm.scores?.A || 0).toFixed(2)}</td>
+            <td>${(asm.scores?.B || 0).toFixed(2)}</td>
+            <td>${(asm.scores?.C || 0).toFixed(2)}</td>
+            <td>${(asm.scores?.D || 0).toFixed(2)}</td>
+            <td>${(asm.scores?.E || 0).toFixed(2)}</td>
+            <td>
+                ${editBtn}
+                <button onclick="deleteAssessment(${idx})" style="background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">삭제</button>
+            </td>
         </tr>`;
     });
 
@@ -2921,12 +2944,13 @@ function closeManualAssessmentModal() { document.getElementById('manual-assessme
 async function saveManualAssessment() {
     const name = document.getElementById('manual-assess-name').value.trim();
     const weight = parseFloat(document.getElementById('manual-assess-weight').value) || 0;
-    const a = parseFloat(document.getElementById('manual-a').value) || 0;
-    const b = parseFloat(document.getElementById('manual-b').value) || 0;
-    const c = parseFloat(document.getElementById('manual-c').value) || 0;
-    const d = parseFloat(document.getElementById('manual-d').value) || 0;
-    const e = parseFloat(document.getElementById('manual-e').value) || 0;
-
+    
+    // 100점 만점 기준 입력값을 비율(%)에 맞게 환산
+    const a = (parseFloat(document.getElementById('manual-a').value) || 0) * (weight / 100);
+    const b = (parseFloat(document.getElementById('manual-b').value) || 0) * (weight / 100);
+    const c = (parseFloat(document.getElementById('manual-c').value) || 0) * (weight / 100);
+    const d = (parseFloat(document.getElementById('manual-d').value) || 0) * (weight / 100);
+    const e = (parseFloat(document.getElementById('manual-e').value) || 0) * (weight / 100);
     if(!name || weight <= 0) {
         alert("평가명과 반영 비율을 정확히 입력하세요.");
         return;
@@ -2951,12 +2975,7 @@ async function saveManualAssessment() {
 
 // 🟢 [수정됨] 4단계 지필평가 저장 완료 시 프로젝트 뷰로 복귀
 async function saveAssessmentToProject() {
-    if (!currentProjectId) { alert("먼저 폴더를 선택하거나 생성해 주세요!"); return; }
-    
-    const name = document.getElementById('assessment-name').value.trim();
-    const weight = parseFloat(document.getElementById('assessment-weight').value) || 0;
-    
-    if (!name || weight <= 0) { alert("평가 명칭과 반영 비율을 정확히 입력해 주세요."); return; }
+    if (!currentProjectId || currentEditingAssessmentIndex === -1) { alert("오류: 편집 중인 평가를 찾을 수 없습니다."); return; }
 
     const boxes = document.getElementById('final-cut-score-boxes').querySelectorAll('span');
     if (boxes.length < 5) { alert("점수 산출이 먼저 완료되어야 합니다."); return; }
@@ -2970,19 +2989,54 @@ async function saveAssessmentToProject() {
     };
 
     try {
+        const docRef = db.collection('user_projects').doc(currentProjectId);
+        const doc = await docRef.get();
+        if(doc.exists) {
+            let assessments = doc.data().assessments || [];
+            // 해당 인덱스의 점수만 업데이트
+            assessments[currentEditingAssessmentIndex].scores = cutOffs;
+            assessments[currentEditingAssessmentIndex].savedAt = new Date();
+            
+            await docRef.update({ assessments: assessments });
+            alert(`✅ 분할점수가 성공적으로 업데이트되었습니다!`);
+            
+            goToStep(-1); 
+            document.getElementById('project-detail-view').style.display = 'block';
+            loadProjectDetails();
+            currentEditingAssessmentIndex = -1; // 초기화
+        }
+    } catch(e) { alert("업데이트 실패: " + e.message); }
+}
+
+window.onload = async () => {
+    await loadStandardsFromDB(); 
+    changeSubject();             
+    syncPendingFeedback();       
+    initChatResizer(); // 챗봇 리사이저 추가
+};
+async function saveWrittenAssessmentShell() {
+    const name = document.getElementById('written-assess-name').value.trim();
+    const weight = parseFloat(document.getElementById('written-assess-weight').value) || 0;
+
+    if(!name || weight <= 0) { alert("평가명과 반영 비율을 정확히 입력하세요."); return; }
+
+    try {
         await db.collection('user_projects').doc(currentProjectId).update({
             assessments: firebase.firestore.FieldValue.arrayUnion({
-                name: name, weight: weight, scores: cutOffs, savedAt: new Date()
+                name: name, weight: weight, type: 'written',
+                scores: { A: 0, B: 0, C: 0, D: 0, E: 0 },
+                savedAt: new Date()
             })
         });
-        alert(`✅ [${name}] 데이터가 폴더에 안전하게 저장되었습니다!`);
-        
-        document.getElementById('assessment-name').value = "";
-        document.getElementById('assessment-weight').value = "";
-        
-        // 지필평가 화면을 닫고 프로젝트 합산 화면으로 이동
-        goToStep(-1); // 모든 스텝 가리기
-        document.getElementById('project-detail-view').style.display = 'block';
-        loadProjectDetails();
-    } catch(e) { alert("저장 실패: " + e.message); }
+        alert("✅ 지필평가 항목이 생성되었습니다. 목록에서 '산출/수정'을 눌러 분석을 시작하세요.");
+        document.getElementById('written-assess-name').value = '';
+        document.getElementById('written-assess-weight').value = '';
+        document.getElementById('written-assessment-modal').style.display = 'none';
+        loadProjectDetails(); 
+    } catch(err) { alert("생성 실패: " + err.message); }
 }
+
+function startEditAssessment(index) {
+    currentEditingAssessmentIndex = index;
+    goToStep(1); // 길1, 길2 선택 화면(1단계)으로 이동시켜 자유롭게 진입 가능하게 함
+}    
