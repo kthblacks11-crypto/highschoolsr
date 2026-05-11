@@ -283,3 +283,16 @@ header {
     z-index: 10;
     transition: background 0.2s;
 }
+/* ==========================================
+   📝 길 2: 시험지 분석 양쪽 독립 스크롤 뷰
+   ========================================== */
+   #exam-inspector-wrapper {
+    height: 80vh !important; /* 화면 높이의 80%만큼 꽉 차게 설정 */
+    overflow: hidden !important; /* 전체 창에서는 스크롤이 안 생기도록 막음 */
+}
+
+#exam-viewer-left, #exam-editor-right {
+    height: 100% !important;
+    overflow-y: auto !important; /* 왼쪽, 오른쪽 각각 독립적으로 스크롤 생성 */
+    padding-bottom: 2rem !important; /* 아래쪽 여유 공간 추가 */
+}

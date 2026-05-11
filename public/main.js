@@ -1624,83 +1624,284 @@ function initShiftClick() {
 }
 
 // ==========================================
-// 📊 분할점수 산출: 길 1 (출제 전 이원목적분류표 6줄 묶어치기)
+// 📊 분할점수 산출: 길 1/길 2 경로 제어
 // ==========================================
 function startPath1() {
     cutScoreMode = 'before';
     const subject = document.getElementById('cut-score-subject').value;
-    if (!subject) { alert("과목을 선택해 주세요."); return; }
+    if (!subject) { alert("먼저 과목을 선택해 주세요."); return; }
 
     const indicatorBar = document.getElementById('dynamic-indicator-bar');
     indicatorBar.style.display = 'flex';
     indicatorBar.innerHTML = `
         <div id="step1-indicator" style="color: #cbd5e1;">1. 과목 선택</div>
-        <div id="step2-indicator" style="color: var(--primary);">2. 이원목적분류표 입력</div>
+        <div id="step2-indicator" style="color: var(--primary);">2. 문항별 배점 입력 (엑셀)</div>
+        <div id="step4-indicator" style="color: #cbd5e1;">3. 결과 산출 (자동 그룹화)</div>
+    `;
+    goToStep(2); 
+    generateEmptyScoreTable(); // 길 1은 진입 시 자동으로 빈 표를 만들어줍니다.
+}
+
+function startPath2() {
+    cutScoreMode = 'after';
+    const subject = document.getElementById('cut-score-subject').value;
+    if (!subject) { alert("먼저 과목을 선택해 주세요."); return; }
+
+    loadStandardsForCutScore(); // 길 2를 선택했을 때만 성취기준 로딩
+
+    const indicatorBar = document.getElementById('dynamic-indicator-bar');
+    indicatorBar.style.display = 'flex';
+    indicatorBar.innerHTML = `
+        <div id="step1-indicator" style="color: #cbd5e1;">1. 과목 선택</div>
+        <div id="step3-indicator" style="color: var(--primary);">2. 출제범위 및 시험지 분석</div>
         <div id="step4-indicator" style="color: #cbd5e1;">3. 결과 산출</div>
     `;
-    
-    goToStep(2);
-    renderPath1Table();
+    goToStep(3); 
 }
 
-function renderPath1Table() {
-    const tbody = document.getElementById('path1-table-body');
-    const defaultPcts = {
-        '쉬움':   { A: 95, B: 85, C: 75, D: 60, E: 45 },
-        '보통':   { A: 85, B: 70, C: 55, D: 40, E: 25 },
-        '어려움': { A: 75, B: 60, C: 45, D: 30, E: 15 }
-    };
+// ==========================================
+// 📝 길 1 전용: 엑셀 처리 및 실시간 총점 계산
+// ==========================================
+function updateStep2Total() {
+    let total = 0;
+    document.querySelectorAll('.score-input').forEach(inp => {
+        total += parseFloat(inp.value) || 0;
+    });
+    document.getElementById('step2-total-score').innerText = total.toFixed(1);
+}
 
-    const rows = [
-        { type: '선택형', diff: '쉬움' }, { type: '선택형', diff: '보통' }, { type: '선택형', diff: '어려움' },
-        { type: '서답형', diff: '쉬움' }, { type: '서답형', diff: '보통' }, { type: '서답형', diff: '어려움' }
-    ];
+function generateEmptyScoreTable() {
+    const choiceCount = parseInt(document.getElementById('choice-count').value) || 0;
+    const shortCount = parseInt(document.getElementById('short-count').value) || 0;
+    const container = document.getElementById('score-table-container');
+    
+    let html = `<table class="score-table">
+                <thead style="position: sticky; top: 0; background: #f1f5f9; z-index: 1;">
+                <tr><th>문항 번호</th><th>배점 (점)</th><th>예상 성취수준</th></tr></thead><tbody>`;
+    
+    let globalQNum = 1;
+    for(let i=1; i<=choiceCount; i++) {
+        html += `<tr>
+            <td>${i}</td>
+            <td><input type="number" step="0.1" class="score-input" data-num="${globalQNum}" placeholder="0.0" oninput="updateStep2Total()"></td>
+            <td><select class="level-select" style="padding:4px;"><option value="A">A</option><option value="B">B</option><option value="C" selected>C</option><option value="D">D</option><option value="E">E</option></select></td>
+        </tr>`;
+        globalQNum++;
+    }
+    for(let i=1; i<=shortCount; i++) {
+        html += `<tr style="background:#fff7ed;">
+            <td>서${i}</td>
+            <td><input type="number" step="0.1" class="score-input" data-num="${globalQNum}" placeholder="0.0" oninput="updateStep2Total()"></td>
+            <td><select class="level-select" style="padding:4px;"><option value="A">A</option><option value="B">B</option><option value="C" selected>C</option><option value="D">D</option><option value="E">E</option></select></td>
+        </tr>`;
+        globalQNum++;
+    }
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+    updateStep2Total();
+    document.getElementById('btn-next-to-step3').style.display = 'inline-block';
+}
+
+function downloadScoreTemplate() {
+    const choiceCount = parseInt(document.getElementById('choice-count').value) || 0;
+    const shortCount = parseInt(document.getElementById('short-count').value) || 0;
+    let csv = "문항 번호,배점,성취수준\n";
+    for(let i=1; i<=choiceCount; i++) csv += `${i},0,C\n`;
+    for(let i=1; i<=shortCount; i++) csv += `서${i},0,C\n`;
+    
+    const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "분할점수_배점양식.csv";
+    link.click();
+}
+
+function handleExcelUpload(e) {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, {type: 'array'});
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
+
+        let html = '<table class="score-table" style="width:100%;"><thead style="position: sticky; top: 0; background: #f1f5f9; z-index: 1;"><tr><th>문항 번호</th><th>배점</th><th>성취수준</th></tr></thead><tbody>';
+        
+        jsonData.forEach((row, index) => {
+            if(index === 0 && isNaN(row[0])) return;
+            if(row[0] && row[1]) {
+                let level = (row[2] || 'C').toString().toUpperCase().trim();
+                if(!['A','B','C','D','E'].includes(level)) level = 'C';
+                
+                let selectHtml = `<select class="level-select" style="padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px;">
+                    <option value="A" ${level==='A'?'selected':''}>A</option><option value="B" ${level==='B'?'selected':''}>B</option><option value="C" ${level==='C'?'selected':''}>C</option><option value="D" ${level==='D'?'selected':''}>D</option><option value="E" ${level==='E'?'selected':''}>E</option>
+                </select>`;
+
+                html += `<tr><td>${row[0]}</td><td><input type="number" step="0.1" class="score-input" data-num="${row[0]}" value="${row[1]}" oninput="updateStep2Total()"></td><td>${selectHtml}</td></tr>`;
+            }
+        });
+        html += '</tbody></table>';
+        document.getElementById('score-table-container').innerHTML = html;
+        updateStep2Total(); // 엑셀 업로드 직후 총점 계산
+        document.getElementById('btn-next-to-step3').style.display = 'inline-block';
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+// 🟢 성취수준별 기본 정답률 (길 1 전용)
+function getBasePct(level) {
+    let basePct = { A: 90, B: 75, C: 60, D: 40, E: 20 };
+    if(level === 'A') basePct = { A: 95, B: 80, C: 60, D: 40, E: 20 };
+    else if(level === 'D') basePct = { A: 90, B: 80, C: 70, D: 50, E: 30 };
+    else if(level === 'E') basePct = { A: 85, B: 75, C: 65, D: 55, E: 40 };
+    return basePct;
+}
+
+// ==========================================
+// 🚀 최종 산출: 데이터 통합 및 M자 묶어치기 (길1/길2 공통 활용)
+// ==========================================
+
+function handleNextToPath1Result() {
+    parsedScores = [];
+    const inputs = document.querySelectorAll('.score-input');
+    const selects = document.querySelectorAll('.level-select');
+
+    let totalScore = 0;
+    inputs.forEach((input, idx) => {
+        const s = parseFloat(input.value) || 0;
+        totalScore += s;
+        parsedScores.push({ 
+            num: input.getAttribute('data-num') || (idx + 1), 
+            score: s,
+            level: selects[idx] ? selects[idx].value : 'C'
+        });
+    });
+
+    if (totalScore === 0) { alert("입력된 배점이 없습니다. 점수를 확인해 주세요."); return; }
+
+    const ind2 = document.getElementById('step2-indicator');
+    const ind4 = document.getElementById('step4-indicator');
+    if(ind2) ind2.style.color = '#cbd5e1';
+    if(ind4) ind4.style.color = 'var(--primary)';
+
+    goToStep(4);
+    
+    // 길 1은 수동 입력 데이터를 그대로 넘겨 M자로 그룹화
+    const mergedData = parsedScores.map(q => {
+        const pcts = getBasePct(q.level);
+        return { num: q.num, score: q.score, level: q.level, pcts: pcts };
+    });
+
+    renderGroupedCutScoreTable(mergedData);
+}
+
+// 길 2에서 넘어온 AI 결과와 기존 데이터를 합치는 함수
+function renderFinalCutScoreTable(aiResults) {
+    const mergedData = finalExamQuestions.map(q => {
+        const scoreObj = parsedScores.find(s => s.num === q.num) || { score: 0 };
+        const ai = aiResults.find(a => a.num === q.num) || { level: 'C', pct_A: 90, pct_B: 70, pct_C: 50, pct_D: 30, pct_E: 10 };
+        return {
+            num: q.num, score: scoreObj.score, level: ai.level,
+            pcts: { A: ai.pct_A, B: ai.pct_B, C: ai.pct_C, D: ai.pct_D, E: ai.pct_E }
+        };
+    });
+    renderGroupedCutScoreTable(mergedData);
+}
+
+// 🟢 핵심! 배점과 성취수준으로 문항을 묶어주는 M자 출력 함수
+function renderGroupedCutScoreTable(mergedData) {
+    document.getElementById('final-result-container').style.display = 'block';
+    document.getElementById('final-ai-loading').style.display = 'none';
+    
+    const tableHead = document.querySelector('#cut-score-result-table').previousElementSibling;
+    if (tableHead) {
+        tableHead.innerHTML = `<tr><th>해당 문항 (개수)</th><th>배점</th><th>판정 수준</th><th>A (%)</th><th>B (%)</th><th>C (%)</th><th>D (%)</th><th>E (%)</th></tr>`;
+        tableHead.parentElement.style.display = 'block'; 
+    }
+
+    const tbody = document.getElementById('cut-score-result-table');
+    const groups = {};
+    
+    // 배점(score) + 수준(level) 을 조합한 키로 그룹화
+    mergedData.forEach(q => {
+        const key = `${q.score}_${q.level}`;
+        if (!groups[key]) {
+            groups[key] = {
+                score: q.score, level: q.level, count: 0, qNums: [], pcts: q.pcts
+            };
+        }
+        groups[key].count++;
+        groups[key].qNums.push(q.num);
+    });
 
     let html = '';
-    rows.forEach((row, idx) => {
-        const pct = defaultPcts[row.diff];
-        const typeCell = (idx === 0 || idx === 3) ? `<td rowspan="3" style="font-weight:bold; background:#f8fafc;">${row.type}</td>` : '';
-        const diffColor = row.diff === '쉬움' ? '#22c55e' : (row.diff === '보통' ? '#eab308' : '#ef4444');
-        
+    // 배점 내림차순, 성취수준 오름차순으로 예쁘게 정렬
+    Object.values(groups).sort((a,b) => b.score - a.score || a.level.localeCompare(b.level)).forEach(g => {
+        const levelColor = g.level === 'A' || g.level === 'B' ? '#ef4444' : g.level === 'C' ? '#eab308' : '#22c55e';
         html += `
-        <tr class="path1-row">
-            ${typeCell}
-            <td style="font-weight:bold; color:${diffColor};">${row.diff}</td>
-            <td><input type="number" step="0.1" class="p1-score score-input" placeholder="0" style="width: 80px;"></td>
-            <td><input type="number" class="p1-pct-A score-input" value="${pct.A}"></td>
-            <td><input type="number" class="p1-pct-B score-input" value="${pct.B}"></td>
-            <td><input type="number" class="p1-pct-C score-input" value="${pct.C}"></td>
-            <td><input type="number" class="p1-pct-D score-input" value="${pct.D}"></td>
-            <td><input type="number" class="p1-pct-E score-input" value="${pct.E}"></td>
-        </tr>`;
+        <tr style="border-bottom: 1px solid #e2e8f0;" class="cut-score-row" data-score="${g.score}" data-count="${g.count}">
+            <td style="text-align: left;">
+                <div style="font-size:0.8rem; color:#64748b; margin-bottom: 4px; word-break: keep-all;">${g.qNums.join(', ')}번</div>
+                <strong style="color: var(--primary);">총 ${g.count}문항</strong>
+            </td>
+            <td style="color: #ea580c; font-weight: bold; font-size: 1.1rem;">${g.score}</td>
+            <td>
+                <span style="background:${levelColor}; color:white; padding: 4px 10px; border-radius: 4px; font-weight: bold;">${g.level}</span>
+            </td>
+            <td><input type="number" class="pct-A score-input" value="${g.pcts.A}" oninput="calculateTotalCutScores()"></td>
+            <td><input type="number" class="pct-B score-input" value="${g.pcts.B}" oninput="calculateTotalCutScores()"></td>
+            <td><input type="number" class="pct-C score-input" value="${g.pcts.C}" oninput="calculateTotalCutScores()"></td>
+            <td><input type="number" class="pct-D score-input" value="${g.pcts.D}" oninput="calculateTotalCutScores()"></td>
+            <td><input type="number" class="pct-E score-input" value="${g.pcts.E}" oninput="calculateTotalCutScores()"></td>
+        </tr>
+        `;
     });
+
     tbody.innerHTML = html;
+    calculateTotalCutScores();
 }
 
-function calculatePath1Total() {
+function calculateTotalCutScores() {
     let totalA = 0, totalB = 0, totalC = 0, totalD = 0, totalE = 0;
     let totalScore = 0;
 
-    document.querySelectorAll('.path1-row').forEach(row => {
-        const score = parseFloat(row.querySelector('.p1-score').value) || 0;
-        totalScore += score;
+    document.querySelectorAll('.cut-score-row').forEach(row => {
+        const score = parseFloat(row.getAttribute('data-score')) || 0;
+        const count = parseInt(row.getAttribute('data-count')) || 1;
+        const groupTotalPoints = score * count; 
+        totalScore += groupTotalPoints;
         
-        const pctA = (parseFloat(row.querySelector('.p1-pct-A').value) || 0) / 100;
-        const pctB = (parseFloat(row.querySelector('.p1-pct-B').value) || 0) / 100;
-        const pctC = (parseFloat(row.querySelector('.p1-pct-C').value) || 0) / 100;
-        const pctD = (parseFloat(row.querySelector('.p1-pct-D').value) || 0) / 100;
-        const pctE = (parseFloat(row.querySelector('.p1-pct-E').value) || 0) / 100;
+        const pctA = (parseFloat(row.querySelector('.pct-A').value) || 0) / 100;
+        const pctB = (parseFloat(row.querySelector('.pct-B').value) || 0) / 100;
+        const pctC = (parseFloat(row.querySelector('.pct-C').value) || 0) / 100;
+        const pctD = (parseFloat(row.querySelector('.pct-D').value) || 0) / 100;
+        const pctE = (parseFloat(row.querySelector('.pct-E').value) || 0) / 100;
 
-        totalA += score * pctA; totalB += score * pctB; totalC += score * pctC;
-        totalD += score * pctD; totalE += score * pctE;
+        totalA += groupTotalPoints * pctA;
+        totalB += groupTotalPoints * pctB;
+        totalC += groupTotalPoints * pctC;
+        totalD += groupTotalPoints * pctD;
+        totalE += groupTotalPoints * pctE;
     });
 
-    if (totalScore === 0) { alert("배점 합계를 하나 이상 입력해 주세요."); return; }
-
-    // 결과를 보여주기 위해 4단계 뷰어 재활용 (표는 숨기고 결과 박스만 렌더링)
-    document.getElementById('cut-score-result-table').parentElement.style.display = 'none'; 
-    goToStep(4);
     renderFinalScoreBoxes(totalA, totalB, totalC, totalD, totalE, totalScore);
+}
+
+function renderFinalScoreBoxes(A, B, C, D, E, totalScore) {
+    const boxHtml = `
+        <div style="width: 100%; text-align: center; margin-bottom: 10px; color: #64748b; font-weight: bold;">(최종 인식된 총 배점: ${totalScore.toFixed(1)}점)</div>
+        <div style="flex:1; padding:15px; background:#fef2f2; border: 2px solid #ef4444; border-radius:8px;"><strong>A수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#ef4444;">${A.toFixed(2)}점</span></div>
+        <div style="flex:1; padding:15px; background:#fffbeb; border: 2px solid #f59e0b; border-radius:8px;"><strong>B수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#f59e0b;">${B.toFixed(2)}점</span></div>
+        <div style="flex:1; padding:15px; background:#f0fdf4; border: 2px solid #22c55e; border-radius:8px;"><strong>C수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#22c55e;">${C.toFixed(2)}점</span></div>
+        <div style="flex:1; padding:15px; background:#eff6ff; border: 2px solid #3b82f6; border-radius:8px;"><strong>D수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#3b82f6;">${D.toFixed(2)}점</span></div>
+        <div style="flex:1; padding:15px; background:#f8fafc; border: 2px solid #94a3b8; border-radius:8px;"><strong>E수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#64748b;">${E.toFixed(2)}점</span></div>
+    `;
+    document.getElementById('final-cut-score-boxes').innerHTML = boxHtml;
+    document.getElementById('final-result-container').style.display = 'block';
+    
+    const aiLoading = document.getElementById('final-ai-loading');
+    if(aiLoading) aiLoading.style.display = 'none';
 }
 
 // ==========================================
@@ -1895,41 +2096,78 @@ async function startExamAiAnalysis(base64Data) {
     }
 }
 
+// 전역 변수로 관리하여 삭제/수정이 용이하게 합니다
+let extractedQuestionsArray = [];
+
 function renderExtractedQuestions(rawText) {
     const listContainer = document.getElementById('extracted-questions-list');
     listContainer.innerHTML = "";
-    const questions = rawText.split('---').filter(q => q.trim().length > 5);
+    
+    // 1. 문항 분리 및 데이터 구조화
+    extractedQuestionsArray = rawText.split('---')
+        .filter(q => q.trim().length > 5)
+        .map((qText, idx) => {
+            // [0.0점] 형태의 배점 추출 정규식
+            const scoreMatch = qText.match(/\[(\d+\.?\d*)점\]/);
+            const score = scoreMatch ? scoreMatch[1] : "";
+            // 배점 텍스트는 본문에서 깔끔하게 제거 (선택 사항)
+            const cleanText = qText.replace(/\[\d+\.?\d*점\]/, "").trim();
+            
+            return { id: idx, text: cleanText, score: score, image: null };
+        });
 
-    questions.forEach((qText, idx) => {
+    renderQuestionCards();
+}
+
+function renderQuestionCards() {
+    const listContainer = document.getElementById('extracted-questions-list');
+    listContainer.innerHTML = "";
+
+    extractedQuestionsArray.forEach((q, idx) => {
         const qCard = document.createElement('div');
-        qCard.style.padding = '1rem';
-        qCard.style.borderLeft = '4px solid #ea580c';
-        qCard.style.background = 'white';
-        qCard.style.borderBottom = '1px solid #cbd5e1';
-        qCard.style.marginBottom = '1rem'; // 카드 간격 추가
+        qCard.className = "quiz-container"; // 기존 스타일 재활용
+        qCard.style.marginBottom = "1rem";
+        qCard.style.borderLeft = "4px solid #ea580c";
 
-        // 🟢 [수정됨] 문항 텍스트 영역 위에 배점 및 성취수준 입력칸 추가
         qCard.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; flex-wrap: wrap; gap: 10px;">
-                <div style="font-weight: bold; color: #ea580c; font-size: 1.1rem;">[문항 ${idx + 1}]</div>
-                <div style="display: flex; gap: 10px; align-items: center; background: #f8fafc; padding: 5px 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
-                    <label style="font-size: 0.9rem; font-weight: bold; color: #334155;">배점:</label>
-                    <input type="number" step="0.1" class="path2-score-input" placeholder="0.0" style="width: 60px; padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: bold; color: #ea580c; text-align: center;">
-                    <label style="font-size: 0.9rem; font-weight: bold; margin-left: 5px; color: #334155;">성취수준:</label>
-                    <select class="path2-level-select" style="padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: bold;">
-                        <option value="A">A</option><option value="B">B</option><option value="C" selected>C</option><option value="D">D</option><option value="E">E</option>
-                    </select>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
+                <div style="font-weight: bold; color: #ea580c;">[문항 ${idx + 1}]</div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <label style="font-size: 0.85rem;">배점:</label>
+                    <input type="number" step="0.1" class="path2-score-input" value="${q.score}" 
+                           onchange="extractedQuestionsArray[${idx}].score = this.value"
+                           style="width: 55px; padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px;">
+                    <button onclick="deleteQuestion(${idx})" style="background:#fee2e2; color:#ef4444; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.8rem;">삭제</button>
+                    ${idx > 0 ? `<button onclick="mergeWithPrevious(${idx})" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.8rem;">위와 합치기</button>` : ''}
                 </div>
             </div>
-            <textarea class="q-edit-area" style="width: 100%; height: 100px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px; font-family: inherit;">${qText.trim()}</textarea>
-            <div style="margin-top: 0.5rem; text-align: right;">
-                <button onclick="startPartialCapture(${idx})" style="font-size: 0.8rem; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 4px 8px; border-radius: 4px; cursor: pointer;">✂️ 그림 추가</button>
+            <textarea class="q-edit-area" onchange="extractedQuestionsArray[${idx}].text = this.value"
+                      style="width: 100%; height: 100px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px; font-family: inherit;">${q.text}</textarea>
+            <div id="q-image-container-${idx}" style="margin-top: 10px;">${q.image ? `<img src="${q.image}" style="max-height:150px;">` : ''}</div>
+            <div style="text-align: right; margin-top: 5px;">
+                <button onclick="startPartialCapture(${idx})" style="font-size: 0.75rem; color: #64748b; background:none; border:none; cursor:pointer; text-decoration:underline;">✂️ 그림 캡처/교체</button>
             </div>
-            <div id="q-image-container-${idx}" style="margin-top: 10px; text-align: center;"></div>
         `;
         listContainer.appendChild(qCard);
     });
+
+    // 수학 수식 렌더링 다시 실행
     if (window.MathJax) MathJax.typesetPromise([listContainer]);
+}
+
+// 문항 삭제 및 자동 번호 당기기
+function deleteQuestion(idx) {
+    if(confirm(`${idx + 1}번 문항을 삭제하시겠습니까?`)) {
+        extractedQuestionsArray.splice(idx, 1);
+        renderQuestionCards();
+    }
+}
+
+// 한 문항이 두 개로 쪼개졌을 때 빠르게 수정하는 팁
+function mergeWithPrevious(idx) {
+    extractedQuestionsArray[idx-1].text += "\n" + extractedQuestionsArray[idx].text;
+    extractedQuestionsArray.splice(idx, 1);
+    renderQuestionCards();
 }
 
 let isCapturing = false;
@@ -2031,7 +2269,7 @@ function goToCutScoreStep4() {
     const scoreInputs = document.querySelectorAll('.path2-score-input');
     const levelSelects = document.querySelectorAll('.path2-level-select');
     
-    let hasError = false; // 🟢 배점 누락 체크용 변수
+    let hasError = false; 
 
     textAreas.forEach((ta, idx) => {
         let qText = ta.value.trim();
@@ -2044,10 +2282,8 @@ function goToCutScoreStep4() {
 
         if(cutScoreMode === 'after') {
             score = parseFloat(scoreInputs[idx].value);
-            // 🟢 [추가됨] 배점이 비어있거나 0 이하인지 체크
             if (isNaN(score) || score <= 0) { hasError = true; }
-            level = levelSelects[idx].value;
-            
+            level = levelSelects[idx] ? levelSelects[idx].value : 'C';
             parsedScores.push({ num: idx + 1, score: score, level: level });
         }
         
@@ -2059,21 +2295,27 @@ function goToCutScoreStep4() {
         return;
     }
 
-    // 🟢 [추가됨] 배점을 입력하지 않은 경우 차단
     if (cutScoreMode === 'after' && hasError) {
         alert("모든 문항의 배점을 정확히 입력해 주세요.");
         return;
     }
 
-    // 🟢 [수정됨] 상단 인디케이터 색상 변경 (2단계 완료 -> 3단계 활성화)
+    // 🟢 [추가됨] 성취기준 하나 이상 선택했는지 검증 (길 2)
+    if (cutScoreMode === 'after') {
+        const selectedStds = Array.from(document.querySelectorAll('.cut-score-std-cb:checked'));
+        if (selectedStds.length === 0) { 
+            alert("평가에 반영된 출제 성취기준을 반드시 하나 이상 선택해 주세요!"); 
+            return; 
+        }
+    }
+
     const ind3 = document.getElementById('step3-indicator');
     const ind4 = document.getElementById('step4-indicator');
     if(ind3) ind3.style.color = '#cbd5e1';
     if(ind4) ind4.style.color = 'var(--primary)';
 
     if(cutScoreMode === 'before') {
-        goToStep(4);
-        renderFinalCutScoreTable([]); 
+        // 길 1은 handleNextToPath1Result()에서 처리하므로 이쪽으로는 안 옴
     } else {
         startFinalAiAnalysis(); 
     }
@@ -2094,7 +2336,10 @@ async function startFinalAiAnalysis() {
             return `[문항 ${q.num}] 배점: ${score}점\n내용: ${q.text}`;
         }).join('\n\n');
 
+        const stdList = Array.from(document.querySelectorAll('.cut-score-std-cb:checked')).map(cb => cb.value).join(', ');
+
         const prompt = `당신은 대한민국 최고의 평가 위원입니다. 다음 문항들을 분석하여 각 문항의 성취수준(A~E)과 '수정된 Angoff 방식'에 따른 경계선 학생의 예상 정답 확률(%)을 추정하세요.
+        제시된 성취기준 [${stdList}] 과 <국가 수준 평가 루브릭>을 바탕으로 분석하세요.
         A수준 경계선 학생은 가장 똑똑하므로 정답률이 높아야 하고, E수준으로 갈수록 정답률이 낮아져야 합니다. (확률은 0에서 100 사이의 정수)
         
         반드시 아래의 JSON 배열 형식으로만 응답하세요. 다른 설명은 일절 금지합니다.
@@ -2104,7 +2349,10 @@ async function startFinalAiAnalysis() {
         ]
 
         [문항 데이터]
-        ${questionsPrompt}`;
+        ${questionsPrompt}
+        
+        [국가 수준 평가 루브릭]
+        ${systemRubric}`;
 
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
             method: 'POST',
@@ -2121,80 +2369,16 @@ async function startFinalAiAnalysis() {
         aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
         const aiResults = JSON.parse(aiText);
 
+        // 정상 처리되면 위쪽에 이미 만들어둔 M자 묶어치기 렌더링 함수로 결과 전송
         renderFinalCutScoreTable(aiResults);
 
     } catch (error) {
         console.error(error);
-        alert("분석 중 오류가 발생했습니다. (AI가 JSON 형식을 어겼거나 네트워크 오류)\n" + error.message);
-        goToStep(3); // 실패 시 다시 3단계로
+        alert("분석 중 오류가 발생했습니다. (네트워크 지연 또는 AI 응답 오류)\n" + error.message);
+        goToStep(3); // 실패 시 다시 3단계로 복귀
     } finally {
         document.getElementById('final-ai-loading').style.display = 'none';
     }
-}
-
-function renderFinalCutScoreTable(aiResults) {
-    document.getElementById('final-result-container').style.display = 'block';
-    const tbody = document.getElementById('cut-score-result-table');
-    let html = '';
-
-    finalExamQuestions.forEach(q => {
-        const scoreObj = parsedScores.find(s => s.num === q.num);
-        const score = scoreObj ? scoreObj.score : 0;
-        const ai = aiResults.find(a => a.num === q.num) || { level: 'C', pct_A: 90, pct_B: 70, pct_C: 50, pct_D: 30, pct_E: 10 };
-
-        html += `
-        <tr style="border-bottom: 1px solid #e2e8f0;" class="cut-score-row" data-score="${score}">
-            <td><strong>${q.num}</strong></td>
-            <td style="color: #ea580c; font-weight: bold;">${score}</td>
-            <td>
-                <select class="level-select" style="padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px;">
-                    <option value="A" ${ai.level==='A'?'selected':''}>A</option>
-                    <option value="B" ${ai.level==='B'?'selected':''}>B</option>
-                    <option value="C" ${ai.level==='C'?'selected':''}>C</option>
-                    <option value="D" ${ai.level==='D'?'selected':''}>D</option>
-                    <option value="E" ${ai.level==='E'?'selected':''}>E</option>
-                </select>
-            </td>
-            <td><input type="number" class="pct-A score-input" value="${ai.pct_A}" oninput="calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-B score-input" value="${ai.pct_B}" oninput="calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-C score-input" value="${ai.pct_C}" oninput="calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-D score-input" value="${ai.pct_D}" oninput="calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-E score-input" value="${ai.pct_E}" oninput="calculateTotalCutScores()"></td>
-        </tr>
-        `;
-    });
-
-    tbody.innerHTML = html;
-    calculateTotalCutScores(); 
-}
-
-function calculateTotalCutScores() {
-    let totalA = 0, totalB = 0, totalC = 0, totalD = 0, totalE = 0;
-
-    document.querySelectorAll('.cut-score-row').forEach(row => {
-        const score = parseFloat(row.getAttribute('data-score'));
-        
-        const pctA = (parseFloat(row.querySelector('.pct-A').value) || 0) / 100;
-        const pctB = (parseFloat(row.querySelector('.pct-B').value) || 0) / 100;
-        const pctC = (parseFloat(row.querySelector('.pct-C').value) || 0) / 100;
-        const pctD = (parseFloat(row.querySelector('.pct-D').value) || 0) / 100;
-        const pctE = (parseFloat(row.querySelector('.pct-E').value) || 0) / 100;
-
-        totalA += score * pctA;
-        totalB += score * pctB;
-        totalC += score * pctC;
-        totalD += score * pctD;
-        totalE += score * pctE;
-    });
-
-    const boxHtml = `
-        <div style="flex:1; padding:15px; background:#fef2f2; border: 2px solid #ef4444; border-radius:8px;"><strong>A수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#ef4444;">${totalA.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:15px; background:#fffbeb; border: 2px solid #f59e0b; border-radius:8px;"><strong>B수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#f59e0b;">${totalB.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:15px; background:#f0fdf4; border: 2px solid #22c55e; border-radius:8px;"><strong>C수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#22c55e;">${totalC.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:15px; background:#eff6ff; border: 2px solid #3b82f6; border-radius:8px;"><strong>D수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#3b82f6;">${totalD.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:15px; background:#f8fafc; border: 2px solid #94a3b8; border-radius:8px;"><strong>E수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#64748b;">${totalE.toFixed(2)}점</span></div>
-    `;
-    document.getElementById('final-cut-score-boxes').innerHTML = boxHtml;
 }
 // ==========================================
 // 🤖 스마트 챗봇 창 크기 조절 (왼쪽은 얼음, 오른쪽 빈 공간으로만 확장)
@@ -2500,7 +2684,9 @@ async function deleteQuestionFromDB() {
 // ==========================================
 let currentProjectId = null;
 
-// 1. 파이어베이스에서 내 폴더 불러오기
+// ==========================================
+// 📂 사용자 폴더(프로젝트) 관리 시스템 (삭제 기능 포함)
+// ==========================================
 async function loadProjects() {
     const user = auth.currentUser;
     const listEl = document.getElementById('project-folder-list');
@@ -2529,19 +2715,37 @@ async function loadProjects() {
             const dateStr = data.createdAt ? data.createdAt.toDate().toLocaleDateString() : '최근';
             
             html += `
-            <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 1.5rem; background: white; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05);" 
+            <div style="position: relative; border: 1px solid #cbd5e1; border-radius: 8px; padding: 1.5rem; background: white; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05);" 
                  onmouseover="this.style.borderColor='#3b82f6'; this.style.transform='translateY(-3px)';" 
-                 onmouseout="this.style.borderColor='#cbd5e1'; this.style.transform='none';" 
-                 onclick="openProject('${doc.id}', '${data.name}')">
-                <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📁</div>
-                <h4 style="margin: 0 0 0.5rem 0; color: #1e293b; font-size: 1.1rem;">${data.name}</h4>
-                <p style="margin: 0; font-size: 0.8rem; color: #64748b;">생성일: ${dateStr}</p>
+                 onmouseout="this.style.borderColor='#cbd5e1'; this.style.transform='none';">
+                 
+                <button onclick="deleteProject('${doc.id}', event)" style="position: absolute; top: 10px; right: 10px; background: #fee2e2; color: #ef4444; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.8rem; z-index: 10;">삭제</button>
+                
+                <div onclick="openProject('${doc.id}', '${data.name}')">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📁</div>
+                    <h4 style="margin: 0 0 0.5rem 0; color: #1e293b; font-size: 1.1rem;">${data.name}</h4>
+                    <p style="margin: 0; font-size: 0.8rem; color: #64748b;">생성일: ${dateStr}</p>
+                </div>
             </div>`;
         });
         listEl.innerHTML = html;
     } catch(e) {
         console.error(e);
         listEl.innerHTML = '<p style="color:red; grid-column: 1 / -1;">폴더를 불러오는데 실패했습니다.</p>';
+    }
+}
+
+// 🟢 [추가됨] 폴더(프로젝트) 삭제 로직
+async function deleteProject(projectId, event) {
+    event.stopPropagation(); // 삭제 버튼 클릭 시 폴더 안으로 들어가는 것을 막음
+    if(!confirm("⚠️ 정말로 이 폴더를 삭제하시겠습니까?\n내부에 저장된 모든 평가 내역이 영구 삭제됩니다!")) return;
+    
+    try {
+        await db.collection('user_projects').doc(projectId).delete();
+        alert("🗑️ 폴더가 성공적으로 삭제되었습니다.");
+        loadProjects(); // 목록 새로고침
+    } catch(e) {
+        alert("삭제 중 오류가 발생했습니다: " + e.message);
     }
 }
 

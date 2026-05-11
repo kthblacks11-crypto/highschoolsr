@@ -7,7 +7,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script>
         MathJax = { tex: { inlineMath: [['$','$'], ['\\(','\\)']] }, svg: { fontCache: 'global' } };
     </script>
@@ -194,7 +194,7 @@
             </div>
             <div style="flex: 1;">
                 <label style="font-weight: bold; color: #334155; display: block; margin-bottom: 0.5rem;">[2] 과목 선택</label>
-                <select id="cut-score-subject" class="option-btn" style="text-align: left; padding: 0.8rem; width: 100%;" onchange="loadStandardsForCutScore()">
+                <select id="cut-score-subject" class="option-btn" style="text-align: left; padding: 0.8rem; width: 100%;">
                     <option value="">-- 교과군 먼저 선택 --</option>
                 </select>
             </div>
@@ -202,84 +202,102 @@
 
         <div style="display: flex; gap: 1.5rem; margin-top: 1rem;">
             <div style="flex: 1; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 1.5rem; text-align: center;">
-                <h4 style="color: #475569; margin-top: 0;">출제 전 / 이원목적분류표 기반</h4>
-                <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1.5rem;">성취기준 선택 없이, 이원목적분류표 상의 난이도(상/중/하) 배점만 입력하여 초고속으로 분할점수를 예측합니다.</p>
-                <button class="save-btn" onclick="startPath1()" style="background: #64748b; margin: 0;">🛤️ 길 1: 초간단 시뮬레이션 시작</button>
+                <h4 style="color: #475569; margin-top: 0;">출제 전 / 이원목적분류표(엑셀) 업로드</h4>
+                <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1.5rem;">문항별 배점과 성취수준을 엑셀로 올리거나 직접 입력하면, 시스템이 성격이 같은 문항끼리 알아서 묶어(M자 방식) 분할점수를 예측합니다.</p>
+                <button class="save-btn" onclick="startPath1()" style="background: #64748b; margin: 0;">🛤️ 길 1: 시뮬레이션 시작 (성취기준 생략)</button>
             </div>
 
-            <div style="flex: 1; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; padding: 1.5rem;">
-                <h4 style="color: #ea580c; margin-top: 0; text-align: center;">출제 후 / AI 시험지 정밀 분석</h4>
-                <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1rem; text-align: center;">출제 범위(성취기준)를 선택하고 시험지를 올리면, AI가 문항을 뜯어보고 정답률을 추정합니다.</p>
-                
-                <div id="cut-score-standards-list" style="background: white; border: 1px solid var(--border); border-radius: 8px; padding: 1rem; max-height: 150px; overflow-y: auto; margin-bottom: 1rem;">
-                    <p style="color: #94a3b8; font-size: 0.85rem; margin: 0; text-align: center;">과목을 선택하면 성취기준이 나타납니다.</p>
-                </div>
-                
+            <div style="flex: 1; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; padding: 1.5rem; text-align: center;">
+                <h4 style="color: #ea580c; margin-top: 0;">출제 후 / AI 시험지 정밀 분석</h4>
+                <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1.5rem;">다음 단계에서 출제 범위(성취기준)를 선택하고 실제 시험지를 올리면, AI가 문항을 분석하고 정답률을 추정합니다.</p>
                 <button class="save-btn" onclick="startPath2()" style="background: #ea580c; margin: 0;">🛤️ 길 2: AI 정밀 분석 시작</button>
             </div>
         </div>
     </div>
 
     <div id="cut-score-step2" class="cut-score-card" style="display: none;">
-        <h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">2단계: 이원목적분류표 배점 입력 (길 1)</h3>
+        <h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">2단계: 배점 및 성취수준 입력 (시뮬레이션)</h3>
         
-        <div id="path1-guide" style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1rem; margin-bottom: 1rem; font-size: 0.9rem;">
+        <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1rem; margin-bottom: 1.5rem; font-size: 0.9rem;">
             <strong style="font-size: 1rem;">💡 문항별 예상 성취수준 가이드</strong><br>
-            <span style="color:#475569; font-size:0.85rem;">각 난이도별 <strong>'배점 합계'</strong>만 입력해 주세요. (예: 쉬운 객관식이 6문제고 합쳐서 14점이면 14 입력)</span>
-            <ul style="margin: 8px 0 0 0; padding-left: 20px; line-height: 1.6; color: #334155;">
-                <li><strong>A수준:</strong> 성취기준을 포괄적으로 이해하고, 복잡한 문제 상황에서 수학적 개념을 융합하여 해결할 수 있는 수준</li>
-                <li><strong>B수준:</strong> 성취기준에 대한 이해를 바탕으로, 일반적인 문제 상황에서 개념을 적용할 수 있는 수준</li>
-                <li><strong>C수준:</strong> 성취기준의 기본적인 개념, 원리, 법칙을 이해하고, 단순한 상황에 적용할 수 있는 수준</li>
-                <li><strong>D수준:</strong> 성취기준의 기초적인 개념과 원리를 부분적으로 이해하고 있는 수준</li>
-                <li><strong>E수준:</strong> 기초적인 수학적 지식에 대한 보충 학습이 필요한 수준</li>
-            </ul>
+            <span style="color:#475569; font-size:0.85rem;">각 문항의 배점과 성취수준을 꼼꼼히 입력해 주세요. <strong>결과 화면에서는 배점과 수준이 같은 문항들끼리 자동으로 예쁘게 묶여서(M자 클러스터링) 산출</strong>됩니다.</span>
         </div>
         
-        <div style="overflow-x: auto; margin-bottom: 1.5rem;">
-            <table class="score-table">
-                <thead style="background: #f1f5f9;">
-                    <tr>
-                        <th rowspan="2">평가 유형</th><th rowspan="2">예상 난이도</th><th rowspan="2" style="color: #ea580c;">배점 합계</th>
-                        <th colspan="5">최소능력자의 예상 정답률 (%)</th>
-                    </tr>
-                    <tr>
-                        <th>A</th><th>B</th><th>C</th><th>D</th><th>E</th>
-                    </tr>
-                </thead>
-                <tbody id="path1-table-body">
-                    </tbody>
-            </table>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+                <div style="font-weight:bold;">객관식: <input type="number" id="choice-count" value="20" style="width:50px; text-align:center;"> 문항</div>
+                <div style="font-weight:bold;">서술형: <input type="number" id="short-count" value="5" style="width:50px; text-align:center;"> 문항</div>
+                <button class="btn-step-prev" onclick="generateEmptyScoreTable()" style="color:var(--primary); border-color:var(--primary);">✨ 표 자동 생성</button>
+                <button class="btn-step-prev" onclick="downloadScoreTemplate()">📥 양식 다운로드</button>
+                <button class="btn-step-prev" onclick="document.getElementById('excel-upload').click()" style="background:#10b981; color:white; border:none;">📤 엑셀 업로드</button>
+                <input type="file" id="excel-upload" accept=".csv, .xlsx, .xls" style="display:none;" onchange="handleExcelUpload(event)">
+            </div>
+            
+            <div style="background: #fffbeb; border: 2px solid #f59e0b; padding: 8px 15px; border-radius: 8px; font-weight: bold; color: #92400e; font-size: 1.1rem;">
+                현재 총 배점: <span id="step2-total-score" style="font-size: 1.3rem; color: #ea580c;">0.0</span> 점
+            </div>
         </div>
 
+        <div id="score-table-container" style="max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 1.5rem;">
+            <p style="text-align:center; padding: 2rem; color: #94a3b8;">[표 자동 생성]을 누르거나 엑셀 파일을 업로드해주세요.</p>
+        </div>
+        
         <div style="display: flex; justify-content: space-between;">
             <button class="btn-step-prev" onclick="goToStep(1)">◀ 이전 단계로</button>
-            <button class="save-btn" onclick="calculatePath1Total()" style="width: auto; background: #2563eb;">결과 산출하기 ➡️</button>
+            <button id="btn-next-to-step3" class="save-btn" onclick="handleNextToPath1Result()" style="width: auto; background: #ea580c; display:none;">결과 산출하기 (자동 묶어치기) ➡️</button>
         </div>
     </div>
-    <div id="cut-score-step3" class="cut-score-card" style="display: none;">
-        <h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">2단계: 문항 업로드 및 정밀 설정</h3>
-        <div id="exam-upload-zone" style="border: 2px dashed #cbd5e1; border-radius: 12px; padding: 3rem; text-align: center; margin-bottom: 1.5rem; cursor: pointer; background: #f8fafc;" onclick="document.getElementById('exam-file').click()">
-            <span style="font-size: 3rem;">📄</span>
-            <p style="margin-top: 1rem; font-weight: bold; color: var(--primary);">시험지 파일을 업로드하세요.</p>
-            <input type="file" id="exam-file" accept="image/*,application/pdf" style="display: none;" onchange="handleExamUpload(event)">
-        </div>
-        <div id="exam-loading" style="display: none; text-align: center; padding: 2rem;">
-            <p style="font-weight: bold; color: #ea580c;">AI가 문항을 분석 중입니다... ⏳</p>
-        </div>
-        <div id="exam-inspector-wrapper" style="display: none; gap: 1.5rem; height: 600px; margin-bottom: 1.5rem;">
-            <div id="exam-viewer-left" style="flex: 1; background: #f1f5f9; border-radius: 12px; overflow: auto; position: relative;">
-                <img id="exam-img-display" src="" style="width: 100%;">
-                <canvas id="exam-capture-canvas" style="position: absolute; top: 0; left: 0; display: none;"></canvas>
-            </div>
-            <div id="exam-editor-right" style="flex: 1.2; overflow-y: auto; background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid #cbd5e1;">
-                <div id="extracted-questions-list" style="display: flex; flex-direction: column; gap: 1rem;"></div>
-            </div>
-        </div>
-        <div style="display: flex; justify-content: space-between;">
-            <button class="btn-step-prev" onclick="goBackStep(3)">◀ 이전 단계로</button>
-            <button id="step3-actions" class="save-btn" onclick="goToCutScoreStep4()" style="width: auto; background: #ea580c; display:none;">4단계로 이동 ➡️</button>
-        </div>
-    </div>
+    <button class="btn-step-prev" onclick="document.getElementById('excel-upload').click()" style="background:#10b981; color:white; border:none;">📤 엑셀 업로드</button>
+    <input type="file" id="excel-upload" accept=".csv, .xlsx, .xls" style="display:none;" onchange="handleExcelUpload(event)">
+</div>
+
+<div style="background: #fffbeb; border: 2px solid #f59e0b; padding: 8px 15px; border-radius: 8px; font-weight: bold; color: #92400e; font-size: 1.1rem;">
+    현재 총 배점: <span id="step2-total-score" style="font-size: 1.3rem; color: #ea580c;">0.0</span> 점
+</div>
+</div>
+
+<div id="score-table-container" style="max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 1.5rem;">
+<p style="text-align:center; padding: 2rem; color: #94a3b8;">[표 자동 생성]을 누르거나 엑셀 파일을 업로드해주세요.</p>
+</div>
+
+<div style="display: flex; justify-content: space-between;">
+<button class="btn-step-prev" onclick="goToStep(1)">◀ 이전 단계로</button>
+<button id="btn-next-to-step3" class="save-btn" onclick="handleNextToPath1Result()" style="width: auto; background: #ea580c; display:none;">결과 산출하기 (자동 묶어치기) ➡️</button>
+</div>
+</div>
+
+<div id="cut-score-step3" class="cut-score-card" style="display: none;">
+<h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">2단계: 출제 범위(성취기준) 선택 및 시험지 분석</h3>
+
+<div style="margin-bottom: 2rem;">
+<label style="font-weight: bold; color: #334155;">📌 출제 성취기준 선택 <span style="font-weight: normal; font-size: 0.85rem; color: #ea580c;">(💡 Shift + 클릭으로 범위 선택)</span></label>
+<div id="cut-score-standards-list" style="margin-top: 0.5rem; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; max-height: 200px; overflow-y: auto;">
+    <p style="color: #94a3b8; font-size: 0.95rem; margin: 0; text-align: center;">성취기준을 불러오는 중입니다...</p>
+</div>
+</div>
+
+<div id="exam-upload-zone" style="border: 2px dashed #cbd5e1; border-radius: 12px; padding: 3rem; text-align: center; margin-bottom: 1.5rem; cursor: pointer; background: #f8fafc;" onclick="document.getElementById('exam-file').click()">
+<span style="font-size: 3rem;">📄</span>
+<p style="margin-top: 1rem; font-weight: bold; color: var(--primary);">시험지 파일을 업로드하세요. (PDF 또는 이미지)</p>
+<input type="file" id="exam-file" accept="image/*,application/pdf" style="display: none;" onchange="handleExamUpload(event)">
+</div>
+<div id="exam-loading" style="display: none; text-align: center; padding: 2rem;">
+<p style="font-weight: bold; color: #ea580c;">AI가 문항을 분석 중입니다... ⏳</p>
+</div>
+<div id="exam-inspector-wrapper" style="display: none; gap: 1.5rem; height: 600px; margin-bottom: 1.5rem;">
+<div id="exam-viewer-left" style="flex: 1; background: #f1f5f9; border-radius: 12px; overflow: auto; position: relative;">
+    <img id="exam-img-display" src="" style="width: 100%;">
+    <canvas id="exam-capture-canvas" style="position: absolute; top: 0; left: 0; display: none;"></canvas>
+</div>
+<div id="exam-editor-right" style="flex: 1.2; overflow-y: auto; background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid #cbd5e1;">
+    <div id="extracted-questions-list" style="display: flex; flex-direction: column; gap: 1rem;"></div>
+</div>
+</div>
+<div style="display: flex; justify-content: space-between;">
+<button class="btn-step-prev" onclick="goBackStep(3)">◀ 이전 단계로</button>
+<button id="step3-actions" class="save-btn" onclick="goToCutScoreStep4()" style="width: auto; background: #ea580c; display:none;">4단계로 이동 ➡️</button>
+</div>
+</div>
 
     <div id="cut-score-step4" class="cut-score-card" style="display: none;">
         <h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">3단계: 최종 예상 분할점수 산출</h3>
