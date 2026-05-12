@@ -1696,46 +1696,59 @@ function downloadScoreTemplate() {
     link.click();
 }
 
-// 🟢 [수정완료] 엑셀 업로드 시 난이도(상/중/하) 드롭다운 정상 생성
-function handleExcelUpload(e) {
-    const file = e.target.files[0];
+function handleExcelUpload(event) {
+    const file = event.target.files[0];
     if(!file) return;
     const reader = new FileReader();
+    
     reader.onload = function(e) {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, {type: 'array'});
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
 
-        let html = '<table class="score-table" style="width:100%;"><thead style="position: sticky; top: 0; background: #f1f5f9; z-index: 1;"><tr><th>문항 번호</th><th>예상 난이도</th><th>배점</th><th>성취수준</th></tr></thead><tbody>';
-        
-        jsonData.forEach((row, index) => {
-            if(index === 0 && isNaN(row[0])) return;
-            if(row[0]) {
-                // row[0]=번호, row[1]=난이도, row[2]=배점, row[3]=성취수준
-                let diff = (row[1] || '중').toString().trim();
-                if(!['상','중','하'].includes(diff)) diff = '중';
-                
-                let score = row[2] || 0;
-                
-                let level = (row[3] || 'C').toString().toUpperCase().trim();
-                if(!['A','B','C','D','E'].includes(level)) level = 'C';
-                
-                let selectHtml = `<select class="level-select" style="padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px;">
-                    <option value="A" ${level==='A'?'selected':''}>A</option><option value="B" ${level==='B'?'selected':''}>B</option><option value="C" ${level==='C'?'selected':''}>C</option><option value="D" ${level==='D'?'selected':''}>D</option><option value="E" ${level==='E'?'selected':''}>E</option>
-                </select>`;
+            let html = '<table class="score-table" style="width:100%;"><thead style="position: sticky; top: 0; background: #f1f5f9; z-index: 1;"><tr><th>문항 번호</th><th>예상 난이도</th><th>배점</th><th>성취수준</th></tr></thead><tbody>';
 
-                let diffHtml = `<select class="diff-select" style="padding:4px; border-radius:4px;">
-                    <option value="상" ${diff==='상'?'selected':''}>상</option><option value="중" ${diff==='중'?'selected':''}>중</option><option value="하" ${diff==='하'?'selected':''}>하</option>
-                </select>`;
+            jsonData.forEach((row, index) => {
+                // 헤더(첫 줄) 또는 완전히 빈 줄 건너뛰기
+                if (index === 0 || !row || row.length === 0) return;
 
-                html += `<tr><td>${row[0]}</td><td>${diffHtml}</td><td><input type="number" step="0.1" class="score-input" data-num="${row[0]}" value="${score}" oninput="updateStep2Total()"></td><td>${selectHtml}</td></tr>`;
-            }
-        });
-        html += '</tbody></table>';
-        document.getElementById('score-table-container').innerHTML = html;
-        updateStep2Total(); 
-        document.getElementById('btn-next-to-step3').style.display = 'inline-block';
+                if (row[0] !== undefined && row[0] !== null && String(row[0]).trim() !== "") {
+                    let qNum = String(row[0]).trim();
+                    let diff = (row[1] || '중').toString().trim();
+                    if(!['상','중','하'].includes(diff)) diff = '중';
+
+                    let score = parseFloat(row[2]) || 0;
+
+                    let level = (row[3] || 'C').toString().toUpperCase().trim();
+                    if(!['A','B','C','D','E'].includes(level)) level = 'C';
+
+                    const isShort = qNum.includes('서');
+
+                    let selectHtml = `<select class="level-select" style="padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px;">
+                        <option value="A" ${level==='A'?'selected':''}>A</option><option value="B" ${level==='B'?'selected':''}>B</option><option value="C" ${level==='C'?'selected':''}>C</option><option value="D" ${level==='D'?'selected':''}>D</option><option value="E" ${level==='E'?'selected':''}>E</option>
+                    </select>`;
+
+                    let diffHtml = `<select class="diff-select" style="padding:4px; border-radius:4px;">
+                        <option value="상" ${diff==='상'?'selected':''}>상 (어려움)</option><option value="중" ${diff==='중'?'selected':''}>중 (보통)</option><option value="하" ${diff==='하'?'selected':''}>하 (쉬움)</option>
+                    </select>`;
+
+                    html += `<tr ${isShort ? 'style="background:#fff7ed;"' : ''}>
+                        <td>${qNum}</td><td>${diffHtml}</td>
+                        <td><input type="number" step="0.1" class="score-input" data-num="${qNum}" value="${score}" oninput="updateStep2Total()"></td>
+                        <td>${selectHtml}</td>
+                    </tr>`;
+                }
+            });
+            html += '</tbody></table>';
+            document.getElementById('score-table-container').innerHTML = html;
+            updateStep2Total();
+            document.getElementById('btn-next-to-step3').style.display = 'inline-block';
+            document.getElementById('excel-upload').value = ""; // 다음 업로드를 위해 초기화
+        } catch(error) {
+            alert("엑셀 파일 양식이 맞지 않거나 읽기에 실패했습니다: " + error.message);
+        }
     };
     reader.readAsArrayBuffer(file);
 }
@@ -1767,22 +1780,27 @@ function getBasePct(level, isShortAnswer, difficulty) {
 // 🚀 최종 산출: 데이터 통합 및 M자 묶어치기 (길1/길2 공통 활용)
 // ==========================================
 
-// 🟢 [수정] 표의 배점, 성취수준, 난이도를 모두 읽어 M자 산출로 넘기기
+
 function handleNextToPath1Result() {
     parsedScores = [];
     const inputs = document.querySelectorAll('.score-input');
     const selects = document.querySelectorAll('.level-select');
-    const diffs = document.querySelectorAll('.diff-select'); // ✨ 난이도 배열 가져오기
+    const diffs = document.querySelectorAll('.diff-select');
 
     let totalScore = 0;
     inputs.forEach((input, idx) => {
         const s = parseFloat(input.value) || 0;
         totalScore += s;
+        // 문항 번호에 '서'가 들어가면 서답형, 아니면 객관식
+        const qNum = input.getAttribute('data-num') || String(idx + 1);
+        const isShortAnswer = String(qNum).includes('서');
+        
         parsedScores.push({ 
-            num: input.getAttribute('data-num') || (idx + 1), 
+            num: qNum, 
             score: s,
             level: selects[idx] ? selects[idx].value : 'C',
-            difficulty: diffs[idx] ? diffs[idx].value : '중' // ✨ 난이도 저장
+            difficulty: diffs[idx] ? diffs[idx].value : '중',
+            isShortAnswer: isShortAnswer
         });
     });
 
@@ -1790,10 +1808,10 @@ function handleNextToPath1Result() {
 
     goToStep(4);
     
+    // M자 분석을 위해 데이터 정제
     const mergedData = parsedScores.map(q => {
-        const isShortAnswer = String(q.num).includes('서');
-        const pcts = getBasePct(q.level, isShortAnswer, q.difficulty);
-        return { num: q.num, score: q.score, level: q.level, difficulty: q.difficulty, pcts: pcts };
+        const pcts = getBasePct(q.level, q.isShortAnswer, q.difficulty);
+        return { num: q.num, score: q.score, level: q.level, difficulty: q.difficulty, isShortAnswer: q.isShortAnswer, pcts: pcts };
     });
 
     renderGroupedCutScoreTable(mergedData);
@@ -1801,45 +1819,48 @@ function handleNextToPath1Result() {
 
 
 
-// 🟢 핵심! 배점과 성취수준으로 문항을 묶어주는 M자 출력 함수
+// 🟢 핵심! 문항 유형(선택/서답형)과 난이도(상/중/하)로 묶어주는 진짜 M자 출력 함수
 function renderGroupedCutScoreTable(mergedData) {
     document.getElementById('final-result-container').style.display = 'block';
     document.getElementById('final-ai-loading').style.display = 'none';
     
     const tableHead = document.querySelector('#cut-score-result-table').previousElementSibling;
     if (tableHead) {
-        tableHead.innerHTML = `<tr><th>해당 문항 (개수)</th><th>배점</th><th>판정 수준</th><th>A (%)</th><th>B (%)</th><th>C (%)</th><th>D (%)</th><th>E (%)</th></tr>`;
+        tableHead.innerHTML = `<tr><th>문항 범주 (M자형)</th><th>총 배점</th><th>예상 난이도</th><th>A (%)</th><th>B (%)</th><th>C (%)</th><th>D (%)</th><th>E (%)</th></tr>`;
         tableHead.parentElement.style.display = 'block'; 
     }
 
     const tbody = document.getElementById('cut-score-result-table');
     const groups = {};
     
-    // 배점(score) + 수준(level) 을 조합한 키로 그룹화
+    // 객관식/서답형 + 난이도(상/중/하) 을 조합한 키로 그룹화 (M자 분석 핵심)
     mergedData.forEach(q => {
-        const key = `${q.score}_${q.level}`;
+        const typeStr = q.isShortAnswer ? '서답형' : '선택형(객관식)';
+        const key = `${typeStr}_${q.difficulty}`;
         if (!groups[key]) {
             groups[key] = {
-                score: q.score, level: q.level, count: 0, qNums: [], pcts: q.pcts
+                typeStr: typeStr, difficulty: q.difficulty, count: 0, qNums: [], scoreSum: 0, pcts: q.pcts
             };
         }
         groups[key].count++;
+        groups[key].scoreSum += q.score;
         groups[key].qNums.push(q.num);
     });
 
     let html = '';
-    // 배점 내림차순, 성취수준 오름차순으로 예쁘게 정렬
-    Object.values(groups).sort((a,b) => b.score - a.score || a.level.localeCompare(b.level)).forEach(g => {
-        const levelColor = g.level === 'A' || g.level === 'B' ? '#ef4444' : g.level === 'C' ? '#eab308' : '#22c55e';
+    const diffOrder = {'상': 1, '중': 2, '하': 3}; // 정렬 순서
+    
+    Object.values(groups).sort((a,b) => a.typeStr.localeCompare(b.typeStr) || diffOrder[a.difficulty] - diffOrder[b.difficulty]).forEach(g => {
+        const diffColor = g.difficulty === '상' ? '#ef4444' : g.difficulty === '중' ? '#f59e0b' : '#22c55e';
         html += `
-        <tr style="border-bottom: 1px solid #e2e8f0;" class="cut-score-row" data-score="${g.score}" data-count="${g.count}">
+        <tr style="border-bottom: 1px solid #e2e8f0;" class="cut-score-row" data-score="${g.scoreSum}" data-count="1">
             <td style="text-align: left;">
-                <div style="font-size:0.8rem; color:#64748b; margin-bottom: 4px; word-break: keep-all;">${g.qNums.join(', ')}번</div>
-                <strong style="color: var(--primary);">총 ${g.count}문항</strong>
+                <div style="font-size:0.8rem; color:#64748b; margin-bottom: 4px; word-break: keep-all;">해당 문항: ${g.qNums.join(', ')}번</div>
+                <strong style="color: var(--primary);">${g.typeStr} 총 ${g.count}문항</strong>
             </td>
-            <td style="color: #ea580c; font-weight: bold; font-size: 1.1rem;">${g.score}</td>
+            <td style="color: #ea580c; font-weight: bold; font-size: 1.1rem;">${g.scoreSum.toFixed(1)}</td>
             <td>
-                <span style="background:${levelColor}; color:white; padding: 4px 10px; border-radius: 4px; font-weight: bold;">${g.level}</span>
+                <span style="background:${diffColor}; color:white; padding: 4px 10px; border-radius: 4px; font-weight: bold;">${g.difficulty}</span>
             </td>
             <td><input type="number" class="pct-A score-input" value="${g.pcts.A}" oninput="calculateTotalCutScores()"></td>
             <td><input type="number" class="pct-B score-input" value="${g.pcts.B}" oninput="calculateTotalCutScores()"></td>
@@ -2013,14 +2034,16 @@ function goBackStep(currentStep) {
     }
 }
 
-// ------------------------------------------
-// [3단계] 시험지 업로드 및 문항 추출 (부분 캡처 포함)
-// ------------------------------------------
+
 function handleExamUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
-    document.getElementById('exam-upload-zone').style.display = 'none';
+    
+    // ✨ [수정 2] 에러를 내던 존재하지 않는 코드 삭제 후 로딩 표시
     document.getElementById('exam-loading').style.display = 'block';
+
+    // ✨ [수정 3] 같은 PDF/이미지를 다시 올릴 수 있도록 초기화
+    event.target.value = ""; 
 
     const reader = new FileReader();
     reader.onload = function(e) {
@@ -2656,7 +2679,7 @@ function renderProjectAssessments(assessments) {
         // type이 'written'이면 산출/수정 버튼 표시
         const editBtn = asm.type === 'written' 
             ? `<button onclick="startEditAssessment(${idx})" style="background:#3b82f6; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; margin-right:5px;">산출/수정</button>` 
-            : '';
+            : `<button onclick="editManualAssessment(${idx})" style="background:#8b5cf6; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; margin-right:5px;">수정</button>`;
 
         html += `<tr>
             <td><strong>${asm.name}</strong></td>
@@ -2721,35 +2744,78 @@ async function deleteAssessment(index) {
 function openManualAssessmentModal() { document.getElementById('manual-assessment-modal').style.display = 'flex'; }
 function closeManualAssessmentModal() { document.getElementById('manual-assessment-modal').style.display = 'none'; }
 
+let currentEditingManualIndex = -1;
+
+// ✨ [추가] 수행평가 수정 창 열기 함수
+function editManualAssessment(index) {
+    db.collection('user_projects').doc(currentProjectId).get().then(doc => {
+        if(doc.exists) {
+            const asm = doc.data().assessments[index];
+            document.getElementById('manual-assess-name').value = asm.name;
+            document.getElementById('manual-assess-weight').value = asm.weight;
+            
+            // 반영 비율에 맞게 100점 만점으로 역환산하여 표시
+            const ratio = asm.weight / 100;
+            document.getElementById('manual-a').value = Math.round((asm.scores.A || 0) / ratio);
+            document.getElementById('manual-b').value = Math.round((asm.scores.B || 0) / ratio);
+            document.getElementById('manual-c').value = Math.round((asm.scores.C || 0) / ratio);
+            document.getElementById('manual-d').value = Math.round((asm.scores.D || 0) / ratio);
+            document.getElementById('manual-e').value = Math.round((asm.scores.E || 0) / ratio);
+            
+            currentEditingManualIndex = index;
+            document.getElementById('manual-assessment-modal').style.display = 'flex';
+        }
+    });
+}
+
+// ✨ [수정] 수행평가 모달 닫을 때 내용 초기화
+function closeManualAssessmentModal() { 
+    document.getElementById('manual-assessment-modal').style.display = 'none';
+    currentEditingManualIndex = -1; 
+    document.querySelectorAll('#manual-assessment-modal input').forEach(input => input.value = ''); 
+}
+
+// ✨ [수정] 수행평가 저장 (새로 추가 & 수정 모두 대응)
 async function saveManualAssessment() {
     const name = document.getElementById('manual-assess-name').value.trim();
     const weight = parseFloat(document.getElementById('manual-assess-weight').value) || 0;
     
-    // 100점 만점 기준 입력값을 비율(%)에 맞게 환산
     const a = (parseFloat(document.getElementById('manual-a').value) || 0) * (weight / 100);
     const b = (parseFloat(document.getElementById('manual-b').value) || 0) * (weight / 100);
     const c = (parseFloat(document.getElementById('manual-c').value) || 0) * (weight / 100);
     const d = (parseFloat(document.getElementById('manual-d').value) || 0) * (weight / 100);
     const e = (parseFloat(document.getElementById('manual-e').value) || 0) * (weight / 100);
-    if(!name || weight <= 0) {
-        alert("평가명과 반영 비율을 정확히 입력하세요.");
-        return;
-    }
+    
+    if(!name || weight <= 0) { alert("평가명과 반영 비율을 정확히 입력하세요."); return; }
 
     try {
-        await db.collection('user_projects').doc(currentProjectId).update({
-            assessments: firebase.firestore.FieldValue.arrayUnion({
-                name: name, weight: weight,
-                scores: { A: a, B: b, C: c, D: d, E: e },
-                savedAt: new Date()
-            })
-        });
-        alert("✅ 수행평가가 성공적으로 추가되었습니다!");
-        
-        // 필드 초기화
-        document.querySelectorAll('#manual-assessment-modal input').forEach(input => input.value = '');
-        closeManualAssessmentModal();
-        loadProjectDetails(); // 합산표 재계산
+        const docRef = db.collection('user_projects').doc(currentProjectId);
+        const doc = await docRef.get();
+        if(doc.exists) {
+            let assessments = doc.data().assessments || [];
+            
+            if (currentEditingManualIndex !== -1) {
+                // 기존 데이터 덮어쓰기 (수정 모드)
+                assessments[currentEditingManualIndex] = {
+                    name: name, weight: weight, type: 'manual',
+                    scores: { A: a, B: b, C: c, D: d, E: e },
+                    savedAt: new Date()
+                };
+            } else {
+                // 새 데이터 추가
+                assessments.push({
+                    name: name, weight: weight, type: 'manual',
+                    scores: { A: a, B: b, C: c, D: d, E: e },
+                    savedAt: new Date()
+                });
+            }
+            
+            await docRef.update({ assessments: assessments });
+            alert("✅ 수행평가가 성공적으로 저장되었습니다!");
+            
+            closeManualAssessmentModal();
+            loadProjectDetails(); 
+        }
     } catch(err) { alert("저장 실패: " + err.message); }
 }
 
@@ -2765,9 +2831,8 @@ async function saveAssessmentToProject() {
         
         if(doc.exists) {
             let assessments = doc.data().assessments || [];
-            const weight = assessments[currentEditingAssessmentIndex].weight || 0; // 설정해둔 반영 비율 가져오기
+            const weight = assessments[currentEditingAssessmentIndex].weight || 0; 
             
-            // 100점 만점 시험이라고 가정하고 반영 비율(%) 만큼 곱해서 최종 점수 산출
             const weightedScores = {
                 A: parseFloat(boxes[0].innerText.replace('점','')) * (weight / 100),
                 B: parseFloat(boxes[1].innerText.replace('점','')) * (weight / 100),
@@ -2776,14 +2841,15 @@ async function saveAssessmentToProject() {
                 E: parseFloat(boxes[4].innerText.replace('점','')) * (weight / 100)
             };
 
-            // 해당 인덱스의 점수 업데이트
             assessments[currentEditingAssessmentIndex].scores = weightedScores;
             assessments[currentEditingAssessmentIndex].savedAt = new Date();
+            
+            // ✨ [핵심 추가] 작성했던 표 데이터(parsedScores)도 DB에 함께 저장합니다!
+            assessments[currentEditingAssessmentIndex].parsedScores = parsedScores;
             
             await docRef.update({ assessments: assessments });
             alert(`✅ 산출된 분할점수가 반영비율(${weight}%)에 맞게 환산되어 저장되었습니다!`);
             
-            // 뷰 초기화 및 폴더 화면으로 복귀
             goToStep(-1); 
             document.getElementById('project-detail-view').style.display = 'block';
             loadProjectDetails();
@@ -2822,15 +2888,65 @@ async function saveWrittenAssessmentShell() {
 
 function startEditAssessment(index) {
     currentEditingAssessmentIndex = index;
-    
-    // ✨ History API 추가: 지필평가 분석(Step2) 화면 진입 기록
     history.pushState({ section: 'cut-score', sub: 'step2' }, "", "#cut-score/step2");
 
     document.getElementById('project-detail-view').style.display = 'none';
     document.getElementById('cut-score-step2').style.display = 'block';
     
-    generateEmptyScoreTable(); 
-}  
+    db.collection('user_projects').doc(currentProjectId).get().then(doc => {
+        if(doc.exists) {
+            const asm = doc.data().assessments[index];
+            document.getElementById('current-assessment-info').innerText = `📌 ${asm.name} (반영 비율: ${asm.weight}%)`;
+            
+            // ✨ [핵심 추가] 기존에 저장된 표 데이터가 있으면 복구하고, 없으면 빈 표를 생성합니다.
+            if (asm.parsedScores && asm.parsedScores.length > 0) {
+                restoreScoreTable(asm.parsedScores);
+                document.getElementById('btn-next-to-step3').style.display = 'inline-block';
+            } else {
+                generateEmptyScoreTable(); 
+            }
+        }
+    });
+}
+
+// ✨ [신규 추가] 저장된 데이터를 기반으로 표를 다시 그려주는 함수
+function restoreScoreTable(savedScores) {
+    const container = document.getElementById('score-table-container');
+    let html = `<table class="score-table">
+                <thead style="position: sticky; top: 0; background: #f1f5f9; z-index: 1;">
+                <tr><th>문항 번호</th><th>예상 난이도</th><th>배점 (점)</th><th>예상 성취수준</th></tr></thead><tbody>`;
+
+    savedScores.forEach(q => {
+        const isShort = String(q.num).includes('서');
+        const diff = q.difficulty || '중';
+        const level = q.level || 'C';
+
+        html += `<tr ${isShort ? 'style="background:#fff7ed;"' : ''}>
+            <td>${q.num}</td>
+            <td>
+                <select class="diff-select" style="padding:4px; border-radius:4px;">
+                    <option value="상" ${diff==='상'?'selected':''}>상 (어려움)</option>
+                    <option value="중" ${diff==='중'?'selected':''}>중 (보통)</option>
+                    <option value="하" ${diff==='하'?'selected':''}>하 (쉬움)</option>
+                </select>
+            </td>
+            <td><input type="number" step="0.1" class="score-input" data-num="${q.num}" value="${q.score}" oninput="updateStep2Total()"></td>
+            <td><select class="level-select" style="padding:4px;">
+                <option value="A" ${level==='A'?'selected':''}>A</option>
+                <option value="B" ${level==='B'?'selected':''}>B</option>
+                <option value="C" ${level==='C'?'selected':''}>C</option>
+                <option value="D" ${level==='D'?'selected':''}>D</option>
+                <option value="E" ${level==='E'?'selected':''}>E</option>
+            </select></td>
+        </tr>`;
+    });
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+    updateStep2Total();
+    
+    // 전역 변수 동기화
+    parsedScores = savedScores;
+}
 // 🟢 [추가] AI 도우미 영역 열기/닫기
 function openAiHelper() {
     const zone = document.getElementById('ai-helper-zone');

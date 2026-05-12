@@ -248,11 +248,10 @@
             <div id="final-cut-score-boxes" style="display: flex; gap: 10px; justify-content: space-around;"></div>
             
             <div id="save-to-project-zone" style="margin-top: 2rem; padding: 1.5rem; background: #fffbeb; border-radius: 12px; border: 1px solid #fde68a; text-align: center;">
-                <p style="font-weight: bold; color: #92400e; margin-bottom: 1rem;">✨ 이 산출 결과를 현재 폴더에 저장하시겠습니까?</p>
+                <p style="font-weight: bold; color: #92400e; margin-bottom: 1rem;">✨ 이 산출 결과를 현재 폴더에 덮어써서 최종 저장하시겠습니까?</p>
                 <div style="display: flex; gap: 10px; justify-content: center; max-width: 500px; margin: 0 auto;">
-                    <input type="text" id="assessment-name" placeholder="예: 1회 고사, 수행평가1" style="flex: 2; padding: 0.8rem; border-radius: 8px; border: 1px solid #cbd5e1;">
-                    <input type="number" id="assessment-weight" placeholder="비율(%)" style="flex: 1; padding: 0.8rem; border-radius: 8px; border: 1px solid #cbd5e1;">
-                    <button class="save-btn" onclick="saveAssessmentToProject()" style="flex: 1; margin: 0; background: #ea580c;">💾 저장</button>
+                    <div id="current-assessment-info" style="flex: 2; padding: 0.8rem; background: white; border-radius: 8px; border: 1px solid #cbd5e1; color: #334155; font-weight: bold; text-align: left;">평가 정보 불러오는 중...</div>
+                    <button class="save-btn" onclick="saveAssessmentToProject()" style="flex: 1; margin: 0; background: #ea580c;">💾 결과 덮어쓰기</button>
                 </div>
             </div>
             <div style="margin-top: 1.5rem;"><button class="btn-step-prev" onclick="goBackStep(4)">◀ 이전 단계로</button></div>
