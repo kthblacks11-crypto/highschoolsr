@@ -2200,29 +2200,40 @@ let extractedQuestionsArray = [];
 
 
 
-// 🟢 교체할 렌더링 함수 및 수식 미리보기 업데이트 함수
 function renderQuestionCards() {
     const listContainer = document.getElementById('extracted-questions-list');
     listContainer.innerHTML = "";
     
-    // ✨ [추가] 현재 선택된 과목 그룹 확인 (수학인지 체크)
-    const group = document.getElementById('cut-score-group')?.value;
-    const isMath = (group === 'math');
-
     extractedQuestionsArray.forEach((q, idx) => {
         const qCard = document.createElement('div');
         qCard.className = "quiz-container";
         qCard.style.marginBottom = "1rem";
         qCard.style.borderLeft = "4px solid #ea580c";
 
-        // 💡 3번 요청: 난이도를 초기화하고 필수 안내문구를 삽입
-        // 💡 2번 요청: 수식 미리보기 영역 추가
         qCard.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
+                <div style="font-weight: bold; color: #ea580c;">[문항 ${q.num || (idx + 1)}]</div>
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                    <select id="ai-diff-${idx}" style="padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; max-width: 200px;">
+                        <option value="" disabled selected>문항 난이도 선택</option>
+                        <option value="상">상</option>
+                        <option value="중">중</option>
+                        <option value="하">하</option>
+                    </select>
+                    <label style="font-size: 0.85rem; margin-left: 5px;">배점:</label>
+                    <input type="number" step="0.1" class="path2-score-input" value="${q.score}" 
+                           onchange="extractedQuestionsArray[${idx}].score = this.value"
+                           style="width: 55px; padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px;">
+                    <button onclick="deleteQuestion(${idx})" style="background:#fee2e2; color:#ef4444; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.8rem;">삭제</button>
+                    ${idx > 0 ? `<button onclick="mergeWithPrevious(${idx})" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.8rem;">위와 합치기</button>` : ''}
+                </div>
+            </div>
+            
             <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 3px;">✏️ 문항 텍스트 편집</div>
             <textarea class="q-edit-area" oninput="updateMathPreview(${idx}, this.value)"
                       style="width: 100%; height: 100px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px; font-family: inherit; margin-bottom: 10px;">${q.text}</textarea>
             
-            <div id="math-preview-section-${idx}" style="display: ${isMath ? 'block' : 'none'};">
+            <div id="math-preview-section-${idx}">
                 <div style="font-size: 0.8rem; font-weight: bold; color: #3b82f6; margin-bottom: 3px;">👀 수학책 수식 미리보기</div>
                 <div id="math-preview-${idx}" style="padding: 10px; background: white; border: 1px dashed #3b82f6; border-radius: 4px; font-size: 0.95rem; min-height: 40px; margin-bottom: 10px;">
                     ${q.text.replace(/\n/g, '<br>')}
@@ -2237,7 +2248,7 @@ function renderQuestionCards() {
         listContainer.appendChild(qCard);
     });
 
-    if (window.MathJax && isMath) MathJax.typesetPromise([listContainer]);
+    if (window.MathJax) MathJax.typesetPromise([listContainer]);
 }
 
 // 🟢 (추가) 텍스트를 수정할 때마다 수식을 다시 그려주는 함수
@@ -2994,6 +3005,7 @@ window.onload = async () => {
     changeSubject();             
     syncPendingFeedback();       
     initChatResizer(); // 챗봇 리사이저 추가
+    initCaptureEvents(); // 📸 그림 캡처 이벤트 생명 불어넣기 (추가됨)
 };
 async function saveWrittenAssessmentShell() {
     const name = document.getElementById('written-assess-name').value.trim();
