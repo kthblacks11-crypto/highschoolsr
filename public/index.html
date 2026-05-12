@@ -183,7 +183,10 @@
     
 
     <div id="cut-score-step2" class="cut-score-card" style="display: none;">
-        <h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">문항별 배점 및 성취수준 입력</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 20px;">
+            <h3 style="margin: 0; color: #1e3a8a;">문항별 배점 및 성취수준 입력</h3>
+            <button class="btn-step-prev" onclick="document.getElementById('project-detail-view').style.display='block'; document.getElementById('cut-score-step2').style.display='none';" style="margin: 0; padding: 6px 12px; font-size: 0.9rem;">◀ 폴더로 돌아가기</button>
+        </div>
         
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
             <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
@@ -209,8 +212,9 @@
             <div id="exam-loading" style="display:none; color:#ea580c; font-weight:bold; margin-top:10px;">AI가 분석 중입니다... ⏳</div>
         </div>
         <div id="exam-inspector-wrapper" style="display:none; gap: 1.5rem; height: 600px; margin-bottom: 1.5rem;">
-            <div id="exam-viewer-left" style="flex: 1; background: #f1f5f9; border-radius: 12px; overflow: auto; position: relative;">
-                <img id="exam-img-display" src="" style="width: 100%;">
+            <div id="exam-viewer-left" style="flex: 1; background: #f1f5f9; border-radius: 12px; overflow: auto; position: relative; height: 100%; min-height: 600px;">
+                <img id="exam-img-display" src="" style="width: 100%; display: none;">
+                <embed id="exam-pdf-display" src="" type="application/pdf" width="100%" height="100%" style="display: none;">
                 <canvas id="exam-capture-canvas" style="position: absolute; top: 0; left: 0; display: none;"></canvas>
             </div>
             <div id="exam-editor-right" style="flex: 1.2; overflow-y: auto; background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid #cbd5e1;">
@@ -225,14 +229,16 @@
             <p style="text-align:center; padding: 2rem; color: #94a3b8;">[표 생성]을 누르거나 엑셀/AI 분석을 시작하세요.</p>
         </div>
         
-        <div style="display: flex; justify-content: space-between;">
-            <button class="btn-step-prev" onclick="document.getElementById('project-detail-view').style.display='block'; document.getElementById('cut-score-step2').style.display='none';">◀ 폴더로 돌아가기</button>
+        <div style="display: flex; justify-content: flex-end;">
             <button id="btn-next-to-step3" class="save-btn" onclick="handleNextToPath1Result()" style="width: auto; background: #ea580c; display:none;">분할점수 산출하기 (M자 그룹화) ➡️</button>
         </div>
     </div>   
 
     <div id="cut-score-step4" class="cut-score-card" style="display: none;">
-        <h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem;">3단계: 최종 예상 분할점수 산출</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 20px;">
+            <h3 style="margin: 0; color: #1e3a8a;">3단계: 최종 예상 분할점수 산출</h3>
+            <button class="btn-step-prev" onclick="goBackStep(4)" style="margin: 0; padding: 6px 12px; font-size: 0.9rem;">◀ 이전 단계로</button>
+        </div>
         <div id="final-ai-loading" style="display: none; text-align: center; padding: 2rem;">
             <p style="font-weight: bold; color: #10b981;">최종 결과 산출 중... ⏳</p>
         </div>
@@ -251,15 +257,14 @@
                 <p style="font-weight: bold; color: #92400e; margin-bottom: 1rem;">✨ 이 산출 결과를 현재 폴더에 덮어써서 최종 저장하시겠습니까?</p>
                 <div style="display: flex; gap: 10px; justify-content: center; max-width: 500px; margin: 0 auto;">
                     <div id="current-assessment-info" style="flex: 2; padding: 0.8rem; background: white; border-radius: 8px; border: 1px solid #cbd5e1; color: #334155; font-weight: bold; text-align: left;">평가 정보 불러오는 중...</div>
-                    <button class="save-btn" onclick="saveAssessmentToProject()" style="flex: 1; margin: 0; background: #ea580c;">💾 결과 덮어쓰기</button>
+                    <button class="save-btn" onclick="saveAssessmentToProject()" style="flex: 1; margin: 0; background: #ea580c;">💾 결과 저장하기</button>
                 </div>
             </div>
-            <div style="margin-top: 1.5rem;"><button class="btn-step-prev" onclick="goBackStep(4)">◀ 이전 단계로</button></div>
-        </div>
+
     </div>
 </div>
 
-    <div id="admin-dashboard" class="section">
+</div>    <div id="admin-dashboard" class="section">
         <h2>🛠️ 데이터 관리자 모드</h2>
         <div class="quiz-container" style="max-width: 800px; margin: 0 auto;">
             <div style="background: #fffbeb; padding: 1rem; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 1.5rem;">
@@ -537,7 +542,7 @@
             </div> 
         </div>
     </div>
-</div>
+
 
 
 <div class="modal" id="feedback-modal">
