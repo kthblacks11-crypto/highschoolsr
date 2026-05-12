@@ -651,7 +651,30 @@
         <button class="save-btn" onclick="saveWrittenAssessmentShell()" style="background: #ea580c; margin: 0;">➕ 목록에 추가하기</button>
     </div>
 </div>
-
+<div class="modal" id="manual-assessment-modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <span class="close-btn" onclick="closeManualAssessmentModal()">&times;</span>
+        <h2 style="margin-top: 0; color: #8b5cf6;">✍️ 수행평가 (직접 입력) 추가</h2>
+        <div style="background: #f8fafc; padding: 1.2rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #cbd5e1; font-size: 0.9rem;">
+            <strong style="color: #334155;">💡 수행평가 입력 안내</strong><br>
+            100점 만점 기준으로 각 성취수준(A~E)별 예상 컷오프 점수를 입력하세요. 반영 비율에 맞게 시스템이 자동 환산하여 최종 표에 합산합니다.
+        </div>
+        <div style="display: flex; gap: 10px; margin-bottom: 1rem;">
+            <input type="text" id="manual-assess-name" placeholder="예: 포트폴리오 평가" style="flex: 2; padding: 0.8rem; border: 1px solid #cbd5e1; border-radius: 8px;">
+            <input type="number" id="manual-assess-weight" placeholder="비율(%)" style="flex: 1; padding: 0.8rem; border: 1px solid #cbd5e1; border-radius: 8px;">
+        </div>
+        
+        <p style="text-align: center; margin-bottom: 0.5rem; font-weight: bold; font-size: 0.9rem; color: #475569;">[ 100점 만점 기준 컷오프 점수 입력 ]</p>
+        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-bottom: 1.5rem; text-align: center;">
+            <div><label style="font-weight:bold; color:#ef4444;">A</label><input type="number" id="manual-a" placeholder="80" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; text-align: center;"></div>
+            <div><label style="font-weight:bold; color:#f59e0b;">B</label><input type="number" id="manual-b" placeholder="70" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; text-align: center;"></div>
+            <div><label style="font-weight:bold; color:#22c55e;">C</label><input type="number" id="manual-c" placeholder="60" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; text-align: center;"></div>
+            <div><label style="font-weight:bold; color:#3b82f6;">D</label><input type="number" id="manual-d" placeholder="50" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; text-align: center;"></div>
+            <div><label style="font-weight:bold; color:#64748b;">E</label><input type="number" id="manual-e" placeholder="40" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; text-align: center;"></div>
+        </div>
+        <button class="save-btn" onclick="saveManualAssessment()" style="background: #8b5cf6; margin: 0;">💾 수행평가 목록에 저장하기</button>
+    </div>
+</div>
 
 </div>
 </body>
