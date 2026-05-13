@@ -296,3 +296,12 @@ header {
     overflow-y: auto !important; /* 왼쪽, 오른쪽 각각 독립적으로 스크롤 생성 */
     padding-bottom: 2rem !important; /* 아래쪽 여유 공간 추가 */
 }
+/* 3번 해결: 캡처 오버레이 우선순위 강화 */
+#capture-overlay {
+    position: fixed !important;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 99999 !important; /* 최상단으로 올림 */
+    cursor: crosshair;
+    display: none;
+}

@@ -15,7 +15,7 @@ const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 let currentUploadedImageUrl = null;
 
-auth.onAuthStateChanged((user) => {
+auth.onAuthStateChanged(async (user) => {
     const loginBtn = document.getElementById('login-btn');
     const logoutBtn = document.getElementById('logout-btn');
     const userInfo = document.getElementById('user-info');
@@ -23,27 +23,48 @@ auth.onAuthStateChanged((user) => {
     const adminModeBtn = document.getElementById('admin-mode-btn'); 
 
     if (user) {
+        // 로그인 성공 시 UI 변경
         loginBtn.style.display = 'none';
         logoutBtn.style.display = 'inline-block';
-        userInfo.innerText = user.displayName + " 선생님";
+        userInfo.innerText = user.displayName + " 선생님 환영합니다.";
+        
+        // F5 누르지 않아도 데이터 즉시 로드
+        await loadStandardsFromDB(); 
+        changeSubject(); // 👈 [1번 해결] 데이터를 다 불러온 후 화면을 갱신하도록 명령 추가!
         initChecklist(); 
         
+        // 💡 [오류 방지] 실제 하단에 정의된 함수 이름인 renderSavedAssessments로 수정
+        if (typeof renderSavedAssessments === "function") {
+            renderSavedAssessments(); 
+        }
+        
+        // API 키 확인 및 안내
+        const savedKey = localStorage.getItem('gemini_api_key');
+        if (!savedKey) {
+            if(confirm("AI 분석을 위해 Gemini API 키 등록이 필요합니다. 'API 가져오기' 화면으로 이동하시겠습니까?")) {
+                openSettings(); // 👈 [2번 해결] 복잡한 버튼 찾기 대신, 직관적으로 모달창 여는 함수 실행
+            }
+        }
+
+        // 관리자 권한 확인 (기존 코드 유지)
         if (user.email === "kthblacks11@gmail.com") {
             if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'inline-block';
             if(adminModeBtn) adminModeBtn.style.display = 'inline-block';
-        } else {
-            if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'none';
-            if(adminModeBtn) adminModeBtn.style.display = 'none';
         }
     } else {
+        // 로그아웃 상태
         loginBtn.style.display = 'inline-block';
         logoutBtn.style.display = 'none';
-        userInfo.innerText = "";
-        if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'none'; 
-        if(adminModeBtn) adminModeBtn.style.display = 'none'; 
-        initChecklist(); 
+        userInfo.innerText = "로그인이 필요합니다.";
+        if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'none';
+        if(adminModeBtn) adminModeBtn.style.display = 'none';
     }
 });
+
+function showApiModal() {
+    const modal = document.getElementById('api-modal'); // index.html에 있는 ID 확인
+    if(modal) modal.style.display = 'flex';
+}
 
 async function handleLogin() {
     try { await auth.signInWithPopup(provider); }
@@ -1718,14 +1739,35 @@ function generateEmptyScoreTable() {
 }
 
 function downloadScoreTemplate() {
-    const choiceCount = parseInt(document.getElementById('choice-count').value) || 0;
-    const shortCount = parseInt(document.getElementById('short-count').value) || 0;
-    // 헤더에 '예상 난이도' 추가
-    let csv = "문항 번호,예상 난이도,배점,성취수준\n";
-    for(let i=1; i<=choiceCount; i++) csv += `${i},중,0,C\n`;
-    for(let i=1; i<=shortCount; i++) csv += `서${i},중,0,C\n`;
+    // 💡 7번 해결: 현재 화면에 생성되어 있는 입력칸들을 먼저 싹 찾아봅니다.
+    const existingInputs = document.querySelectorAll('.score-input');
     
-    const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+    // 엑셀에서 한글이 깨지지 않도록 마법의 주문(\ufeff)을 맨 앞에 붙입니다.
+    let csv = "\ufeff문항 번호,예상 난이도,배점,성취수준\n"; 
+
+    if (existingInputs.length > 0) {
+        // [상황 A] 이미 표가 만들어져 있을 때: 화면에 있는 데이터를 그대로 긁어옵니다!
+        const selects = document.querySelectorAll('.level-select');
+        const diffs = document.querySelectorAll('.diff-select');
+
+        existingInputs.forEach((input, idx) => {
+            const qNum = input.getAttribute('data-num') || String(idx + 1);
+            const diff = diffs[idx] ? diffs[idx].value : '중';
+            const score = input.value || '0';
+            const level = selects[idx] ? selects[idx].value : 'C';
+
+            csv += `${qNum},${diff},${score},${level}\n`;
+        });
+    } else {
+        // [상황 B] 표가 아직 없을 때: 위의 개수 설정에 맞춰 빈 양식을 만들어줍니다.
+        const choiceCount = parseInt(document.getElementById('choice-count').value) || 0;
+        const shortCount = parseInt(document.getElementById('short-count').value) || 0;
+
+        for(let i=1; i<=choiceCount; i++) csv += `${i},중,0,C\n`;
+        for(let i=1; i<=shortCount; i++) csv += `서${i},중,0,C\n`;
+    }
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = "분할점수_배점양식.csv";
@@ -1890,9 +1932,13 @@ function renderGroupedCutScoreTable(mergedData) {
     let html = '';
     
     // 3. 6줄을 순서대로 화면에 그립니다. 문항수가 0개면 음영 처리합니다.
-    Object.values(groups).forEach(g => {
+    Object.values(groups).forEach((g, index) => { // 👈 index(순번)를 알 수 있도록 추가했습니다.
         const isEmpty = g.count === 0;
-        const rowStyle = isEmpty ? 'background: #f8fafc; opacity: 0.5;' : 'border-bottom: 1px solid #e2e8f0;';
+        
+        // 💡 6번 해결: 3번째 줄(객관식_하, index 2) 아래에는 굵은 3px 이중선을 그어 서답형과 확실히 구분합니다.
+        let bottomBorder = (index === 2) ? 'border-bottom: 3px double #64748b;' : 'border-bottom: 1px solid #e2e8f0;';
+        const rowStyle = isEmpty ? `background: #f8fafc; opacity: 0.5; ${bottomBorder}` : bottomBorder;
+        
         const diffColor = isEmpty ? '#cbd5e1' : (g.difficulty === '상' ? '#ef4444' : g.difficulty === '중' ? '#f59e0b' : '#22c55e');
         const qNumText = isEmpty ? '해당 문항 없음' : `해당 문항: ${g.qNums.join(', ')}번`;
         const countText = isEmpty ? '0문항' : `총 ${g.count}문항`;
@@ -2215,13 +2261,13 @@ function renderQuestionCards() {
                 <div style="font-weight: bold; color: #ea580c;">[문항 ${q.num || (idx + 1)}]</div>
                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                     <select id="ai-diff-${idx}" style="padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; max-width: 200px;">
-                        <option value="" disabled selected>문항 난이도 선택</option>
+                        <option value="" disabled selected>난이도 선택</option>
                         <option value="상">상</option>
                         <option value="중">중</option>
                         <option value="하">하</option>
                     </select>
                     <label style="font-size: 0.85rem; margin-left: 5px;">배점:</label>
-                    <input type="number" step="0.1" class="path2-score-input" value="${q.score}" 
+                    <input type="number" step="0.1" class="path2-score-input" value="${q.score || 0}" 
                            onchange="extractedQuestionsArray[${idx}].score = this.value"
                            style="width: 55px; padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px;">
                     <button onclick="deleteQuestion(${idx})" style="background:#fee2e2; color:#ef4444; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.8rem;">삭제</button>
@@ -2229,13 +2275,13 @@ function renderQuestionCards() {
                 </div>
             </div>
             
-            <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 3px;">✏️ 문항 텍스트 편집</div>
+            <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 3px; font-weight: bold;">✏️ 문항 텍스트 원본 수정 (수식이나 화학식은 $ 기호로 감싸주세요)</div>
             <textarea class="q-edit-area" oninput="updateMathPreview(${idx}, this.value)"
-                      style="width: 100%; height: 100px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px; font-family: inherit; margin-bottom: 10px;">${q.text}</textarea>
+                      style="width: 100%; height: 100px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px; font-family: inherit; margin-bottom: 10px; line-height: 1.5;">${q.text}</textarea>
             
             <div id="math-preview-section-${idx}">
-                <div style="font-size: 0.8rem; font-weight: bold; color: #3b82f6; margin-bottom: 3px;">👀 수학책 수식 미리보기</div>
-                <div id="math-preview-${idx}" style="padding: 10px; background: white; border: 1px dashed #3b82f6; border-radius: 4px; font-size: 0.95rem; min-height: 40px; margin-bottom: 10px;">
+                <div style="font-size: 0.85rem; font-weight: bold; color: #3b82f6; margin-bottom: 3px;">👀 최종 출력 미리보기 (수식 자동 변환)</div>
+                <div id="math-preview-${idx}" style="padding: 10px; background: #f8fafc; border: 1px dashed #3b82f6; border-radius: 4px; font-size: 0.95rem; min-height: 40px; margin-bottom: 10px; line-height: 1.6;">
                     ${q.text.replace(/\n/g, '<br>')}
                 </div>
             </div>
@@ -2243,7 +2289,18 @@ function renderQuestionCards() {
             <div id="q-image-container-${idx}" style="margin-top: 10px; text-align: center;">
                 ${q.image ? `<img src="${q.image}" style="max-width:100%; border:1px solid #e2e8f0; border-radius:4px;">` : ''}
             </div>
-            <button onclick="startPartialCapture(${idx})" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:0.8rem; margin-top:5px;">📸 문제 그림 캡처하기</button>
+            
+            <div style="background: #fffbeb; border: 1px solid #fde68a; padding: 10px; border-radius: 6px; margin-top: 10px; text-align: left;">
+                <p style="margin: 0 0 5px 0; font-size: 0.8rem; font-weight: bold; color: #92400e;">🖼️ 그림/도표 넣는 방법</p>
+                <p style="margin: 0 0 8px 0; font-size: 0.75rem; color: #b45309; line-height: 1.4;">
+                    • <strong>이미지 파일</strong> 업로드 시 👉 [자체 캡처] 버튼 사용<br>
+                    • <strong>PDF 파일</strong> 업로드 시 👉 키보드 <strong>윈도우키 + Shift + S</strong> 로 화면을 캡처한 뒤, 아래 [복사한 그림 붙여넣기] 버튼 클릭!
+                </p>
+                <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                    <button onclick="startPartialCapture(${idx})" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:0.8rem;">📸 자체 캡처 (이미지용)</button>
+                    <button onclick="pasteImageToQuestion(${idx})" style="background:#fef3c7; border:1px solid #fde68a; color:#92400e; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:0.8rem; font-weight:bold;">📋 복사한 그림 붙여넣기 (PDF용)</button>
+                </div>
+            </div>
         `;
         listContainer.appendChild(qCard);
     });
@@ -2274,13 +2331,30 @@ let capStartX = 0, capStartY = 0;
 let currentCaptureQIdx = -1;
 
 function startPartialCapture(idx) {
+    const canvas = document.getElementById('exam-capture-canvas');
+    const imgEl = document.getElementById('exam-img-display'); 
+    const pdfEl = document.getElementById('exam-pdf-display'); 
+
+    // 🟢 PDF가 화면에 떠 있는 경우, 친절한 안내 메시지 띄우기
+    if (pdfEl && pdfEl.style.display === 'block') {
+        alert("💡 [PDF 캡처 안내]\n\n웹 브라우저 보안 정책상 PDF는 이 버튼으로 직접 캡처할 수 없습니다.\n\n대신 키보드의 [윈도우키 + Shift + S]를 눌러 캡처하신 후, 옆에 있는 노란색 [복사한 그림 붙여넣기] 버튼을 이용해 주세요!");
+        return; 
+    }
+
+    if(!canvas) return;
+
     currentCaptureQIdx = idx;
     isCapturing = true;
-    const canvas = document.getElementById('exam-capture-canvas');
-    if(!canvas) return;
+
+    // 도화지 크기를 이미지 크기에 맞게 조절
+    if(imgEl && imgEl.style.display !== 'none') {
+        canvas.width = imgEl.clientWidth;
+        canvas.height = imgEl.clientHeight;
+    }
+
     canvas.style.display = 'block';
     canvas.style.cursor = 'crosshair';
-    alert("📸 왼쪽 PDF 화면에서 그림 영역을 드래그하여 캡처하세요.");
+    alert("📸 왼쪽 화면에서 그림 영역을 드래그하여 캡처하세요.");
 }
 
 // 캔버스 마우스 이벤트 등록 (window.onload 내부 또는 파일 끝에 추가)
@@ -2648,7 +2722,17 @@ async function loadProjects() {
             let badges = '';
             
             if(data.assessments && data.assessments.length > 0) {
-                badges = data.assessments.map(a => `<span style="display:inline-block; background:#e2e8f0; color:#475569; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-right:4px; margin-top:4px;">${a.name}</span>`).join('');
+                // 💡 지필고사(written)가 먼저, 수행평가(manual)가 나중에 오도록 정렬합니다.
+                let sortedAss = [...data.assessments].sort((a, b) => {
+                    if (a.type === 'written' && b.type !== 'written') return -1;
+                    if (a.type !== 'written' && b.type === 'written') return 1;
+                    return 0;
+                });
+                // 지필은 파란색, 수행은 초록색으로 시각적 구분을 줍니다!
+                badges = sortedAss.map(a => {
+                    const bg = a.type === 'written' ? '#3b82f6' : '#10b981'; 
+                    return `<span style="display:inline-block; background:${bg}; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:bold; margin-right:4px; margin-top:4px;">${a.name}</span>`;
+                }).join('');
             } else {
                 badges = '<span style="font-size: 0.75rem; color: #94a3b8;">평가 내역 없음</span>';
             }
@@ -2790,7 +2874,19 @@ function renderProjectAssessments(assessments) {
     let totalWeight = 0;
     let totals = { A: 0, B: 0, C: 0, D: 0, E: 0 };
 
-    assessments.forEach((asm, idx) => {
+    // 💡 8번 해결: 화면에 그리기 전 지필 -> 수행 순으로 정렬합니다.
+    // [중요!] 정렬해서 순서가 섞이더라도, 진짜 DB의 번호(originalIndex)를 기억하게 해서 엉뚱한 항목이 삭제/수정되는 대참사를 막습니다.
+    let sortedWithIndex = assessments.map((asm, idx) => ({ ...asm, originalIndex: idx }));
+    sortedWithIndex.sort((a, b) => {
+        if (a.type === 'written' && b.type !== 'written') return -1;
+        if (a.type !== 'written' && b.type === 'written') return 1;
+        return 0;
+    });
+
+    // 이제 원본(assessments)이 아닌, 정렬된 배열(sortedWithIndex)을 돌며 화면에 그립니다.
+    sortedWithIndex.forEach((asm) => {
+        const idx = asm.originalIndex; // 핵심: 버튼에는 화면 순서가 아닌 DB의 진짜 인덱스표를 달아줍니다!
+        
         totalWeight += asm.weight;
         totals.A += (asm.scores?.A || 0);
         totals.B += (asm.scores?.B || 0);
@@ -2798,13 +2894,18 @@ function renderProjectAssessments(assessments) {
         totals.D += (asm.scores?.D || 0);
         totals.E += (asm.scores?.E || 0);
 
-        // type이 'written'이면 산출/수정 버튼 표시
+        // 지필고사는 파란색 텍스트, 수행평가는 초록색 텍스트로 이름을 꾸며줍니다.
+        const nameColor = asm.type === 'written' ? '#1e40af' : '#166534';
+        const typeBadge = asm.type === 'written' 
+            ? `<span style="background:#3b82f6; color:white; padding:2px 4px; border-radius:4px; font-size:0.7rem; margin-right:5px;">지필</span>`
+            : `<span style="background:#10b981; color:white; padding:2px 4px; border-radius:4px; font-size:0.7rem; margin-right:5px;">수행</span>`;
+
         const editBtn = asm.type === 'written' 
             ? `<button onclick="startEditAssessment(${idx})" style="background:#3b82f6; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; margin-right:5px;">산출/수정</button>` 
             : `<button onclick="editManualAssessment(${idx})" style="background:#8b5cf6; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; margin-right:5px;">수정</button>`;
 
         html += `<tr>
-            <td><strong>${asm.name}</strong></td>
+            <td style="text-align:left;">${typeBadge}<strong style="color:${nameColor};">${asm.name}</strong></td>
             <td style="color: #ea580c; font-weight: bold;">${asm.weight}%</td>
             <td>${(asm.scores?.A || 0).toFixed(2)}</td>
             <td>${(asm.scores?.B || 0).toFixed(2)}</td>
@@ -2817,7 +2918,6 @@ function renderProjectAssessments(assessments) {
             </td>
         </tr>`;
     });
-
     html += `</tbody>
         <tfoot style="background:#fffbeb; font-weight:bold;">
             <tr>
@@ -3157,13 +3257,14 @@ function sendAiResultsToTable() {
         let score = q.score || "0";
         
         let diffSelect = document.getElementById(`ai-diff-${idx}`);
-        let difficulty = (diffSelect && diffSelect.value !== "") ? diffSelect.value : "중";
+        let difficulty = (diffSelect && diffSelect.value !== "") ? diffSelect.value : ""; // 👈 강제로 '중'이 되지 않도록 비워둡니다.
 
         html += `<tr>
             <td>${q.num}</td>
             <td style="text-align:left; font-size:0.8rem; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${q.text.substring(0,30)}...</td>
             <td>
-                <select class="diff-select" style="padding:4px; border-radius:4px;">
+                <select class="diff-select" style="padding:4px; border-radius:4px; ${difficulty === '' ? 'border: 2px solid #ef4444; background: #fee2e2; color: #ef4444; font-weight: bold;' : ''}" onchange="this.style.border='1px solid #cbd5e1'; this.style.background='white'; this.style.color='black'; this.style.fontWeight='normal';">
+                    <option value="" disabled ${difficulty===''?'selected':''}>선택하세요</option>
                     <option value="상" ${difficulty==='상'?'selected':''}>상</option>
                     <option value="중" ${difficulty==='중'?'selected':''}>중</option>
                     <option value="하" ${difficulty==='하'?'selected':''}>하</option>
@@ -3192,4 +3293,113 @@ function sendAiResultsToTable() {
     document.getElementById('btn-next-to-step3').style.display = 'inline-block';
     
     alert("✅ AI 분석 결과가 표에 반영되었습니다. 최종 확인 및 수정 후 산출 버튼을 눌러주세요.");
+}
+// 8번 해결: 지필/수행 키워드 확장 및 최신순 정렬
+async function renderSavedAssessments() {
+    const listContainer = document.getElementById('saved-assessment-list');
+    if(!listContainer) return;
+
+    listContainer.innerHTML = "<p style='padding:10px; color:#64748b;'>목록을 불러오는 중...</p>";
+    if (!auth.currentUser) {
+        listContainer.innerHTML = "<p style='padding:10px; color:#ef4444;'>로그인이 필요합니다.</p>";
+        return;
+    }
+
+    try {
+        const snapshot = await db.collection("assessments")
+                                 .where("uid", "==", auth.currentUser.uid)
+                                 .orderBy("createdAt", "desc")
+                                 .get();
+
+        if (snapshot.empty) {
+            listContainer.innerHTML = "<p style='padding:10px;'>저장된 평가가 없습니다.</p>";
+            return;
+        }
+
+        // 💡 [지능형 정렬 로직]
+        const docsArray = snapshot.docs.sort((a, b) => {
+            const dataA = a.data();
+            const dataB = b.data();
+            const titleA = dataA.title || "";
+            const titleB = dataB.title || "";
+
+            // 지필고사로 판단할 키워드들 (선생님이 쓰시는 단어들 추가)
+            const jipilKeywords = ["지필", "1회", "2회", "중간", "기말", "고사"];
+            const isA_Jipil = jipilKeywords.some(k => titleA.includes(k));
+            const isB_Jipil = jipilKeywords.some(k => titleB.includes(k));
+
+            // 1. 카테고리 우선 정렬 (지필이 위로)
+            if (isA_Jipil && !isB_Jipil) return -1;
+            if (!isA_Jipil && isB_Jipil) return 1;
+
+            // 2. 같은 카테고리 내에서는 최신 날짜가 위로 (내림차순)
+            const dateA = dataA.createdAt ? dataA.createdAt.toMillis() : 0;
+            const dateB = dataB.createdAt ? dataB.createdAt.toMillis() : 0;
+            return dateB - dateA; 
+        });
+
+        let html = `<ul style="list-style:none; padding:0; margin:0;">`;
+        docsArray.forEach(doc => {
+            const data = doc.data();
+            const date = data.createdAt ? new Date(data.createdAt.toMillis()).toLocaleString() : "날짜 없음";
+            
+            // 지필은 파란색, 수행은 초록색으로 시각적 구분
+            const isJipil = ["지필", "1회", "2회", "중간", "기말", "고사"].some(k => data.title.includes(k));
+            const themeColor = isJipil ? "#3b82f6" : "#10b981";
+            const tagText = isJipil ? "지필" : "수행";
+
+            html += `
+                <li style="margin-bottom: 10px; padding: 12px; border: 1px solid #e2e8f0; border-left: 6px solid ${themeColor}; border-radius: 6px; background: white; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                    <div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="background:${themeColor}; color:white; font-size:0.7rem; padding:2px 6px; border-radius:4px; font-weight:bold;">${tagText}</span>
+                            <div style="font-weight: bold; color: #0f172a; font-size: 1.05rem;">${data.title}</div>
+                        </div>
+                        <div style="font-size: 0.8rem; color: #64748b; margin-top: 4px; padding-left: 45px;">${date}</div>
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                        <button onclick="loadSingleAssessment('${doc.id}')" style="background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">열기</button>
+                        <button onclick="deleteAssessment('${doc.id}')" style="background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; padding:6px 12px; border-radius:4px; cursor:pointer;">삭제</button>
+                    </div>
+                </li>
+            `;
+        });
+        html += `</ul>`;
+        listContainer.innerHTML = html;
+        
+    } catch (error) {
+        console.error("정렬 로드 오류:", error);
+        listContainer.innerHTML = "<p>목록 정렬 중 오류가 발생했습니다.</p>";
+    }
+}
+// ✨ 캡처(복사)한 이미지를 해당 문항에 바로 붙여넣는 마법 함수
+async function pasteImageToQuestion(idx) {
+    try {
+        // 클립보드(복사된 데이터) 읽기 권한 요청
+        const clipboardItems = await navigator.clipboard.read();
+        
+        for (const clipboardItem of clipboardItems) {
+            // 복사된 내용 중 이미지가 있는지 확인
+            const imageTypes = clipboardItem.types.filter(type => type.startsWith('image/'));
+            
+            if (imageTypes.length > 0) {
+                const blob = await clipboardItem.getType(imageTypes[0]);
+                const reader = new FileReader();
+                
+                reader.onload = (e) => {
+                    // 해당 문항의 데이터에 이미지 주소 넣기
+                    extractedQuestionsArray[idx].image = e.target.result;
+                    renderQuestionCards(); // 화면 새로고침
+                    alert("✅ 그림이 성공적으로 첨부되었습니다!");
+                };
+                reader.readAsDataURL(blob);
+                return; 
+            }
+        }
+        // 사용자가 실수로 텍스트를 복사했거나, 복사를 안 했을 때의 친절한 안내
+        alert("⚠️ 아직 복사된 그림이 없습니다.\n\n1. 왼쪽 화면에서 [윈도우키 + Shift + S]를 눌러 그림을 캡처하세요.\n2. 다시 이 [붙여넣기] 버튼을 눌러주세요!");
+    } catch (err) {
+        console.error("클립보드 접근 에러:", err);
+        alert("🚨 그림을 가져올 수 없습니다.\n인터넷 주소창 왼쪽의 '자물쇠' 아이콘을 클릭하고 [클립보드] 권한을 '허용'으로 바꿔주세요.");
+    }
 }
