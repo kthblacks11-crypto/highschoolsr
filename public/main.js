@@ -28,19 +28,15 @@ auth.onAuthStateChanged(async (user) => {
         logoutBtn.style.display = 'inline-block';
         userInfo.innerText = user.displayName + " 선생님 환영합니다.";
         
-        // F5 누르지 않아도 데이터 즉시 로드
-        await loadStandardsFromDB(); 
-        changeSubject(); // 👈 [1번 해결] 데이터를 다 불러온 후 화면을 갱신하도록 명령 추가!
+        // 💡 페이지 로드 시 window.onload에서 데이터를 이미 불러오므로, 
+        // 여기서는 유저 개인 정보(체크리스트, 저장된 평가 등)만 갱신합니다.
         initChecklist(); 
         
-        // 💡 [오류 방지] 실제 하단에 정의된 함수 이름인 renderSavedAssessments로 수정
         if (typeof renderSavedAssessments === "function") {
             renderSavedAssessments(); 
         }
         
-        
-
-        // 관리자 권한 확인 (기존 코드 유지)
+        // 관리자 권한 확인
         if (user.email === "kthblacks11@gmail.com") {
             if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'inline-block';
             if(adminModeBtn) adminModeBtn.style.display = 'inline-block';
@@ -84,6 +80,7 @@ let interactionType = null;
 let activeBoxIndex = -1;
 let dragStartX = 0, dragStartY = 0;
 let initialBoxState = null;
+let lastBatchDiff = '상'; // 일괄넣기 난이도 기억용 변수
 
 function shuffleArray(array) {
     for (let i = array.length - 1; i > 0; i--) {
@@ -149,6 +146,7 @@ async function submitFeedback() {
     }
 }
 
+// ✨ 2. 관리자 의견 확인창을 렌더링하는 함수 (AI 초안 텍스트박스 분리 및 수정창 탑재)
 async function openAdminFeedback() {
     const user = auth.currentUser;
     const adminEmail = "kthblacks11@gmail.com"; 
@@ -158,19 +156,88 @@ async function openAdminFeedback() {
     document.getElementById('admin-feedback-modal').style.display = 'flex';
     const listEl = document.getElementById('admin-feedback-list');
     listEl.innerHTML = "<p style='text-align:center; padding: 2rem;'>의견 목록을 불러오는 중...</p>";
+    
     try {
         const snapshot = await db.collection('developer_feedback').orderBy('timestamp', 'desc').get();
         if(snapshot.empty) { listEl.innerHTML = "<p style='text-align:center; color:#64748b;'>아직 접수된 의견이 없습니다.</p>"; return; }
         let html = "";
+        
         snapshot.forEach(doc => {
             const data = doc.data();
             const date = data.timestamp ? data.timestamp.toDate().toLocaleString() : "방금 전";
-            html += `<div style="background: white; padding: 1.2rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                        <p style="margin:0 0 0.5rem 0; font-size:0.8rem; color:var(--text-light); font-weight:bold;">🕒 ${date}</p>
-                        <p style="margin:0; font-size:0.95rem; white-space:pre-wrap; line-height:1.5;">${data.text}</p>
-                     </div>`;
+            
+            if (data.type === "문항 매칭 이의 제기") {
+                let aiReviewText = data.ai_review || "";
+                
+                // ✨ AI의 응답에서 태그별로 데이터 추출
+                let reviewResult = aiReviewText.match(/\[검토결과\]:\s*([\s\S]*?)(?=\[최종|$)/)?.[1]?.trim() || "검토 결과를 파싱하지 못했습니다.";
+                let finalStd = aiReviewText.match(/\[최종성취기준\]:\s*([^\n]+)/)?.[1]?.trim() || data.proposed_standard;
+                let finalLvl = aiReviewText.match(/\[최종성취수준\]:\s*([A-E])/)?.[1]?.trim() || data.proposed_level;
+                let finalAns = aiReviewText.match(/\[최종정답\]:\s*([^\n]+)/)?.[1]?.trim() || "";
+                let finalReason = aiReviewText.match(/\[최종판정이유\]:\s*([\s\S]*)/)?.[1]?.trim() || data.teacher_reason;
+
+                html += `<div style="background: white; padding: 1.2rem; border-radius: 8px; margin-bottom: 1.2rem; border-left: 4px solid #ea580c; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                                <span style="background: #ffedd5; color: #c2410c; padding: 3px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">🙋 판정 이의 제기</span>
+                                <span style="font-size:0.8rem; color:var(--text-light); font-weight:bold;">🕒 ${date}</span>
+                            </div>
+                            <div style="background: #f8fafc; padding: 10px; border-radius: 6px; font-size: 0.9rem; margin-bottom: 10px; border: 1px solid #e2e8f0; line-height: 1.5;">
+                                <strong style="color:#1e40af;">[원본 문항]</strong><br>${data.question}
+                            </div>
+                            
+                            <div style="margin-bottom: 10px; font-size: 0.9rem;">
+                                <strong style="color: #475569;">👨‍🏫 선생님 이의 제기 사유:</strong>
+                                <p style="margin: 5px 0 0 0; background: #f1f5f9; padding: 10px; border-radius: 6px; line-height: 1.5;">[제안: ${data.proposed_standard} / ${data.proposed_level}수준] ${data.teacher_reason}</p>
+                            </div>
+
+                            <div style="font-size: 0.9rem; margin-bottom: 10px;">
+                                <strong style="color: #6d28d9;">🤖 AI 수석 위원 검토 결과:</strong>
+                                <p style="margin: 5px 0 0 0; background: #f5f3ff; padding: 10px; border-radius: 6px; border: 1px solid #ddd6fe; color: #4c1d95; line-height: 1.6; font-weight: 500;">${reviewResult}</p>
+                            </div>
+
+                            <div style="background: #dcfce7; padding: 12px; border-radius: 6px; border: 1px solid #bbf7d0; font-size: 0.85rem;">
+                                <strong style="color: #15803d; font-size: 0.95rem;">✅ 최종 반영할 판정 (AI 도출 결과 / 수정 가능)</strong>
+                                <div style="margin-top: 10px; display: flex; align-items: center; gap: 5px;">
+                                    <span style="font-weight:bold; width:40px;">기준:</span> <input type="text" id="admin-prop-std-${doc.id}" value="${finalStd}" style="flex: 1; padding: 5px; border: 1px solid #86efac; border-radius: 4px;">
+                                </div>
+                                <div style="margin-top: 5px; display: flex; align-items: center; gap: 5px;">
+                                    <span style="font-weight:bold; width:40px;">수준:</span> <select id="admin-prop-lvl-${doc.id}" style="flex: 1; padding: 5px; border: 1px solid #86efac; border-radius: 4px;">
+                                        <option value="A" ${finalLvl==='A'?'selected':''}>A</option>
+                                        <option value="B" ${finalLvl==='B'?'selected':''}>B</option>
+                                        <option value="C" ${finalLvl==='C'?'selected':''}>C</option>
+                                        <option value="D" ${finalLvl==='D'?'selected':''}>D</option>
+                                        <option value="E" ${finalLvl==='E'?'selected':''}>E</option>
+                                    </select>
+                                </div>
+                                <div style="margin-top: 5px; display: flex; align-items: center; gap: 5px;">
+                                    <span style="font-weight:bold; width:40px;">정답:</span> <input type="text" id="admin-prop-ans-${doc.id}" value="${finalAns}" placeholder="정답 입력 (수식 $ 사용)" style="flex: 1; padding: 5px; border: 1px solid #86efac; border-radius: 4px;">
+                                </div>
+                                <div style="margin-top: 5px; display: flex; align-items: flex-start; gap: 5px;">
+                                    <span style="font-weight:bold; width:40px; margin-top:5px;">이유:</span> <textarea id="admin-prop-reason-${doc.id}" rows="3" style="flex: 1; padding: 5px; border: 1px solid #86efac; border-radius: 4px; font-family:inherit;">${finalReason}</textarea>
+                                </div>
+                            </div>
+                            
+                            <div style="display: flex; gap: 10px; margin-top: 15px; border-top: 1px dashed #cbd5e1; padding-top: 15px;">
+                                <button onclick="acceptFeedback('${doc.id}')" style="background: #10b981; color: white; border: none; flex: 1; padding: 0.8rem; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.95rem;">✅ 위 내용으로 DB 즉시 수정</button>
+                                <button onclick="rejectFeedback('${doc.id}')" style="background: #ef4444; color: white; border: none; flex: 1; padding: 0.8rem; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.95rem;">❌ 기각 (의견 삭제)</button>
+                            </div>
+                         </div>`;
+            } else {
+                // 일반 피드백 창 로직
+                html += `<div style="background: white; padding: 1.2rem; border-radius: 8px; margin-bottom: 1.2rem; border-left: 4px solid var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                                <span style="background: #e0e7ff; color: #1e40af; padding: 3px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">💡 일반 의견</span>
+                                <span style="font-size:0.8rem; color:var(--text-light); font-weight:bold;">🕒 ${date}</span>
+                            </div>
+                            <p style="margin:0; font-size:0.95rem; white-space:pre-wrap; line-height:1.5;">${data.text || "내용 없음"}</p>
+                            <div style="text-align: right; margin-top: 10px;">
+                                <button onclick="rejectFeedback('${doc.id}')" style="background: #ef4444; color: white; border: none; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">삭제</button>
+                            </div>
+                         </div>`;
+            }
         });
         listEl.innerHTML = html;
+        if (window.MathJax) MathJax.typesetPromise([listEl]).catch(err => console.error(err));
     } catch(e) { listEl.innerHTML = "<p style='color:red;'>데이터 로드 실패.</p>"; }
 }
 
@@ -442,7 +509,6 @@ function getCroppedBase64(boxObj) {
     return tempCanvas.toDataURL('image/jpeg', 0.9).split(',')[1];
 }
 
-// 🟢 안전장치가 추가된 화면 초기화 함수
 function resetAnalysis() {
     const probImg = document.getElementById('problem-image');
     if(probImg) probImg.value = "";
@@ -471,25 +537,25 @@ function resetAnalysis() {
     const chatContainer = document.getElementById('ai-chat-container');
     if(chatContainer) {
         chatContainer.style.display = 'none';
-        chatContainer.style.flex = 'none';      
-        chatContainer.style.width = '350px';  
+        chatContainer.style.position = 'relative'; // 💡 원상 복구
+        chatContainer.style.width = '280px';
+        
         const chatHistory = document.getElementById('chat-history');
         if(chatHistory) chatHistory.innerHTML = "";
         currentChatContext = ""; 
     }
 
-    const leftPanel = document.querySelector('#analysis-layout-wrapper .quiz-container');
-    if (leftPanel) {
-        leftPanel.style.flex = '1';
-        leftPanel.style.width = 'auto';
-        leftPanel.style.minWidth = '300px';
-    }
+    // 💡 고정되었던 문제 패널 해제
     
+    const wrapper = document.getElementById('analysis-layout-wrapper');
+    if (wrapper) {
+        wrapper.style.position = 'relative'; 
+        wrapper.style.display = 'block'; // flex를 해제하여 화면이 밀리지 않게 함
+    }
+
     const mainContainer = document.querySelector('.container');
     if (mainContainer) {
-        mainContainer.style.maxWidth = '';
-        mainContainer.style.marginLeft = '';
-        mainContainer.style.marginRight = '';
+        mainContainer.style.maxWidth = ''; // 💡 인위적으로 늘렸던 너비를 완전히 제거하여 원래 크기(1240px)로 되돌림!
     }
 }
 
@@ -523,10 +589,8 @@ async function executeAnalysis() {
     const isLoggedIn = await checkLogin();
     if (!isLoggedIn) return;
 
-    // 🟢 스마트 검문소 배치!
     if (!requireApiKey()) return; 
-    const apiKey = localStorage.getItem('gemini_api_key'); // 무사히 통과했으면 키를 가져옴
-    // ... 이하 생략
+    const apiKey = localStorage.getItem('gemini_api_key');
 
     if(document.getElementById('single-mode-ui')) document.getElementById('single-mode-ui').style.display = 'none';
     if(document.getElementById('multi-mode-ui')) document.getElementById('multi-mode-ui').style.display = 'none';
@@ -547,9 +611,25 @@ async function executeAnalysis() {
                 standardsInfo += subjectData[key].standards.map(s => `${s.code} ${s.desc}`).join('\n');
             }
         }
+        const subjectSpecificRubric = getSubjectSpecificRubric(currentSubject);
+        const enhancedSystemRubric = systemRubric + "\n" + subjectSpecificRubric;
 
         let apiParts = [];
         let isSingleMode = (analysisMainMode === 'single');
+        const referenceDBText = await fetchReferenceQuestions(currentSubject);
+        // 💡 4번 지시사항 반영: 루브릭 안내 조립
+        let rubricGuidance = "";
+        if (systemRubric && systemRubric.trim().length > 10) {
+            rubricGuidance = `4. 성취수준 판정(A+~E):
+        - [1순위] 아래 제시된 <국가 수준 평가 루브릭>의 세부 기준을 엄격하게 최우선 적용하세요.
+        - [2순위] 루브릭에 명시되지 않은 예외적/융합적 문항의 경우, AI의 교과 교육학적 지식과 2022 개정 교육과정의 일반적 위계를 바탕으로 논리적으로 추론하여 판정하세요.
+        
+        <국가 수준 평가 루브릭>
+        ${systemRubric}`;
+        } else {
+            rubricGuidance = `4. 성취수준 판정(A+~E):
+        - 대한민국 2022 개정 교육과정의 일반적인 평가 위계와 교과 전문가적 지식을 바탕으로 최대한 일관성 있게 판정하세요.`;
+        }
 
         if (isSingleMode) {
             const box = (singleCropMode === 'multi' && cropBoxes.length > 0) ? cropBoxes[0] : null;
@@ -578,13 +658,25 @@ ${standardsInfo}
 </과목별 성취기준 목록>
 
 <국가 수준 평가 루브릭>
-${systemRubric}
+${enhancedSystemRubric}
 </국가 수준 평가 루브릭>
+
+${referenceDBText}
 
 [핵심 개념]: 문제 해결에 필요한 핵심 공식, 정리, 또는 수학적 원리를 글머리 기호(•)를 사용하여 2~3가지로 명확하고 깊이 있게 제시하세요.
 
 [상세 풀이]: 논리적 비약이나 생략 없이 가독성 좋은 단계별 풀이를 작성하세요. 반드시 '1단계:', '2단계:' 형식으로 문단을 시작하세요. 절대 '[상세 풀이]:' 라는 태그 이름을 변경하지 마세요.
-
+[분석 예시]
+[원본 문제 추출]: $x^2 - 4x + 4 = 0$의 해를 구하시오.
+[교과 및 단원]: 공통수학1, 다항식
+[성취기준 및 수준]:
+성취기준: [10공수1-01-01] 다항식의 사칙연산을 할 수 있다.
+성취수준: C
+판정 이유: "<국가 수준 평가 루브릭>의 [일반적 특성]에 부합하며, 추가로 [기본적인 이차방정식 풀이]를 고려하여 판단함"
+[핵심 개념]: • 완전제곱식의 이해
+[상세 풀이]: 
+1단계: 주어진 식을 인수분해한다.
+2단계: 해를 구한다.
 [중요 지침]: 모든 수식은 반드시 앞뒤로 $ 기호를 감싸서 LaTeX 문법으로 작성하세요.`;
             apiParts.push({ text: prompt });
             apiParts.push({ inlineData: { mimeType: "image/jpeg", data: lastAnalyzedSingleImage } });
@@ -605,10 +697,10 @@ ${standardsInfo}
 </과목별 성취기준 목록>
 
 <국가 수준 평가 루브릭>
-${systemRubric}
-</국가 수준 평가 루브릭>`;
+${enhancedSystemRubric}
+</국가 수준 평가 루브릭>
+${referenceDBText}`;
             apiParts.push({ text: prompt });
-            
             cropBoxes.forEach(box => {
                 apiParts.push({ inlineData: { mimeType: "image/jpeg", data: getCroppedBase64(box) } });
             });
@@ -619,7 +711,7 @@ ${systemRubric}
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ parts: apiParts }],
-                generationConfig: { temperature: 0.1, topP: 0.9, maxOutputTokens: 8192 }
+                generationConfig: { temperature: 0.15, topP: 0.95, maxOutputTokens: 8192 }
             })
         });
 
@@ -628,36 +720,56 @@ ${systemRubric}
         const analysisText = data.candidates[0].content.parts[0].text;
         
         currentChatContext = analysisText; 
-        document.getElementById('ai-chat-container').style.display = 'block'; 
 
+        // ✨ 창이 늘어나지 않도록 wrapper를 기본 블록으로 되돌립니다. (leftPanel 조절 부분은 삭제!)
+        const wrapper = document.getElementById('analysis-layout-wrapper');
+        if (wrapper) {
+            wrapper.style.position = 'relative'; 
+            wrapper.style.display = 'block'; 
+        }
+
+        // ✨ 챗봇을 오버레이(공중부양)로 띄웁니다.
+        const chatContainer = document.getElementById('ai-chat-container');
+        if(chatContainer) {
+            chatContainer.style.display = 'flex';
+            chatContainer.style.position = 'absolute'; // 💡 화면을 밀어내지 않고 공중부양!
+            chatContainer.style.right = '-200px';           // 💡 우측 끝에 딱 붙임!
+            chatContainer.style.top = '0';             // 💡 위쪽 끝에 맞춤
+            
+            chatContainer.style.width = '350px'; 
+            chatContainer.style.height = 'fit-content'; // 💡 내용물 높이에 딱 맞춤 (녹색선 해결!)
+           
+            chatContainer.style.paddingBottom = '1rem'; // 💡 맨 아래 여백을 아주 살짝만 추가
+            
+            chatContainer.style.zIndex = '100';        
+            chatContainer.style.backgroundColor = 'white';
+            chatContainer.style.border = '1px solid #cbd5e1'; 
+            chatContainer.style.borderRadius = '12px'; 
+            chatContainer.style.boxShadow = '-5px 0 15px rgba(0,0,0,0.1)'; 
+        }
+        
+
+        // --- 이 부분을 찾아서 아래 내용으로 교체하세요 ---
         if (isSingleMode) {
             renderSophisticatedResult(analysisText, lastAnalyzedSingleImage);
-            processAndSaveBackground(analysisText, apiKey);
+            
         } else {
             let rawText = analysisText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
-            
-            rawText = rawText.replace(/\[문항\s*(\d+)\]/g, (match, p1) => {
-                const idx = parseInt(p1) - 1; 
-                const imgBase64 = cropBoxes[idx] ? getCroppedBase64(cropBoxes[idx]) : null;
-                let imgHtml = '';
-                
-                if (imgBase64) {
-                    imgHtml = `<div style="margin: 15px 0; text-align: center; background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                                   <img src="data:image/jpeg;base64,${imgBase64}" style="max-height: 180px; max-width: 100%; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                               </div>`;
-                }
-                
-                const borderTop = idx === 0 ? '' : 'border-top: 2px dashed #cbd5e1; margin-top: 2.5rem; padding-top: 1.5rem;';
-                return `<div style="${borderTop}"><strong style="font-size: 1.3rem; color: #ef4444; background: #fee2e2; padding: 4px 12px; border-radius: 20px;">${match}</strong></div>${imgHtml}`;
-            });
-
             resultText.innerHTML = `<div style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); line-height: 1.8;">${rawText}</div>`;
+            
+        }
+
+        // ✅ [추가] 분석이 성공적으로 끝나면 선생님의 동의를 구하는 버튼 영역을 화면에 표시합니다.
+        const saveZone = document.getElementById('save-analysis-zone');
+        if (saveZone) {
+            saveZone.style.display = 'block';
         }
 
         if (window.MathJax) {
             MathJax.typesetClear();
-            MathJax.typesetPromise([resultDiv]).catch(err => console.log(err));
+            MathJax.typesetPromise([resultDiv]);
         }
+        
 
     } catch (error) {
         console.error('API Error:', error);
@@ -767,6 +879,11 @@ async function processAndSaveBackground(analysisText, apiKey) {
             body: JSON.stringify({ contents: [{ parts: [{ text: analysisText + "\n\n" + transformPrompt }] }] })
         });
         const result = await response.json();
+        if (!result.candidates || result.candidates.length === 0) {
+            console.warn("AI 변형 문항 생성 실패 (응답 없음). 조용히 넘어갑니다.");
+            return; 
+        }
+
         const aiResponse = result.candidates[0].content.parts[0].text;
         
         let finalQuestion = aiResponse;
@@ -787,15 +904,39 @@ async function processAndSaveBackground(analysisText, apiKey) {
             }
         }
 
-        db.collection('transformed_bank').add({
+        // 선생님의 완벽한 A+ 처리 로직 (그대로 유지!)
+        const levelMatch = analysisText.match(/성취수준:\s*(A\+|[A-E])/);
+        let extractedLevel = levelMatch ? levelMatch[1] : "C";
+
+        // ✨ 선생님의 완벽한 기획 적용: A+라면 데이터베이스에는 A로 저장되도록 둔갑시킵니다!
+        if (extractedLevel === "A+") {
+            extractedLevel = "A"; 
+        }
+
+        // 💡 [여기가 새로 추가된 부분입니다!] AI의 분석 결과 텍스트에서 '판정 이유'만 쏙 뽑아냅니다.
+        const reasonMatch = analysisText.match(/판정 이유:\s*([\s\S]*?)(?=\[|$)/);
+        let extractedReason = reasonMatch ? reasonMatch[1].trim() : "AI가 교육과정 루브릭을 바탕으로 분석한 문항입니다.";
+
+        // 💡 백그라운드 저장을 확실하게 기다려줍니다 (await)
+        await db.collection('transformed_bank').add({
             subject: matchedSubject,
             question: finalQuestion,
             answer: finalAnswer, 
+            level: extractedLevel, // 둔갑시킨 A (또는 기존 A~E) 그대로 잘 저장됩니다!
+            reason: extractedReason, // 💡 [여기가 추가된 부분입니다!] 이제 판정이유도 DB에 완벽하게 들어갑니다.
             original_analysis: analysisText, 
             standard_code: stdCode,
+            uid: auth.currentUser.uid,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
-    } catch (e) { console.warn("Background Save Failed:", e); }
+
+        console.log("✅ 문항 분석 결과가 성공적으로 저장되었습니다.");
+
+    } catch (e) { 
+        console.error("데이터 저장 실패:", e);
+        // 에러가 났을 때 원인을 화면에 띄워줍니다.
+        alert("분석 결과 자동 저장 중 문제가 발생했습니다: " + e.message);
+    }
 }
 
 function showSection(id) {
@@ -817,10 +958,29 @@ function showSection(id) {
         if (subTitle) subTitle.style.visibility = 'visible';
     }
     
-    // ✨ History API 추가
     history.pushState({ section: id }, "", "#" + id);
 
-    if (id === 'cut-score') loadProjects();
+    // ✨ 마법의 코드: 탭을 누르면 무조건 해당 메뉴의 '초기 화면(Home)'으로 리셋!
+    if (id === 'cut-score') {
+        // 분할점수 탭 초기화 (폴더 목록 화면으로)
+        currentProjectId = null;
+        document.querySelectorAll('.cut-score-card').forEach(card => card.style.display = 'none');
+        document.getElementById('cut-score-dashboard').style.display = 'block';
+        loadProjects();
+    } else if (id === 'problem-analysis') {
+        // 문제분석 탭 초기화 (기본 빈 화면으로)
+        resetAnalysis();
+    } else if (id === 'quiz') {
+        // 퀴즈 탭 초기화 (성취기준 다시 선택 화면으로)
+        const qSelect = document.getElementById('quiz-standard-selection');
+        const qMatch = document.getElementById('quiz-level-matching');
+        if(qSelect) qSelect.style.display = 'block';
+        if(qMatch) qMatch.style.display = 'none';
+    } else if (id === 'bookmark') {
+        // 북마크 탭 누르면 기존에 떠있던 목록 초기화
+        const bList = document.getElementById('bookmark-list');
+        if(bList) bList.innerHTML = ""; 
+    }
 }
 
 function changeSubject() {
@@ -896,17 +1056,26 @@ async function startLevelMatching(code) {
         const snapshot = await db.collection('transformed_bank').where('standard_code', '==', code).get();
         snapshot.forEach(doc => {
             const data = doc.data();
-            let extractedLevel = data.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1] || "C"; 
-
-            combinedQuestions.push({
-                q: `<div style="background-color: #f0fdf4; padding: 10px; border-left: 4px solid #22c55e; margin-bottom: 10px; border-radius: 4px;">
-                        <span style="font-size: 0.8rem; color: #166534; font-weight: bold;">💡 AI 변형 추가 문항</span>
-                    </div>` + data.question,
-                level: extractedLevel,
-                reason: "사용자가 업로드한 문항을 AI가 분석하고 변형한 실전 문항입니다.",
-                answer: data.answer || "정답 정보 없음" 
+            let extractedLevel = data.level || data.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1] || "C"; 
+            
+            // 💡 추가된 핵심 로직: DB의 reason 필드를 최우선으로 읽고, 없으면 original_analysis 텍스트에서 강제로 추출합니다!
+            let extractedReason = data.reason || data.original_analysis?.match(/판정 이유:\s*([\s\S]*?)(?=\[|$)/)?.[1]?.trim() || "사용자가 업로드한 문항을 AI가 분석하고 변형한 실전 문항입니다.";
+        
+            let sourceBadge = data.source === "선생님 직접 등록"
+                ? `<div style="background-color: #e0e7ff; padding: 10px; border-left: 4px solid #3b82f6; margin-bottom: 10px; border-radius: 4px;">
+                       <span style="font-size: 0.8rem; color: #1e40af; font-weight: bold;">🧑‍🏫 선생님 등록 문항</span>
+                   </div>`
+                : `<div style="background-color: #f0fdf4; padding: 10px; border-left: 4px solid #22c55e; margin-bottom: 10px; border-radius: 4px;">
+                       <span style="font-size: 0.8rem; color: #166534; font-weight: bold;">💡 AI 변형 추가 문항</span>
+                   </div>`;
+        
+                   combinedQuestions.push({
+                    q: sourceBadge + (data.question || data.q || "문제 내용이 없습니다."),
+                    level: extractedLevel,
+                    reason: extractedReason, // 💡 수정됨!
+                    answer: data.answer || "정답 정보 없음" 
+                });
             });
-        });
     } catch (error) { console.warn("DB 로드 실패"); }
 
     currentQuestions = shuffleArray(combinedQuestions);
@@ -966,8 +1135,7 @@ function checkLevelAnswer(selectedLevel, btn) {
         fb.style.color = "#166534"; fb.style.backgroundColor = '#dcfce7';
         btn.style.border = '3px solid #166534'; btn.style.opacity = '1';
     } else {
-        const standard = subjectData[currentSubject].standards.find(s => s.code === currentStandardCode);
-        const wrongLevelExample = standard.questions ? standard.questions.find(q => q.level === selectedLevel) : null;
+        const wrongLevelExample = currentQuestions.find(q => q.level === selectedLevel);
         let comparativeText = "";
         
         if (wrongLevelExample) {
@@ -990,6 +1158,22 @@ function checkLevelAnswer(selectedLevel, btn) {
         });
     }
     document.getElementById('next-q-btn').style.display = 'block';
+    let feedbackBtn = document.getElementById('invoke-feedback-btn');
+    if (!feedbackBtn) {
+        feedbackBtn = document.createElement('button');
+        feedbackBtn.id = 'invoke-feedback-btn';
+        feedbackBtn.className = 'save-btn';
+        feedbackBtn.style.marginTop = '10px';
+        feedbackBtn.style.background = '#f1f5f9';
+        feedbackBtn.style.color = '#475569';
+        feedbackBtn.style.border = '1px dashed #94a3b8';
+        feedbackBtn.innerHTML = '🙋 이 판정에 이의 있습니다! (의견 보내기)';
+        
+        // 피드백 박스(정답해설) 바로 밑에 버튼을 쏙 넣습니다.
+        document.getElementById('level-feedback').parentNode.appendChild(feedbackBtn);
+    }
+    feedbackBtn.style.display = 'block';
+    feedbackBtn.onclick = () => openSpecificFeedbackPanel();
     if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([fb]); }
 }
 
@@ -1399,35 +1583,40 @@ async function loadStandardsForQuestion() {
 }
 
 async function saveQuestionToDB() {
-    const docId = document.getElementById('admin-q-standard').value;
+    const stdSelect = document.getElementById('admin-q-standard');
+    const docId = stdSelect.value;
+    const stdCode = stdSelect.options[stdSelect.selectedIndex].text.split(' ')[0]; // 코드만 추출
+    const subject = document.getElementById('admin-q-subject').value;
     const qText = document.getElementById('admin-q-text').value.trim();
-    const qAnswer = document.getElementById('admin-q-answer').value.trim(); 
-    const qLevel = document.getElementById('admin-q-level').options[document.getElementById('admin-q-level').selectedIndex].text.charAt(0); 
+    const qAnswer = document.getElementById('admin-q-answer').value.trim();
+    const qLevel = document.getElementById('admin-q-level').value; // A, B, C...
     const qReason = document.getElementById('admin-q-reason').value.trim();
 
     if (!docId || !qText || !qReason) {
-        alert("성취기준 선택, 문항 내용, 판정 이유는 필수입니다!");
+        alert("모든 빈칸을 채워주세요!");
         return;
     }
 
     try {
-        await db.collection('standards_2022').doc(docId).update({
-            questions: firebase.firestore.FieldValue.arrayUnion({
-                q: qText,
-                answer: qAnswer || "정답 정보 없음", 
-                level: qLevel,
-                reason: qReason
-            })
+        // 🌟 통합 서랍(transformed_bank)에 직접 저장
+        await db.collection('transformed_bank').add({
+            subject: subject,
+            standard_code: stdCode,
+            question: qText,
+            answer: qAnswer || "정답 정보 없음",
+            level: qLevel,
+            reason: qReason,
+            source: "선생님 직접 등록",
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
-        alert("✨ 문항이 성공적으로 추가되었습니다!");
+        alert("✨ 문항이 통합 서랍에 성공적으로 저장되었습니다!");
         
+        // 입력창 비우기
         document.getElementById('admin-q-text').value = '';
-        document.getElementById('admin-q-answer').value = ''; 
+        document.getElementById('admin-q-answer').value = '';
         document.getElementById('admin-q-reason').value = '';
-        
     } catch (error) {
-        console.error("문항 추가 실패:", error);
-        alert("문항 추가 중 오류가 발생했습니다.");
+        alert("저장 실패: " + error.message);
     }
 }
 
@@ -1452,7 +1641,7 @@ async function loadBookmark(level) {
             const snapshot = await db.collection('transformed_bank').get();
             snapshot.forEach(doc => {
                 const d = doc.data();
-                let extractedLevel = d.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1];
+                let extractedLevel = d.level || d.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1];
                 
                 // 코드가 없거나 unknown인 문항만 쏙쏙 골라냅니다.
                 if (extractedLevel === level && (d.standard_code === "unknown" || d.standard_code === "코드없음")) {
@@ -1503,13 +1692,16 @@ async function loadBookmark(level) {
         const snapshot = await db.collection('transformed_bank').where('subject', '==', subject).get();
         snapshot.forEach(doc => {
             const d = doc.data();
-            let extractedLevel = d.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1];
-            // 코드가 정상적으로 있는 문항만 담습니다.
+            // 💡 level 필드를 직접 읽어와 수동/AI 문항 모두 대응
+            let extractedLevel = d.level || d.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1];
+            
             if (extractedLevel === level && d.standard_code !== "unknown" && d.standard_code !== "코드없음") {
                 currentBookmarkQuestions.push({
-                    code: d.standard_code, q: d.question,
-                    reason: "AI가 원본을 분석하고 변형하며 판정한 문항입니다.",
-                    answer: d.answer, source: "✨ AI 추가 문항"
+                    code: d.standard_code, 
+                    q: d.question || d.q || "문제 내용이 없습니다.",
+                    reason: d.reason || "AI가 원본을 분석하고 변형하며 판정한 문항입니다.",
+                    answer: d.answer || "등록된 정답/풀이가 없습니다.", 
+                    source: d.source || "✨ AI 추가 문항"
                 });
             }
         });
@@ -1705,8 +1897,8 @@ async function generateEmptyScoreTable() {
     const shortCount = parseInt(document.getElementById('short-count').value) || 0;
     
     let newScores = [];
-    for(let i=1; i<=choiceCount; i++) newScores.push({ num: String(i), difficulty: '중', score: 0, level: 'C', isShortAnswer: false });
-    for(let i=1; i<=shortCount; i++) newScores.push({ num: '서'+i, difficulty: '중', score: 0, level: 'C', isShortAnswer: true });
+    for(let i=1; i<=choiceCount; i++) newScores.push({ num: String(i), difficulty: '선택하세요', score: 0, level: '판정필요', isShortAnswer: false });
+    for(let i=1; i<=shortCount; i++) newScores.push({ num: '서'+i, difficulty: '선택하세요', score: 0, level: '판정필요', isShortAnswer: true });
 
     // HTML에 그리지 않고 DB에 바로 저장! (저장하면 onSnapshot이 알아서 모두의 화면에 그려줍니다)
     try {
@@ -1721,35 +1913,53 @@ async function generateEmptyScoreTable() {
 }
 
 
-function downloadScoreTemplate() {
-    const existingInputs = document.querySelectorAll('.score-input');
-    let csv = "\ufeff문항 번호,예상 난이도,배점,성취수준\n";
-
-    if (existingInputs.length > 0) {
-        const selects = document.querySelectorAll('.level-select'); // 💡 현재 화면(내 입력) 기준
-        const diffs = document.querySelectorAll('.diff-select');
-
-        existingInputs.forEach((input, idx) => {
-            const qNum = input.getAttribute('data-num') || String(idx + 1);
-            const diff = diffs[idx] ? diffs[idx].value : '';
-            const score = input.value || '0';
-            const level = selects[idx] ? selects[idx].value : '';
-
-            // 비어있으면 '선택안함'으로 다운로드
-            csv += `${qNum},${diff || '선택안함'},${score},${level || '선택안함'}\n`;
-        });
-    } else {
-        const choiceCount = parseInt(document.getElementById('choice-count').value) || 0;
-        const shortCount = parseInt(document.getElementById('short-count').value) || 0;
-        for(let i=1; i<=choiceCount; i++) csv += `${i},선택안함,0,선택안함\n`;
-        for(let i=1; i<=shortCount; i++) csv += `서${i},선택안함,0,선택안함\n`;
+async function downloadScoreTemplate() {
+    if (!currentProjectId || currentEditingAssessmentIndex < 0) {
+        alert("선택된 평가가 없습니다.");
+        return;
     }
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "분할점수_내입력양식.csv";
-    link.click();
+    try {
+        const docRef = db.collection('user_projects').doc(currentProjectId);
+        const doc = await docRef.get();
+        
+        if (doc.exists) {
+            let asm = doc.data().assessments[currentEditingAssessmentIndex];
+            let existingScores = asm.parsedScores || [];
+            
+            // 💡 로그인한 선생님(나)의 기존 판정 데이터만 데이터베이스에서 직접 빼옵니다.
+            let myInputs = [];
+            if (asm.teacherInputs && asm.teacherInputs[auth.currentUser.email]) {
+                myInputs = asm.teacherInputs[auth.currentUser.email];
+            }
+
+            // 엑셀 첫 번째 줄(헤더) 만들기
+            let excelData = [["문항 번호", "예상 난이도", "배점", "성취수준"]];
+
+            // 엑셀에 들어갈 데이터 채우기
+            existingScores.forEach((q, index) => {
+                // 내 판정 결과가 있으면 가져오고, 없으면 빈칸으로 둡니다. (AI나 다른 사람 것은 안 가져옵니다!)
+                let myLevel = myInputs[index] ? myInputs[index].level : "";
+                
+                excelData.push([
+                    q.num,
+                    q.difficulty || "", // 공통 데이터인 난이도는 표시
+                    q.score || 0,       // 공통 데이터인 배점은 표시
+                    myLevel             // 오직 '내 판정' 결과만 표시
+                ]);
+            });
+
+            // 엑셀 파일 생성 및 다운로드 실행 (한글 깨짐이 없는 진짜 엑셀 XLSX 포맷)
+            const ws = XLSX.utils.aoa_to_sheet(excelData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "평가양식");
+            
+            // 파일명에 평가 이름이 자동으로 들어가도록 설정
+            XLSX.writeFile(wb, `${asm.name}_내입력양식.xlsx`);
+        }
+    } catch (error) {
+        alert("엑셀 다운로드 중 오류가 발생했습니다: " + error.message);
+    }
 }
 
 async function handleExcelUpload(event) {
@@ -1764,47 +1974,65 @@ async function handleExcelUpload(event) {
             const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
             const jsonData = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
 
-            let newScores = [];
-            let myLevels = [];
-
-            jsonData.forEach((row, index) => {
-                if (index === 0 || !row || row.length === 0) return;
-                if (row[0] !== undefined && row[0] !== null && String(row[0]).trim() !== "") {
-                    let qNum = String(row[0]).trim();
-                    
-                    let diff = (row[1] || '').toString().trim();
-                    if(diff === '선택안함' || !['상','중','하'].includes(diff)) diff = ''; // 💡 선택안함 처리
-
-                    let score = parseFloat(row[2]) || 0;
-
-                    let level = (row[3] || '').toString().toUpperCase().trim();
-                    if(level === '선택안함' || !['A','B','C','D','E'].includes(level)) level = ''; // 💡 선택안함 처리
-
-                    newScores.push({ num: qNum, difficulty: diff, score: score, level: level, isShortAnswer: qNum.includes('서') });
-                    myLevels.push({ level: level });
-                }
-            });
-
-            if (newScores.length > 0 && currentProjectId) {
+            if (currentProjectId) {
                 const docRef = db.collection('user_projects').doc(currentProjectId);
                 const doc = await docRef.get();
                 if(doc.exists) {
                     let assessments = doc.data().assessments;
                     let asm = assessments[currentEditingAssessmentIndex];
                     
-                    // 기본 배점, 난이도 표 틀 덮어쓰기
-                    asm.parsedScores = newScores;
+                    // 💡 기존 DB 데이터를 불러옵니다. (AI 판정 결과를 지켜주기 위해!)
+                    let existingScores = asm.parsedScores || [];
+                    let myLevels = [];
+                    let newScores = [];
 
-                    // 엑셀의 '성취수준'은 '내 칸'에 덮어쓰기
+                    jsonData.forEach((row, index) => {
+                        if (index === 0 || !row || row.length === 0) return;
+                        if (row[0] !== undefined && row[0] !== null && String(row[0]).trim() !== "") {
+                            let qNum = String(row[0]).trim();
+                            
+                            // 현재 올리는 엑셀 문항과 똑같은 번호의 기존 DB 문항 찾기
+                            let existQ = existingScores.find(q => String(q.num) === qNum) || {};
+
+                            // 1. 난이도: 엑셀이 절대적 기준! (선생님이 엑셀에서 적은 대로, 지웠으면 지운 대로)
+                            let diff = (row[1] || '').toString().trim();
+                            if(diff === '선택안함' || !['상','중','하'].includes(diff)) diff = ''; 
+
+                            // 2. 배점: 엑셀이 절대적 기준! (선생님이 적은 숫자 그대로)
+                            let score = parseFloat(row[2]);
+                            if (isNaN(score) || score < 0) score = 0;
+
+                            // 3. 성취수준 (내 판정): 선생님이 엑셀 마지막 칸에 채워 넣은 A, B, C...
+                            let level = (row[3] || '').toString().toUpperCase().trim();
+                            if(level === '선택안함' || !['A+','A','B','C','D','E'].includes(level)) level = ''; 
+
+                            // 4. 표 데이터 조립 (엑셀에 없는 AI 판정 결과만 기존 DB에서 가져와 보호합니다!)
+                            newScores.push({ 
+                                num: qNum, 
+                                difficulty: diff, 
+                                score: score, 
+                                level: existQ.level || '판정필요', // 🛡️ AI 판정 결과 완벽 보호
+                                isShortAnswer: existQ.isShortAnswer !== undefined ? existQ.isShortAnswer : qNum.includes('서') 
+                            });
+                            
+                            // 선생님의 성취수준 입력값은 내 판정 전용 공간에 따로 저장
+                            myLevels.push({ level: level });
+                        }
+                    });
+
+                    // DB에 최종 업데이트
+                    asm.parsedScores = newScores;
                     if (!asm.teacherInputs) asm.teacherInputs = {};
                     asm.teacherInputs[auth.currentUser.email] = myLevels;
 
                     await docRef.update({ assessments: assessments });
-                    alert("✅ 엑셀 데이터가 업로드되어 모든 참여자에게 동기화되었습니다!");
+                    alert("✅ 엑셀 데이터가 완벽하게 동기화되었습니다!\n(선생님의 작업 내역 반영 & AI 판정 결과 보호 완료)");
                 }
             }
             document.getElementById('excel-upload').value = ""; 
-        } catch(error) { alert("엑셀 업로드 실패: " + error.message); }
+        } catch(error) { 
+            alert("엑셀 업로드 실패: " + error.message); 
+        }
     };
     reader.readAsArrayBuffer(file);
 }
@@ -1830,7 +2058,6 @@ function getBasePct(isShortAnswer, difficulty) {
 // ==========================================
 
 
-// 🚀 [최종 피날레] 모든 선생님의 입력을 취합하여 평균(합의) 수준을 내고 M자 분석으로 이동!
 async function handleNextToPath1Result() {
     if (!currentProjectId) return;
 
@@ -1845,7 +2072,6 @@ async function handleNextToPath1Result() {
         const teacherInputs = asm.teacherInputs || {};
         let baseQuestions = asm.parsedScores || [];
 
-        // 1. 혹시 입력을 안 끝낸 선생님이 있는지 검사합니다.
         let missingList = [];
         collaborators.forEach(email => {
             const inputs = teacherInputs[email] || [];
@@ -1859,15 +2085,14 @@ async function handleNextToPath1Result() {
             }
         }
 
-        // 2. 입력된 A~E 값을 숫자로 바꿔서 평균(합의점)을 계산합니다.
-        const levelToNum = { 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'E': 1 };
-        const numToLevel = { 5: 'A', 4: 'B', 3: 'C', 2: 'D', 1: 'E' };
+        // 💡 핵심: A+ 를 6점으로, 평균 5.5 이상이면 A+ 로 취합되도록 역산 로직 추가!
+        const levelToNum = { 'A+': 6, 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'E': 1 };
+        const numToLevel = { 6: 'A+', 5: 'A', 4: 'B', 3: 'C', 2: 'D', 1: 'E' };
 
         let mergedData = baseQuestions.map((q, qIdx) => {
             let sum = 0;
             let count = 0;
             
-            // 모든 선생님의 이 문항 점수를 더합니다.
             collaborators.forEach(email => {
                 const level = teacherInputs[email]?.[qIdx]?.level;
                 if(level) {
@@ -1876,10 +2101,9 @@ async function handleNextToPath1Result() {
                 }
             });
 
-            // 평균 계산 (반올림)
-            let finalLevel = q.level; // 기본값은 AI 판정
+            let finalLevel = q.level; 
             if(count > 0) {
-                let avg = Math.round(sum / count); // 예: 4.5면 5(A), 3.2면 3(C)
+                let avg = Math.round(sum / count); 
                 finalLevel = numToLevel[avg] || 'C';
             }
 
@@ -1887,13 +2111,12 @@ async function handleNextToPath1Result() {
                 num: q.num,
                 score: q.score,
                 difficulty: q.difficulty || '중',
-                level: finalLevel, // 합의된 최종 성취수준!
+                level: finalLevel, 
                 isShortAnswer: q.isShortAnswer,
                 pcts: getBasePct(q.isShortAnswer, q.difficulty || '중')
             };
         });
 
-        // 3. 계산된 결과를 가지고 4단계(M자 분석표)로 멋지게 넘어갑니다.
         parsedScores = mergedData; 
         goToStep(4);
         renderGroupedCutScoreTable(mergedData);
@@ -1911,26 +2134,24 @@ function renderGroupedCutScoreTable(mergedData) {
     
     const tableHead = document.querySelector('#cut-score-result-table').previousElementSibling;
     if (tableHead) {
-        tableHead.innerHTML = `<tr><th>문항 범주 (M자형)</th><th>총 배점</th><th>예상 난이도</th><th>A (%)</th><th>B (%)</th><th>C (%)</th><th>D (%)</th><th>E (%)</th></tr>`;
+        tableHead.innerHTML = `<tr><th style="min-width:180px;">문항 범주 (M자형)</th><th>총 배점</th><th>예상 난이도</th><th>A (%)</th><th>B (%)</th><th>C (%)</th><th>D (%)</th><th>E (%)</th></tr>`;
         tableHead.parentElement.style.display = 'block'; 
     }
 
     const tbody = document.getElementById('cut-score-result-table');
     
-    // 1. M자형 분석을 위해 6가지 범주 틀을 무조건 미리 만들어둡니다.
+    // 💡 A+ 그룹 방을 추가로 만들어 둡니다.
     const groups = {
-        '선택형(객관식)_상': { typeStr: '선택형(객관식)', difficulty: '상', count: 0, scoreSum: 0, qNums: [], pcts: getBasePct(false, '상') },
-        '선택형(객관식)_중': { typeStr: '선택형(객관식)', difficulty: '중', count: 0, scoreSum: 0, qNums: [], pcts: getBasePct(false, '중') },
-        '선택형(객관식)_하': { typeStr: '선택형(객관식)', difficulty: '하', count: 0, scoreSum: 0, qNums: [], pcts: getBasePct(false, '하') },
-        '서답형_상': { typeStr: '서답형', difficulty: '상', count: 0, scoreSum: 0, qNums: [], pcts: getBasePct(true, '상') },
-        '서답형_중': { typeStr: '서답형', difficulty: '중', count: 0, scoreSum: 0, qNums: [], pcts: getBasePct(true, '중') },
-        '서답형_하': { typeStr: '서답형', difficulty: '하', count: 0, scoreSum: 0, qNums: [], pcts: getBasePct(true, '하') }
+        '선택형(객관식)_상': { typeStr: '선택형(객관식)', difficulty: '상', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(false, '상') },
+        '선택형(객관식)_중': { typeStr: '선택형(객관식)', difficulty: '중', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(false, '중') },
+        '선택형(객관식)_하': { typeStr: '선택형(객관식)', difficulty: '하', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(false, '하') },
+        '서답형_상': { typeStr: '서답형', difficulty: '상', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(true, '상') },
+        '서답형_중': { typeStr: '서답형', difficulty: '중', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(true, '중') },
+        '서답형_하': { typeStr: '서답형', difficulty: '하', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(true, '하') }
     };
     
-    // 2. 실제 데이터(mergedData)를 돌면서 존재하는 문항의 정보만 채워넣습니다.
     mergedData.forEach(q => {
         const typeStr = q.isShortAnswer ? '서답형' : '선택형(객관식)';
-        // 엑셀에서 '쉬움', '어려움' 등으로 들어올 경우를 대비해 정규화
         let diff = q.difficulty;
         if (diff === '쉬움') diff = '하';
         if (diff === '보통') diff = '중';
@@ -1940,42 +2161,76 @@ function renderGroupedCutScoreTable(mergedData) {
         if (groups[key]) {
             groups[key].count++;
             groups[key].scoreSum += q.score;
-            groups[key].qNums.push(q.num);
+            
+            if (groups[key].levels[q.level]) {
+                groups[key].levels[q.level].push(q.num);
+            } else {
+                groups[key].levels['C'].push(q.num); 
+            }
         }
     });
 
+    // 노란색 하이라이트 매핑 (A+도 A와 동일한 컷오프 칸에 하이라이트 되도록 처리)
+    const highlightMap = {
+        0: ['A+', 'A', 'E'],      
+        1: ['C'],           
+        2: ['A+', 'A', 'E'], 
+        3: ['A+', 'A', 'E'],      
+        4: ['C'],           
+        5: ['A+', 'A', 'E']       
+    };
+
     let html = '';
     
-    // 3. 6줄을 순서대로 화면에 그립니다. 문항수가 0개면 음영 처리합니다.
-    Object.values(groups).forEach((g, index) => { // 👈 index(순번)를 알 수 있도록 추가했습니다.
+    Object.values(groups).forEach((g, index) => {
         const isEmpty = g.count === 0;
-        
-        // 💡 6번 해결: 3번째 줄(객관식_하, index 2) 아래에는 굵은 3px 이중선을 그어 서답형과 확실히 구분합니다.
         let bottomBorder = (index === 2) ? 'border-bottom: 3px double #64748b;' : 'border-bottom: 1px solid #e2e8f0;';
         const rowStyle = isEmpty ? `background: #f8fafc; opacity: 0.5; ${bottomBorder}` : bottomBorder;
-        
         const diffColor = isEmpty ? '#cbd5e1' : (g.difficulty === '상' ? '#ef4444' : g.difficulty === '중' ? '#f59e0b' : '#22c55e');
-        const qNumText = isEmpty ? '해당 문항 없음' : `해당 문항: ${g.qNums.join(', ')}번`;
         const countText = isEmpty ? '0문항' : `총 ${g.count}문항`;
         const scoreText = isEmpty ? '-' : g.scoreSum.toFixed(1);
-        const disabledAttr = isEmpty ? 'disabled' : '';
-        const inputBg = isEmpty ? 'background: #e2e8f0;' : '';
+        
+        let qNumHtml = '';
+        if (isEmpty) {
+            qNumHtml = '<div style="color:#94a3b8; font-size:0.8rem; margin-bottom:4px;">해당 문항 없음</div>';
+        } else {
+            // 💡 A+ 도 찾아서 출력! (A+는 빨간 글씨로 돋보이게 처리합니다)
+            ['A+', 'A', 'B', 'C', 'D', 'E'].forEach(lvl => {
+                if (g.levels[lvl].length > 0) {
+                    let lvlLabel = lvl === 'A+' ? '<strong style="color:#ef4444;">A+</strong>' : `<strong>${lvl}</strong>`;
+                    qNumHtml += `<div style="font-size:0.85rem; color:#475569; margin-bottom:2px;">${lvlLabel}: ${g.levels[lvl].join(', ')}번</div>`;
+                }
+            });
+        }
+
+        const getPctInput = (lvl, val) => {
+            const disabledAttr = isEmpty ? 'disabled' : '';
+            let bgStyle = isEmpty ? 'background: #e2e8f0;' : 'background: white;';
+            let borderStyle = 'border: 1px solid #cbd5e1;';
+            
+            if (!isEmpty && highlightMap[index].includes(lvl)) {
+                bgStyle = 'background: #fef08a;'; 
+                borderStyle = 'border: 2px solid #eab308;'; 
+            }
+            
+            return `<input type="number" class="pct-${lvl} pct-input" value="${isEmpty ? '' : val}" ${disabledAttr} oninput="calculateTotalCutScores()" style="width: 60px; padding: 4px; text-align: center; border-radius: 4px; font-weight: bold; color: #1e293b; ${bgStyle} ${borderStyle} transition: 0.2s;">`;
+        };
 
         html += `
         <tr style="${rowStyle}" class="cut-score-row" data-score="${g.scoreSum}" data-count="1">
-            <td style="text-align: left;">
-                <div style="font-size:0.8rem; color:#64748b; margin-bottom: 4px; word-break: keep-all;">${qNumText}</div>
-                <strong style="color: ${isEmpty ? '#94a3b8' : 'var(--primary)'};">${g.typeStr} ${countText}</strong>
+            <td style="text-align: left; vertical-align: top;">
+                ${qNumHtml}
+                <strong style="color: ${isEmpty ? '#94a3b8' : 'var(--primary)'}; display:block; margin-top:5px;">${g.typeStr} ${countText}</strong>
             </td>
-            <td style="color: ${isEmpty ? '#94a3b8' : '#ea580c'}; font-weight: bold; font-size: 1.1rem;">${scoreText}</td>
-            <td>
+            <td style="color: ${isEmpty ? '#94a3b8' : '#ea580c'}; font-weight: bold; font-size: 1.1rem; vertical-align: middle;">${scoreText}</td>
+            <td style="vertical-align: middle;">
                 <span style="background:${diffColor}; color:white; padding: 4px 10px; border-radius: 4px; font-weight: bold;">${g.difficulty}</span>
             </td>
-            <td><input type="number" class="pct-A pct-input" value="${isEmpty ? '' : g.pcts.A}" ${disabledAttr} oninput="calculateTotalCutScores()" style="width: 60px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; ${inputBg}"></td>
-            <td><input type="number" class="pct-B pct-input" value="${isEmpty ? '' : g.pcts.B}" ${disabledAttr} oninput="calculateTotalCutScores()" style="width: 60px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; ${inputBg}"></td>
-            <td><input type="number" class="pct-C pct-input" value="${isEmpty ? '' : g.pcts.C}" ${disabledAttr} oninput="calculateTotalCutScores()" style="width: 60px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; ${inputBg}"></td>
-            <td><input type="number" class="pct-D pct-input" value="${isEmpty ? '' : g.pcts.D}" ${disabledAttr} oninput="calculateTotalCutScores()" style="width: 60px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; ${inputBg}"></td>
-            <td><input type="number" class="pct-E pct-input" value="${isEmpty ? '' : g.pcts.E}" ${disabledAttr} oninput="calculateTotalCutScores()" style="width: 60px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; ${inputBg}"></td>
+            <td style="vertical-align: middle;">${getPctInput('A', g.pcts.A)}</td>
+            <td style="vertical-align: middle;">${getPctInput('B', g.pcts.B)}</td>
+            <td style="vertical-align: middle;">${getPctInput('C', g.pcts.C)}</td>
+            <td style="vertical-align: middle;">${getPctInput('D', g.pcts.D)}</td>
+            <td style="vertical-align: middle;">${getPctInput('E', g.pcts.E)}</td>
         </tr>
         `;
     });
@@ -2152,34 +2407,59 @@ function handleExamUpload(event) {
     document.getElementById('exam-loading').style.display = 'block';
     event.target.value = ""; 
 
-    // ✨ 1. Firebase Storage에 이미지 파일 업로드
-    const fileRef = storage.ref().child(`exam_images/${Date.now()}_${file.name}`);
-    fileRef.put(file).then((snapshot) => {
-        snapshot.ref.getDownloadURL().then((url) => {
-            currentUploadedImageUrl = url; // 업로드된 영구 주소 저장
-        });
-    }).catch(error => console.error("이미지 업로드 실패:", error));
-
-    // 2. 기존 Gemini 분석용 로직 (화면에 띄우기)
+    window.localExamUrl = URL.createObjectURL(file);
+    
+    // 1. AI 분석을 위해 파일을 읽고 "즉시" 분석을 시작합니다! (클라우드 업로드를 기다리지 않음)
     const reader = new FileReader();
     reader.onload = function(e) {
         const base64Img = e.target.result;
         examImages = [base64Img]; 
-        startExamAiAnalysis(base64Img);
+        startExamAiAnalysis(base64Img); // AI 바로 출동!
     };
     reader.readAsDataURL(file);
+
+    try {
+        const fileRef = storage.ref().child(`exam_images/${Date.now()}_${file.name}`);
+        fileRef.put(file).then(snapshot => {
+            snapshot.ref.getDownloadURL().then(async url => {
+                currentUploadedImageUrl = url; // 업로드 완료 시 주소 저장
+                
+                if (currentProjectId && currentEditingAssessmentIndex !== -1) {
+                    const docRef = db.collection('user_projects').doc(currentProjectId);
+                    
+                    // 🔒 마법의 자물쇠(트랜잭션) 시작: 사진 주소만 살포시 업데이트!
+                    try {
+                        await db.runTransaction(async (transaction) => {
+                            const doc = await transaction.get(docRef);
+                            if(doc.exists) {
+                                let assessments = doc.data().assessments;
+                                if(assessments[currentEditingAssessmentIndex]) {
+                                    assessments[currentEditingAssessmentIndex].imageUrl = url;
+                                    transaction.update(docRef, { assessments: assessments });
+                                }
+                            }
+                        });
+                        console.log("✅ 백그라운드 이미지 업로드 및 DB 동기화 완료!");
+                    } catch (e) {
+                        console.warn("이미지 주소 트랜잭션 저장 실패:", e);
+                    }
+                }
+            });
+        }).catch(err => {
+            console.warn("백그라운드 이미지 업로드 실패:", err);
+        });
+    } catch(error) {
+        console.warn("스토리지 설정 오류:", error);
+    }
 }
 
 async function startExamAiAnalysis(base64Data) {
-    // 🟢 스마트 검문소 배치!
     if (!requireApiKey()) {
-        document.getElementById('exam-loading').style.display = 'none'; // 취소하면 로딩바 끄기
+        document.getElementById('exam-loading').style.display = 'none'; 
         return; 
     }
     const apiKey = localStorage.getItem('gemini_api_key');
-
     const loadingEl = document.getElementById('exam-loading');
-    // ... 이하 생략
     if (loadingEl) loadingEl.style.display = 'flex';
 
     try {
@@ -2187,25 +2467,30 @@ async function startExamAiAnalysis(base64Data) {
         const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : "image/jpeg";
         const base64Clean = base64Data.split(',')[1];
 
+        const referenceDBText = await fetchReferenceQuestions(currentSubject);
+        // 💡 프롬프트에 A+ 판정 기준 추가!
         const prompt = `이 파일은 시험지입니다. 1번 문항부터 마지막 문항까지 번호를 인식하여 텍스트를 추출해 주세요.
         
         [중요 지침]
         1. 노이즈, 페이지 번호, 학교 마크 등은 무시하고 실제 문항만 추출하세요.
-        2. 과학/수학의 복잡한 그래프, 도표, 회로도 등은 억지로 글자로 읽지 말고 단순하게 '[그림 및 도표]' 라고만 표기하세요.
+        2. 사회/역사/과학/수학의 복잡한 그래프, 도표, 회로도, 그림등은 억지로 글자로 읽지 말고 단순하게 '[그림 및 도표]' 라고만 표기하세요.
         3. 각 문항이 객관식인지 서답형인지 판단하여 객관식은 '1', '2', 서답형은 '서1', '서2' 형식으로 번호를 매겨주세요.
-        4. 문항의 텍스트 내용과 배점을 분석하여, 예상되는 성취수준(A, B, C, D, E)을 AI가 직접 판단하여 기입하세요. (예시를 베끼지 말고 문항마다 다르게 분석할 것)
+        4. 문항의 텍스트 내용과 배점을 분석하여, 예상되는 성취수준(A+, A, B, C, D, E)을 AI가 직접 판단하여 기입하세요. (특히 아주 복잡하고 어려운 최고난도 킬러 문항인 경우 'A+' 로 판정하세요.)
         5. 난이도는 교사가 직접 입력해야 하므로, 임의로 판단하지 말고 무조건 '선택하세요'라고 표기하세요.
+        6. ✨ 판정 시 아래 제공된 <과거 AI 판정 참고 데이터베이스>를 반드시 참고하여, 과거 선생님이 저장해둔 유사 문항의 수준과 최대한 일관성 있게 판정하세요.
         
+        ${referenceDBText}
+
         결과는 반드시 각 문항별로 구분선(---)을 사용하여 출력하고, 첫 줄은 아래 형식을 지켜주세요.
-        형식: [번호] 추출한번호 | [배점] 추출한점수점 | [수준] AI가판단한수준 | [난이도] 선택하세요
+        형식: [번호] 추출한번호 | [배점] 추출한점수점 | [수준] A+~E 중 택1 | [난이도] 선택하세요
         (그 아래에 추출한 문제 텍스트 작성)`;
 
-        // 선생님 환경의 모델명 유지
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: mimeType, data: base64Clean } }] }]
+                contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: mimeType, data: base64Clean } }] }],
+                generationConfig: { temperature: 0.1, topP: 0.95 } // ✨ AI의 일관성을 높이는 마법의 주문 추가!
             })
         });
 
@@ -2217,7 +2502,7 @@ async function startExamAiAnalysis(base64Data) {
         const blocks = fullText.split('---').map(b => b.trim()).filter(b => b.length > 0);
         
         blocks.forEach((block, idx) => {
-            let numMatch = block.match(/\[번호\]\s*([가-힣\w]+)/); // '1', '서1' 추출
+            let numMatch = block.match(/\[번호\]\s*([가-힣\w]+)/); 
             let scoreMatch = block.match(/\[배점\]\s*([\d.]+)점/);
             let qNum = numMatch ? numMatch[1].trim() : String(idx + 1);
             let score = scoreMatch ? scoreMatch[1] : "0";
@@ -2237,29 +2522,28 @@ async function startExamAiAnalysis(base64Data) {
     } finally {
         if (loadingEl) loadingEl.style.display = 'none';
         const imgEl = document.getElementById('exam-img-display');
-        const pdfEl = document.getElementById('exam-pdf-display'); // 추가된 PDF 요소
+        const pdfEl = document.getElementById('exam-pdf-display'); 
         
         if (examImages.length > 0) {
             const fileData = examImages[0];
-            
-            // 파일 데이터가 PDF인지 확인
             if (fileData.includes("application/pdf")) {
                 if(imgEl) imgEl.style.display = 'none';
-                if(pdfEl) {
-                    pdfEl.src = fileData;
-                    pdfEl.style.display = 'block'; // PDF 뷰어 켜기
+                if(pdfEl) { 
+                    // 💡 fileData 대신 window.localExamUrl 사용!
+                    pdfEl.src = window.localExamUrl || fileData; 
+                    pdfEl.style.display = 'block'; 
                 }
             } else {
-                // 이미지 파일일 경우
                 if(pdfEl) pdfEl.style.display = 'none';
-                if(imgEl) {
-                    imgEl.src = fileData;
-                    imgEl.style.display = 'block'; // 이미지 뷰어 켜기
+                if(imgEl) { 
+                    // 💡 fileData 대신 window.localExamUrl 사용!
+                    imgEl.src = window.localExamUrl || fileData; 
+                    imgEl.style.display = 'block'; 
                 }
             }
         }
     }
-}   
+}      
 
 // 전역 변수로 관리하여 삭제/수정이 용이하게 합니다
 let extractedQuestionsArray = [];
@@ -2278,7 +2562,9 @@ function renderQuestionCards() {
 
         qCard.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
-                <div style="font-weight: bold; color: #ea580c;">[문항 ${q.num || (idx + 1)}]</div>
+                <div style="font-weight: bold; color: #ea580c; display: flex; align-items: center; gap: 5px;">
+                    [문항 <input type="text" value="${q.num || (idx + 1)}" onchange="extractedQuestionsArray[${idx}].num = this.value" style="width: 45px; padding: 2px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; font-weight: bold; color: #ea580c;">]
+                </div>
                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                     <select id="ai-diff-${idx}" style="padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; max-width: 200px;">
                         <option value="" disabled selected>난이도 선택</option>
@@ -2312,10 +2598,6 @@ function renderQuestionCards() {
             
             <div style="background: #fffbeb; border: 1px solid #fde68a; padding: 10px; border-radius: 6px; margin-top: 10px; text-align: left;">
                 <p style="margin: 0 0 5px 0; font-size: 0.8rem; font-weight: bold; color: #92400e;">🖼️ 그림/도표 넣는 방법</p>
-                <p style="margin: 0 0 8px 0; font-size: 0.75rem; color: #b45309; line-height: 1.4;">
-                    • <strong>이미지 파일</strong> 업로드 시 👉 [자체 캡처] 버튼 사용<br>
-                    • <strong>PDF 파일</strong> 업로드 시 👉 키보드 <strong>윈도우키 + Shift + S</strong> 로 화면을 캡처한 뒤, 아래 [복사한 그림 붙여넣기] 버튼 클릭!
-                </p>
                 <div style="display: flex; gap: 5px; flex-wrap: wrap;">
                     <button onclick="startPartialCapture(${idx})" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:0.8rem;">📸 자체 캡처 (이미지용)</button>
                     <button onclick="pasteImageToQuestion(${idx})" style="background:#fef3c7; border:1px solid #fde68a; color:#92400e; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:0.8rem; font-weight:bold;">📋 복사한 그림 붙여넣기 (PDF용)</button>
@@ -2325,8 +2607,42 @@ function renderQuestionCards() {
         listContainer.appendChild(qCard);
     });
 
+    // 💡 핵심: 스크롤 영역 밖(외부)에 동적 버튼 컨테이너를 만듭니다!
+    let applyBtnContainer = document.getElementById('external-apply-btn-zone');
+    if (!applyBtnContainer) {
+        applyBtnContainer = document.createElement('div');
+        applyBtnContainer.id = 'external-apply-btn-zone';
+        applyBtnContainer.style.textAlign = 'right';
+        applyBtnContainer.style.margin = '15px 0';
+        
+        const wrapper = document.getElementById('exam-inspector-wrapper');
+        // 처음에 시험지는 표 위에 있으므로, 시험지 영역 바로 밑에(스크롤 밖 우측 하단) 버튼을 둡니다.
+        if (wrapper) wrapper.parentNode.insertBefore(applyBtnContainer, wrapper.nextSibling);
+    }
+    
+    if (extractedQuestionsArray.length > 0) {
+        applyBtnContainer.innerHTML = `
+            <div style="background: #f0fdf4; padding: 1.5rem; border-radius: 8px; border: 1px solid #bbf7d0; text-align: center; margin-bottom: 1rem;">
+                <h4 style="margin: 0 0 10px 0; color: #166534; font-size: 1.1rem;">💡 성취평가제 신뢰도 제고에 기여해 주세요!</h4>
+                <p style="margin: 0 0 1.5rem 0; font-size: 0.9rem; color: #15803d; line-height: 1.6; text-align: center;">
+                    분석된 시험지 문항들을 문제은행에 공유해 주시겠습니까?<br>
+                    (저작권 보호를 위해 AI가 숫자와 상황을 변형하여 안전하게 저장합니다.)
+                </p>
+                <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                    <button class="save-btn" onclick="saveBankAndApplyTable()" style="background: #10b981; display: inline-block; width: auto; margin: 0; box-shadow: 0 4px 6px rgba(0,0,0,0.2); font-size: 1.05rem;">💾 문제은행에 저장하고 표에 반영</button>
+                    <button class="save-btn" onclick="sendAiResultsToTable()" style="background: #64748b; display: inline-block; width: auto; margin: 0; box-shadow: 0 4px 6px rgba(0,0,0,0.2); font-size: 1.05rem;">🗑️ 저장하지 않고 표에만 반영</button>
+                </div>
+            </div>
+        `;
+        applyBtnContainer.style.display = 'block';
+    } else {
+        applyBtnContainer.style.display = 'none';
+    }
+
     if (window.MathJax) MathJax.typesetPromise([listContainer]);
 }
+
+
 
 // 🟢 (추가) 텍스트를 수정할 때마다 수식을 다시 그려주는 함수
 function updateMathPreview(idx, newText) {
@@ -2446,10 +2762,8 @@ let chatStartWidth = 0;
 let leftPanelStartWidth = 0;
 
 function initChatResizer() {
-    const resizer = document.getElementById('chat-resizer-right');
+    const resizer = document.getElementById('chat-resizer-left'); 
     const chatContainer = document.getElementById('ai-chat-container');
-    const leftPanel = document.querySelector('#analysis-layout-wrapper .quiz-container');
-    const mainContainer = document.querySelector('.container');
 
     if(!resizer || !chatContainer) return;
 
@@ -2457,20 +2771,6 @@ function initChatResizer() {
         isResizingChat = true;
         chatStartX = e.clientX;
         chatStartWidth = chatContainer.getBoundingClientRect().width;
-        
-        if (leftPanel) {
-            leftPanelStartWidth = leftPanel.getBoundingClientRect().width;
-            leftPanel.style.flex = 'none';
-            leftPanel.style.width = leftPanelStartWidth + 'px';
-            leftPanel.style.minWidth = leftPanelStartWidth + 'px';
-        }
-
-        if (mainContainer) {
-            const rect = mainContainer.getBoundingClientRect();
-            mainContainer.style.maxWidth = 'none'; 
-            mainContainer.style.marginLeft = rect.left + 'px'; 
-            mainContainer.style.marginRight = 'auto';
-        }
 
         document.body.style.cursor = 'ew-resize';
         document.body.style.userSelect = 'none';
@@ -2478,9 +2778,12 @@ function initChatResizer() {
 
     document.addEventListener('mousemove', (e) => {
         if (!isResizingChat) return;
-        const newWidth = chatStartWidth + (e.clientX - chatStartX);
-        if (newWidth > 300 && newWidth < 900) { 
-            chatContainer.style.flex = 'none';
+        
+        // 💡 마우스가 왼쪽으로 갈수록 너비가 늘어납니다 (문제 영역을 덮음)
+        const diff = chatStartX - e.clientX;
+        const newWidth = chatStartWidth + diff;
+
+        if (newWidth > 250 && newWidth < window.innerWidth * 0.9) {
             chatContainer.style.width = newWidth + 'px';
         }
     });
@@ -2628,25 +2931,40 @@ async function loadStandardsForManage() {
 }
 
 async function loadQuestionsForEdit() {
-    const docId = document.getElementById('admin-manage-q-standard').value;
-    const qSelect = document.getElementById('admin-manage-q-list');
+    const stdSelect = document.getElementById('admin-manage-q-standard');
+    const docId = stdSelect.value;
     const fields = document.getElementById('question-edit-fields');
     fields.style.display = 'none';
 
     if (!docId) return;
 
-    const doc = await db.collection('standards_2022').doc(docId).get();
-    currentEditingAllQuestions = doc.data().questions || [];
+    // 선택된 성취기준의 코드 추출 (예: [10공수1-01-01])
+    const stdCode = stdSelect.options[stdSelect.selectedIndex].text.split(' ')[0];
+    const qSelect = document.getElementById('admin-manage-q-list');
+    qSelect.innerHTML = '<option value="">문항을 불러오는 중... ⏳</option>';
 
-    if (currentEditingAllQuestions.length === 0) {
-        qSelect.innerHTML = '<option value="">등록된 문항이 없습니다.</option>';
-        return;
+    try {
+        // 🌟 통합 서랍(transformed_bank)에서 해당 코드의 문항들만 쿼리
+        const snapshot = await db.collection('transformed_bank')
+                                 .where('standard_code', '==', stdCode)
+                                 .get();
+        
+        currentEditingAllQuestions = []; // 전역 변수 초기화
+        qSelect.innerHTML = '<option value="">-- 수정할 문항 선택 --</option>';
+
+        if (snapshot.empty) {
+            qSelect.innerHTML = '<option value="">등록된 문항이 없습니다.</option>';
+            return;
+        }
+
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            currentEditingAllQuestions.push({ id: doc.id, ...data }); // 문서 ID 포함 저장
+            qSelect.innerHTML += `<option value="${doc.id}">[${data.level}] ${data.question.substring(0, 30)}...</option>`;
+        });
+    } catch (error) {
+        qSelect.innerHTML = '<option value="">데이터 로드 실패</option>';
     }
-
-    qSelect.innerHTML = '<option value="">-- 수정할 문항 선택 --</option>';
-    currentEditingAllQuestions.forEach((q, idx) => {
-        qSelect.innerHTML += `<option value="${idx}">[${q.level}] ${q.q.substring(0, 30)}...</option>`;
-    });
 }
 
 function populateQuestionEditFields() {
@@ -2662,41 +2980,41 @@ function populateQuestionEditFields() {
     fields.style.display = 'block';
 }
 
+// 문항 수정 저장
 async function updateQuestionInDB() {
-    const docId = document.getElementById('admin-manage-q-standard').value;
-    const qIdx = document.getElementById('admin-manage-q-list').value;
-    if (!docId || qIdx === "") return;
+    const qDocId = document.getElementById('admin-manage-q-list').value;
+    if (!qDocId) return;
 
-    // 현재 배열 복사 후 해당 인덱스 내용 수정
-    let updatedQuestions = [...currentEditingAllQuestions];
-    updatedQuestions[qIdx] = {
-        q: document.getElementById('manage-q-text').value.trim(),
+    const updatedData = {
+        question: document.getElementById('manage-q-text').value.trim(),
         answer: document.getElementById('manage-q-answer').value.trim(),
         level: document.getElementById('manage-q-level').value,
         reason: document.getElementById('manage-q-reason').value.trim()
     };
 
     if (confirm("문항 내용을 수정하시겠습니까?")) {
-        await db.collection('standards_2022').doc(docId).update({ questions: updatedQuestions });
-        alert("✅ 문항이 수정되었습니다!");
-        location.reload();
+        try {
+            await db.collection('transformed_bank').doc(qDocId).update(updatedData);
+            alert("✅ 문항이 성공적으로 수정되었습니다!");
+            loadQuestionsForEdit(); // 목록 새로고침
+        } catch(e) { alert("수정 실패: " + e.message); }
     }
 }
 
+// 문항 삭제
 async function deleteQuestionFromDB() {
-    const docId = document.getElementById('admin-manage-q-standard').value;
-    const qIdx = document.getElementById('admin-manage-q-list').value;
-    if (!docId || qIdx === "") return;
+    const qDocId = document.getElementById('admin-manage-q-list').value;
+    if (!qDocId) return;
 
-    if (confirm("🚨 정말로 이 문항을 삭제하시겠습니까?")) {
-        let updatedQuestions = [...currentEditingAllQuestions];
-        updatedQuestions.splice(qIdx, 1); // 해당 인덱스 문항 제거
-
-        await db.collection('standards_2022').doc(docId).update({ questions: updatedQuestions });
-        alert("🗑️ 문항이 삭제되었습니다.");
-        location.reload();
+    if (confirm("🚨 이 문항을 영구 삭제하시겠습니까?")) {
+        try {
+            await db.collection('transformed_bank').doc(qDocId).delete();
+            alert("🗑️ 문항이 삭제되었습니다.");
+            loadQuestionsForEdit(); // 목록 새로고침
+        } catch(e) { alert("삭제 실패: " + e.message); }
     }
 }
+
 // ==========================================
 // 📂 사용자 폴더(프로젝트) 관리 시스템 (분할점수 산출용)
 // ==========================================
@@ -2746,25 +3064,38 @@ async function loadProjects() {
                     ? [...data.assessments].sort((a,b)=> (a.type==='written'&&b.type!=='written')?-1:1).map(a => `<span style="display:inline-block; background:${a.type === 'written' ? '#3b82f6' : '#10b981'}; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:bold; margin-right:4px; margin-top:4px;">${a.name}</span>`).join('') 
                     : '<span style="font-size: 0.75rem; color: #94a3b8;">평가 내역 없음</span>';
 
-                // 💡 2번 요구사항: 초대 버튼 위치를 '삭제' 버튼 바로 아래(top: 40px)로 이동!
-                const inviteBtn = isOwnerList ? `<button onclick="inviteCollaborator('${data.id}', event)" style="position: absolute; top: 40px; right: 10px; background: #dbeafe; color: #1e40af; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.8rem; z-index: 10; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">🤝 선생님 초대</button>` : '';
-                const emails = data.collaborators ? data.collaborators.map(e => e.split('@')[0]).join(', ') : user.email.split('@')[0];
-                const collabText = `<p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; color: #10b981; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">👥 참여: ${emails}</p>`;
+                // 1. 방장(Owner)일 때만 나타나는 삭제 및 초대 버튼
+                const deleteBtn = isOwnerList ? `<button onclick="deleteProject('${data.id}', event)" style="position: absolute; top: 15px; right: 15px; background: #fee2e2; color: #ef4444; border: none; padding: 2px 5px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.65rem; z-index: 10;">삭제</button>` : '';
+                const inviteBtn = isOwnerList ? `<button onclick="inviteCollaborator('${data.id}', event)" style="position: absolute; top: 42px; right: 15px; background: #dbeafe; color: #1e40af; border: none; padding: 2px 5px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.65rem; z-index: 10; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">🤝 선생님 초대</button>` : '';
 
+                // 2. 방장 여부에 따라 명단이 시작되는 높이 자동 조절 (방장이면 버튼 아래, 아니면 맨 위)
+                const listTop = isOwnerList ? '65px' : '10px';
+                
+                // 3. 참여 명단 세로형 배치 및 글자 크기 축소
+                let memberHtml = `<div style="position: absolute; top: ${listTop}; right: 15px; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; z-index: 5;">`;
+                memberHtml += '<span style="font-size: 0.6rem; color: #64748b; font-weight: bold; margin-bottom: 2px;">👥 참여 명단:</span>';
+                const memberList = data.collaborators ? data.collaborators.map(e => e.split('@')[0]) : [user.email.split('@')[0]];
+                
+                memberList.forEach(member => {
+                    memberHtml += `<span style="font-size: 0.6rem; color: #10b981; font-weight: bold; background: #ecfdf5; padding: 2px 6px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); white-space: nowrap;">👤 ${member}</span>`;
+                });
+                memberHtml += '</div>';
+
+                // 4. 글씨가 우측 명단을 침범하지 않도록 padding-right: 110px 추가
                 cardHtml += `
-                <div style="position: relative; border: 1px solid #cbd5e1; border-radius: 8px; padding: 1.5rem; background: white; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05);" 
+                <div style="position: relative; border: 1px solid #cbd5e1; border-radius: 8px; padding: 1.5rem; background: white; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05); min-height: 120px;" 
                      onmouseover="this.style.borderColor='#3b82f6'; this.style.transform='translateY(-3px)';" 
                      onmouseout="this.style.borderColor='#cbd5e1'; this.style.transform='none';">
                      
-                    ${isOwnerList ? `<button onclick="deleteProject('${data.id}', event)" style="position: absolute; top: 10px; right: 10px; background: #fee2e2; color: #ef4444; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.8rem; z-index: 10;">삭제</button>` : ''}
+                    ${deleteBtn}
                     ${inviteBtn}
+                    ${memberHtml}
                     
-                    <div onclick="openProject('${data.id}', '${data.name}')">
+                    <div onclick="openProject('${data.id}', '${data.name}')" style="padding-right: 110px;">
                         <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📁</div>
-                        <h4 style="margin: 0 0 0.5rem 0; color: #1e293b; font-size: 1.1rem; padding-right: 80px;">${data.name}</h4>
-                        <p style="margin: 0 0 0.2rem 0; font-size: 0.8rem; color: #64748b;">생성일: ${dateStr}</p>
-                        ${collabText}
-                        <div style="border-top: 1px dashed #cbd5e1; padding-top: 0.5rem;">${badges}</div>
+                        <h4 style="margin: 0 0 0.5rem 0; color: #1e293b; font-size: 1.1rem; word-break: keep-all;">${data.name}</h4>
+                        <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; color: #64748b;">생성일: ${dateStr}</p>
+                        <div style="border-top: 1px dashed #cbd5e1; padding-top: 0.8rem; margin-top: 15px;">${badges}</div>
                     </div>
                 </div>`;
             });
@@ -2893,7 +3224,12 @@ function renderProjectAssessments(assessments) {
         return;
     }
 
-    let html = `<table class="score-table">
+    // 👉 핵심 포인트 1: 우측 상단 '일괄 수정' 버튼이 여기에 들어갑니다.
+    let html = `
+    <div style="text-align: right; margin-bottom: 10px;">
+        <button id="global-edit-btn" onclick="toggleGlobalEditMode()" style="background:#f59e0b; color:white; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: 0.2s;">✏️ 평가명/비율 일괄 수정</button>
+    </div>
+    <table class="score-table">
         <thead style="background: #f1f5f9;">
             <tr><th>평가명</th><th>반영 비율</th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>관리</th></tr>
         </thead>
@@ -2902,8 +3238,6 @@ function renderProjectAssessments(assessments) {
     let totalWeight = 0;
     let totals = { A: 0, B: 0, C: 0, D: 0, E: 0 };
 
-    // 💡 8번 해결: 화면에 그리기 전 지필 -> 수행 순으로 정렬합니다.
-    // [중요!] 정렬해서 순서가 섞이더라도, 진짜 DB의 번호(originalIndex)를 기억하게 해서 엉뚱한 항목이 삭제/수정되는 대참사를 막습니다.
     let sortedWithIndex = assessments.map((asm, idx) => ({ ...asm, originalIndex: idx }));
     sortedWithIndex.sort((a, b) => {
         if (a.type === 'written' && b.type !== 'written') return -1;
@@ -2911,10 +3245,8 @@ function renderProjectAssessments(assessments) {
         return 0;
     });
 
-    // 이제 원본(assessments)이 아닌, 정렬된 배열(sortedWithIndex)을 돌며 화면에 그립니다.
     sortedWithIndex.forEach((asm) => {
-        const idx = asm.originalIndex; // 핵심: 버튼에는 화면 순서가 아닌 DB의 진짜 인덱스표를 달아줍니다!
-        
+        const idx = asm.originalIndex; 
         totalWeight += asm.weight;
         totals.A += (asm.scores?.A || 0);
         totals.B += (asm.scores?.B || 0);
@@ -2922,19 +3254,27 @@ function renderProjectAssessments(assessments) {
         totals.D += (asm.scores?.D || 0);
         totals.E += (asm.scores?.E || 0);
 
-        // 지필고사는 파란색 텍스트, 수행평가는 초록색 텍스트로 이름을 꾸며줍니다.
         const nameColor = asm.type === 'written' ? '#1e40af' : '#166534';
         const typeBadge = asm.type === 'written' 
             ? `<span style="background:#3b82f6; color:white; padding:2px 4px; border-radius:4px; font-size:0.7rem; margin-right:5px;">지필</span>`
             : `<span style="background:#10b981; color:white; padding:2px 4px; border-radius:4px; font-size:0.7rem; margin-right:5px;">수행</span>`;
 
+        // 👉 핵심 포인트 2: 쓸데없는 개별 수정 버튼은 빼고 깔끔하게 정리했습니다.
         const editBtn = asm.type === 'written' 
             ? `<button onclick="startEditAssessment(${idx})" style="background:#3b82f6; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; margin-right:5px;">산출/수정</button>` 
             : `<button onclick="editManualAssessment(${idx})" style="background:#8b5cf6; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; margin-right:5px;">수정</button>`;
 
+        // 👉 핵심 포인트 3: 표 내부에 수정용 input 창을 숨겨두었습니다. 일괄 수정 버튼을 누르면 나타납니다!
         html += `<tr>
-            <td style="text-align:left;">${typeBadge}<strong style="color:${nameColor};">${asm.name}</strong></td>
-            <td style="color: #ea580c; font-weight: bold;">${asm.weight}%</td>
+            <td style="text-align:left;">
+                ${typeBadge}
+                <strong class="display-name" style="color:${nameColor};">${asm.name}</strong>
+                <input type="text" class="edit-name-input" data-idx="${idx}" value="${asm.name}" style="display:none; width:120px; padding:4px; border:1px solid #cbd5e1; border-radius:4px;">
+            </td>
+            <td>
+                <span class="display-weight" style="color: #ea580c; font-weight: bold;">${asm.weight}%</span>
+                <input type="number" class="edit-weight-input" data-idx="${idx}" value="${asm.weight}" style="display:none; width:60px; padding:4px; border:1px solid #cbd5e1; border-radius:4px; text-align:center;">
+            </td>
             <td>${(asm.scores?.A || 0).toFixed(2)}</td>
             <td>${(asm.scores?.B || 0).toFixed(2)}</td>
             <td>${(asm.scores?.C || 0).toFixed(2)}</td>
@@ -2951,19 +3291,13 @@ function renderProjectAssessments(assessments) {
             <tr>
                 <td style="text-align:center;">합계</td>
                 <td style="color:${totalWeight === 100 ? '#10b981' : '#ef4444'}">${totalWeight}%</td>
-                <td>${totals.A.toFixed(2)}</td>
-                <td>${totals.B.toFixed(2)}</td>
-                <td>${totals.C.toFixed(2)}</td>
-                <td>${totals.D.toFixed(2)}</td>
-                <td>${totals.E.toFixed(2)}</td>
-                <td></td>
+                <td colspan="6"></td>
             </tr>
         </tfoot>
     </table>`;
 
     listEl.innerHTML = html;
 
-    // 최종 산출 박스 업데이트
     finalBoxes.innerHTML = `
         <div style="flex:1; min-width: 100px; padding:15px; background:white; border: 2px solid #ef4444; border-radius:8px;"><strong>A 컷오프</strong><br><span style="font-size:1.6rem; font-weight:bold; color:#ef4444;">${totals.A.toFixed(2)}</span></div>
         <div style="flex:1; min-width: 100px; padding:15px; background:white; border: 2px solid #f59e0b; border-radius:8px;"><strong>B 컷오프</strong><br><span style="font-size:1.6rem; font-weight:bold; color:#f59e0b;">${totals.B.toFixed(2)}</span></div>
@@ -2972,7 +3306,6 @@ function renderProjectAssessments(assessments) {
         <div style="flex:1; min-width: 100px; padding:15px; background:white; border: 2px solid #94a3b8; border-radius:8px;"><strong>E 컷오프</strong><br><span style="font-size:1.6rem; font-weight:bold; color:#64748b;">${totals.E.toFixed(2)}</span></div>
     `;
 
-    // 100%가 아닐 경우 경고창
     warning.style.display = totalWeight !== 100 ? 'block' : 'none';
 }
 
@@ -3005,13 +3338,21 @@ function editManualAssessment(index) {
             document.getElementById('manual-assess-name').value = asm.name;
             document.getElementById('manual-assess-weight').value = asm.weight;
             
-            // 반영 비율에 맞게 100점 만점으로 역환산하여 표시
             const ratio = asm.weight / 100;
             document.getElementById('manual-a').value = Math.round((asm.scores.A || 0) / ratio);
             document.getElementById('manual-b').value = Math.round((asm.scores.B || 0) / ratio);
             document.getElementById('manual-c').value = Math.round((asm.scores.C || 0) / ratio);
             document.getElementById('manual-d').value = Math.round((asm.scores.D || 0) / ratio);
             document.getElementById('manual-e').value = Math.round((asm.scores.E || 0) / ratio);
+            
+            // 🌟 하위 평가요소 데이터가 복원 목록에 있다면 화면에 동적 재구성
+            const subList = document.getElementById('sub-factors-list');
+            subList.innerHTML = '';
+            if (asm.subFactors && asm.subFactors.length > 0) {
+                asm.subFactors.forEach(sf => {
+                    addSubFactorRow(sf);
+                });
+            }
             
             currentEditingManualIndex = index;
             document.getElementById('manual-assessment-modal').style.display = 'flex';
@@ -3023,7 +3364,12 @@ function editManualAssessment(index) {
 function closeManualAssessmentModal() { 
     document.getElementById('manual-assessment-modal').style.display = 'none';
     currentEditingManualIndex = -1; 
-    document.querySelectorAll('#manual-assessment-modal input').forEach(input => input.value = ''); 
+    document.querySelectorAll('#manual-assessment-modal input').forEach(input => {
+        input.value = '';
+        input.readOnly = false;
+        input.style.background = 'white';
+    }); 
+    document.getElementById('sub-factors-list').innerHTML = ''; // 서랍 초기화
 }
 
 // ✨ [수정] 수행평가 저장 (새로 추가 & 수정 모두 대응)
@@ -3039,30 +3385,42 @@ async function saveManualAssessment() {
     
     if(!name || weight <= 0) { alert("평가명과 반영 비율을 정확히 입력하세요."); return; }
 
+    // 🌟 동적으로 추가된 하위 평가요소들의 명단과 원본 등급점수 수집
+    let subFactors = [];
+    document.querySelectorAll('.sub-factor-row').forEach(row => {
+        subFactors.push({
+            name: row.querySelector('.sub-factor-name').value.trim(),
+            max: parseFloat(row.querySelector('.sub-factor-max').value) || 0,
+            a: parseFloat(row.querySelector('.sub-a').value) || 0,
+            b: parseFloat(row.querySelector('.sub-b').value) || 0,
+            c: parseFloat(row.querySelector('.sub-c').value) || 0,
+            d: parseFloat(row.querySelector('.sub-d').value) || 0,
+            e: parseFloat(row.querySelector('.sub-e').value) || 0
+        });
+    });
+
     try {
         const docRef = db.collection('user_projects').doc(currentProjectId);
         const doc = await docRef.get();
         if(doc.exists) {
             let assessments = doc.data().assessments || [];
             
+            // 데이터 오브젝트 패킹 시 하위 요소 정보 명시적 병합
+            const assessmentData = {
+                name: name, weight: weight, type: 'manual',
+                scores: { A: a, B: b, C: c, D: d, E: e },
+                subFactors: subFactors, 
+                savedAt: new Date()
+            };
+
             if (currentEditingManualIndex !== -1) {
-                // 기존 데이터 덮어쓰기 (수정 모드)
-                assessments[currentEditingManualIndex] = {
-                    name: name, weight: weight, type: 'manual',
-                    scores: { A: a, B: b, C: c, D: d, E: e },
-                    savedAt: new Date()
-                };
+                assessments[currentEditingManualIndex] = assessmentData;
             } else {
-                // 새 데이터 추가
-                assessments.push({
-                    name: name, weight: weight, type: 'manual',
-                    scores: { A: a, B: b, C: c, D: d, E: e },
-                    savedAt: new Date()
-                });
+                assessments.push(assessmentData);
             }
             
             await docRef.update({ assessments: assessments });
-            alert("✅ 수행평가가 성공적으로 저장되었습니다!");
+            alert("✅ 수행평가 구조와 분할점수가 안전하게 저장되었습니다!");
             
             closeManualAssessmentModal();
             loadProjectDetails(); 
@@ -3157,8 +3515,7 @@ async function saveWrittenAssessmentShell() {
     } catch(err) { alert("생성 실패: " + err.message); }
 }
 
-// 🟢 [수정됨] 지필고사 편집 시작 (구글 시트급 실시간 동기화 안테나 장착!)
-let unsubscribeProject = null; // 안테나 전원 스위치
+let unsubscribeProject = null; 
 
 function startEditAssessment(index) {
     currentEditingAssessmentIndex = index;
@@ -3167,31 +3524,49 @@ function startEditAssessment(index) {
     document.getElementById('project-detail-view').style.display = 'none';
     document.getElementById('cut-score-step2').style.display = 'block';
     
-    // 기존에 켜져있던 안테나가 있다면 끕니다 (중복 방지)
     if (unsubscribeProject) unsubscribeProject();
 
-    // 💡 [핵심 기술] get() 대신 onSnapshot()을 쓰면 DB가 바뀔 때마다 이 안의 코드가 자동으로 다시 실행됩니다!
     unsubscribeProject = db.collection('user_projects').doc(currentProjectId).onSnapshot(doc => {
         if(doc.exists) {
             const projectData = doc.data();
             const asm = projectData.assessments[index];
             document.getElementById('current-assessment-info').innerText = `📌 ${asm.name} (반영 비율: ${asm.weight}%)`;
             
-            // 협업용 블라인드 테이블 그리기 (방금 바뀐 데이터로 즉시 화면 갱신!)
             renderCollaborativeTable(projectData, asm);
 
-            // 저장된 시험지 이미지가 있다면 뷰어에 다시 띄워주기
+            // 💡 협업자도 시험지를 볼 수 있도록 처리하는 로직
+            // 💡 협업자도 시험지를 볼 수 있도록 처리하는 로직
             if (asm.imageUrl) {
                 const imgEl = document.getElementById('exam-img-display');
+                const pdfEl = document.getElementById('exam-pdf-display');
+                const listContainer = document.getElementById('extracted-questions-list');
+
+                // 이미지인지 PDF인지 구분해서 띄우기
+                if (asm.imageUrl.toLowerCase().includes("pdf")) {
+                    if(imgEl) imgEl.style.display = 'none';
+                    if(pdfEl) { pdfEl.src = asm.imageUrl; pdfEl.style.display = 'block'; }
+                } else {
+                    if(pdfEl) pdfEl.style.display = 'none';
+                    if(imgEl) { imgEl.src = asm.imageUrl; imgEl.style.display = 'block'; }
+                }
+                currentUploadedImageUrl = asm.imageUrl;
+
+                // 💡 [완벽 해결] 시험지가 있다면 숨겨두지 말고 무조건 활짝 열어서 보여주기!
                 const wrapper = document.getElementById('exam-inspector-wrapper');
-                const aiHelper = document.getElementById('ai-helper-zone');
-                
-                if (imgEl && wrapper) {
-                    imgEl.src = asm.imageUrl;
-                    imgEl.style.display = 'block';
-                    wrapper.style.display = 'flex'; 
-                    if(aiHelper) aiHelper.style.display = 'block'; 
-                    currentUploadedImageUrl = asm.imageUrl; 
+                const toggleBtn = document.getElementById('exam-viewer-toggle-btn');
+                if (wrapper) {
+                    wrapper.style.display = 'flex'; // 강제로 엽니다
+                    if (toggleBtn) toggleBtn.innerText = "📄 시험지 닫기 🔼";
+                }
+
+                // 협업자이거나 방장이 이미 표에 반영을 완료한 경우 (우측 화면이 비어있을 때 안내문)
+                if (extractedQuestionsArray.length === 0 && listContainer) {
+                    listContainer.innerHTML = `
+                        <div style="padding: 3rem 1rem; text-align: center; color: #475569; background: white; border-radius: 8px; border: 1px dashed #cbd5e1;">
+                            <span style="font-size: 3rem;">📄</span>
+                            <p style="font-weight: bold; font-size: 1.1rem; margin-top: 10px; color: #1e3a8a;">시험지가 로드되었습니다.</p>
+                            <p style="font-size: 0.95rem; line-height: 1.6;">방장 선생님이 이미 문항을 표에 반영했습니다.<br>왼쪽 시험지를 보고 위의 <strong>[표]</strong>에서 채점을 진행해 주세요.</p>
+                        </div>`;
                 }
             }
         }
@@ -3276,39 +3651,55 @@ async function sendAiResultsToTable() {
 
     try {
         const docRef = db.collection('user_projects').doc(currentProjectId);
-        const doc = await docRef.get();
-        if(doc.exists) {
+        
+        // 🔒 마법의 자물쇠(트랜잭션) 시작
+        await db.runTransaction(async (transaction) => {
+            const doc = await transaction.get(docRef);
+            if(!doc.exists) throw new Error("문서를 찾을 수 없습니다.");
+            
             let assessments = doc.data().assessments;
             let asm = assessments[currentEditingAssessmentIndex];
-            let baseScores = asm.parsedScores || []; // 💡 기존 표 데이터 재사용!
+            let baseScores = asm.parsedScores || []; 
 
             let newScores = [];
             extractedQuestionsArray.forEach((q, idx) => {
-                let levelMatch = q.text.match(/\[수준\]\s*([A-E])/);
+                // 💡 핵심: A+ 도 인식할 수 있도록 정규식(Regex) 강화!
+                let levelMatch = q.text.match(/\[수준\]\s*(A\+|[A-E])/);
                 let diffSelect = document.getElementById(`ai-diff-${idx}`);
                 let diff = (diffSelect && diffSelect.value !== "") ? diffSelect.value : "";
+                let isShort = String(q.num).includes('서');
 
                 if (baseScores[idx]) {
-                    // 기존 표가 있으면 점수와 난이도만 업데이트
+                    baseScores[idx].num = q.num; 
                     baseScores[idx].score = parseFloat(q.score) || 0;
                     if(diff !== "") baseScores[idx].difficulty = diff;
+                    baseScores[idx].isShortAnswer = isShort; 
+                    // AI의 A+ 판정 강제 업데이트
+                    baseScores[idx].level = levelMatch ? levelMatch[1] : "판정필요"; 
                     newScores.push(baseScores[idx]);
                 } else {
-                    // 표가 아예 없으면 새로 생성
-                    newScores.push({ num: q.num, score: parseFloat(q.score) || 0, difficulty: diff, level: levelMatch ? levelMatch[1] : "C", isShortAnswer: String(q.num).includes('서') });
+                    newScores.push({ num: q.num, score: parseFloat(q.score) || 0, difficulty: diff, level: levelMatch ? levelMatch[1] : "판정필요", isShortAnswer: isShort });
                 }
             });
 
             assessments[currentEditingAssessmentIndex].parsedScores = newScores;
-            await docRef.update({ assessments: assessments });
             
-            // 반영 후 시험지 뷰어 닫기
-            const wrapper = document.getElementById('exam-inspector-wrapper');
-            if (wrapper && wrapper.style.display !== 'none') toggleExamViewer();
-            
-            alert("✅ 내용이 협업 표에 성공적으로 반영되었습니다!");
-        }
-    } catch(e) { alert("반영 실패: " + e.message); }
+            if (currentUploadedImageUrl) {
+                assessments[currentEditingAssessmentIndex].imageUrl = currentUploadedImageUrl; 
+            }
+
+            transaction.update(docRef, { assessments: assessments });
+        });
+        
+        // 자물쇠가 무사히 풀리고 저장이 끝나면 화면을 제어합니다.
+        const wrapper = document.getElementById('exam-inspector-wrapper');
+        if (wrapper && wrapper.style.display !== 'none') toggleExamViewer();
+        
+        alert("✅ 내용이 협업 표에 성공적으로 반영되었습니다!");
+        
+    } catch(e) { 
+        alert("반영 실패: " + e.message); 
+    }
 }
 
 // 8번 해결: 지필/수행 키워드 확장 및 최신순 정렬
@@ -3441,43 +3832,61 @@ async function inviteCollaborator(projectId, event) {
         alert("초대 중 오류가 발생했습니다: " + e.message);
     }
 }
-// ✨ 협업용 실시간 블라인드 테이블 그리기 (방장/초대자 모두 이 함수로 화면을 봅니다)
 function renderCollaborativeTable(projectData, asm) {
     const container = document.getElementById('score-table-container');
     const currentUserEmail = auth.currentUser.email;
-    const collaborators = projectData.collaborators || [currentUserEmail];
     
-    const teacherInputs = asm.teacherInputs || {}; // 선생님들 각자의 입력 데이터
-    const baseQuestions = asm.parsedScores || [];  // 기본 문항 틀 (AI가 뽑은 데이터 등)
+    // 💡 [완벽 해결] 방장(만든 사람)과 초대받은 사람을 모두 합쳐서 완벽한 명단을 만듭니다!
+    let allMembers = projectData.collaborators || [];
+    if (projectData.ownerEmail && !allMembers.includes(projectData.ownerEmail)) {
+        allMembers.unshift(projectData.ownerEmail); // 방장을 명단 맨 앞에 강제로 추가
+    }
+    if (!allMembers.includes(currentUserEmail)) {
+        allMembers.push(currentUserEmail); // 현재 접속 중인 사람도 혹시 모르니 무조건 추가
+    }
+    const collaborators = [...new Set(allMembers)]; // 중복된 이름은 깔끔하게 제거
+
+    const teacherInputs = asm.teacherInputs || {};
+    const baseQuestions = asm.parsedScores || [];
 
     if (baseQuestions.length === 0) {
         container.innerHTML = '<p style="text-align:center; padding: 2rem; color: #94a3b8;">[표 생성]을 누르거나 AI 분석을 시작하세요.</p>';
         return;
     }
 
-    // 헤더에 참여 선생님들 이름표 달기 (🤖 AI 일괄 복사 버튼 추가!)
     let html = `<table class="score-table">
                 <thead style="position: sticky; top: 0; background: #f1f5f9; z-index: 1;">
                 <tr>
                     <th>문항</th>
-                    <th>난이도</th> <th>배점</th>
+                    <th style="min-width: 120px;">
+                        난이도<br>
+                        <div style="font-size:0.75rem; font-weight:normal; margin-top:4px; display:flex; gap:4px; justify-content:center;">
+                            <select id="batch-diff-val" style="padding:2px; border-radius:4px;" onchange="lastBatchDiff = this.value">
+                            <option value="상" ${lastBatchDiff === '상' ? 'selected' : ''}>상</option>
+                            <option value="중" ${lastBatchDiff === '중' ? 'selected' : ''}>중</option>
+                            <option value="하" ${lastBatchDiff === '하' ? 'selected' : ''}>하</option>
+                        </select>
+                            <button onclick="applyBatchDifficulty()" style="background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer;">일괄넣기</button>
+                        </div>
+                    </th> 
+                    <th>배점</th>
                     <th>🤖 AI 판정</th>
                     <th style="background:#ecfdf5; border-bottom: 2px solid #10b981;">
                         내 판정<br>
                         <button onclick="copyAiLevelsToMine()" style="margin-top:5px; background:#10b981; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🤖 일괄 복사</button>
                     </th>`;
+                    
     collaborators.forEach(email => {
         if (email !== currentUserEmail) html += `<th>${email.split('@')[0]} 선생님</th>`;
     });
     html += `</tr></thead><tbody>`;
 
-    const levelToNum = { 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'E': 1 }; // 격차 계산을 위한 점수표
+    const levelToNum = { 'A+': 6, 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'E': 1 };
 
     baseQuestions.forEach((q, qIdx) => {
         const isShort = String(q.num).includes('서');
         const myInput = teacherInputs[currentUserEmail]?.[qIdx]?.level || '';
         
-        // 🚨 격차 경고등 계산 로직
         let minNum = myInput ? levelToNum[myInput] : null;
         let maxNum = myInput ? levelToNum[myInput] : null;
 
@@ -3490,33 +3899,32 @@ function renderCollaborativeTable(projectData, asm) {
             }
         });
 
-        // 2단계 이상 차이나면 빨간불!
         const isWarning = (minNum !== null && maxNum !== null && (maxNum - minNum >= 2));
         const trStyle = isWarning ? 'background:#fee2e2; border: 2px solid #ef4444;' : (isShort ? 'background:#fff7ed;' : '');
-
-        const diff = q.difficulty || '중'; // 현재 난이도 값
+        const diff = q.difficulty || '선택하세요';
 
         html += `<tr style="${trStyle}">
-            <td style="font-size: 0.85rem; font-weight:bold;">${q.num}${isWarning ? ' 🚨' : ''}</td>
-            <td>
-                <select class="diff-select" onchange="updateBaseDifficulty(${qIdx}, this.value)" style="padding:4px; border-radius:4px; border: ${diff === '' ? '2px solid #ef4444' : '1px solid #cbd5e1'}; ${diff === '' ? 'background:#fee2e2; color:#ef4444; font-weight:bold;' : (isWarning ? 'background:#fee2e2;' : '')}">
-                    <option value="" disabled ${diff===''?'selected':''}>선택하세요</option>
+            <td style="font-size: 0.9rem; font-weight:bold; text-align:center;">${q.num}${isWarning ? ' 🚨' : ''}</td>
+            <td style="display:flex; align-items:center; justify-content:center; gap:5px; border:none;">
+                <input type="checkbox" class="diff-batch-cb" data-idx="${qIdx}" style="transform: scale(1.3);">
+                <select class="diff-select" onchange="updateBaseDifficulty(${qIdx}, this.value)" style="padding:4px; border-radius:4px;">
+                    <option value=""   ${diff==='선택하세요' || diff===''?'selected':''}>선택하세요</option>
                     <option value="상" ${diff==='상'?'selected':''}>상</option>
                     <option value="중" ${diff==='중'?'selected':''}>중</option>
                     <option value="하" ${diff==='하'?'selected':''}>하</option>
                 </select>
             </td>
-            <td><input type="number" step="0.1" class="score-input" data-num="${q.num}" value="${q.score}" onchange="updateBaseScore(${qIdx}, this.value)" style="width:50px; ${isWarning ? 'background:#fee2e2;':''}"></td>
-            <td><span style="background:#8b5cf6; color:white; padding:2px 6px; border-radius:4px;">${q.level || 'C'}</span></td>
+            <td><input type="number" step="0.1" class="score-input" data-num="${q.num}" value="${q.score}" onchange="updateBaseScore(${qIdx}, this.value)" style="width:50px;"></td>
+            <td><span style="background:${q.level === 'A+' ? '#ef4444' : '#8b5cf6'}; color:white; padding:2px 6px; border-radius:4px;">${q.level || 'C'}</span></td>
             <td>
-                <select class="level-select" style="padding:4px; font-weight:bold; ${myInput ? 'background:#dcfce7; color:#166534;' : 'background:#f1f5f9;'}" onchange="saveMyInput(${qIdx}, this.value)">
+                <select class="level-select" style="padding:4px; font-weight:bold;" onchange="saveMyInput(${qIdx}, this.value)">
                     <option value="" ${!myInput ? 'selected' : ''}>선택</option>
+                    <option value="A+" ${myInput==='A+'?'selected':''}>A+</option>
                     <option value="A" ${myInput==='A'?'selected':''}>A</option><option value="B" ${myInput==='B'?'selected':''}>B</option>
                     <option value="C" ${myInput==='C'?'selected':''}>C</option><option value="D" ${myInput==='D'?'selected':''}>D</option><option value="E" ${myInput==='E'?'selected':''}>E</option>
                 </select>
             </td>`;
 
-        // 다른 선생님들 블라인드 처리 (A~E 값은 숨기고 상태만 보여줌)
         collaborators.forEach(email => {
             if (email !== currentUserEmail) {
                 const theirInput = teacherInputs[email]?.[qIdx]?.level;
@@ -3526,37 +3934,90 @@ function renderCollaborativeTable(projectData, asm) {
         html += `</tr>`;
     });
     html += `</tbody></table>`;
-    
-    // 💡 5번 요구사항: 표 바로 아래에 토글 버튼을 달아줍니다!
-    html += `<div style="text-align: right; margin-top: 15px;">
-                <button id="exam-viewer-toggle-btn" onclick="toggleExamViewer()" style="background: #3b82f6; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">📄 시험지 파일 및 편집 확인 🔽</button>
-             </div>`;
-             
-    container.innerHTML = html;
+    container.innerHTML = html; 
+
+    let externalHtml = `<div style="text-align: right; margin-bottom: 10px;">
+    <button onclick="alert('더 안정적인 서비스 제공을 위해 현재 시스템을 점검 및 업데이트 중입니다. 핵심 기능인 점수 산출은 정상적으로 이용 가능합니다! 🛠️');" style="background: #94a3b8; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">📄 시험지 파일 및 편집 확인 (업데이트 예정) ⏳</button>
+ </div>`;
+
+    const readyStatus = asm.readyStatus || {};
+    let statusHtml = `<div style="padding: 15px; background: #f8fafc; border-radius: 8px; border: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">`;
+
+    statusHtml += `<div><strong style="color:#334155; display:block; margin-bottom:5px;">👥 공동 작업 진행 상황:</strong>`;
+    let allReady = true;
+    collaborators.forEach(email => {
+        const status = readyStatus[email] || '대기 중';
+        if (status !== '완료') allReady = false; 
+        const name = email.split('@')[0]; 
+        
+        const isReady = status === '완료';
+        const isWorking = status === '작성 중';
+        const textColor = isReady ? '#166534' : (isWorking ? '#991b1b' : '#64748b');
+        const bgColor = isReady ? '#dcfce7' : (isWorking ? '#fee2e2' : '#f1f5f9');
+        const iconText = isReady ? '✅ 저장 완료' : (isWorking ? '✍️ 작성 중' : '⏳ 대기 중');
+
+        statusHtml += `<span style="display:inline-block; margin-right: 8px; padding: 4px 8px; border-radius: 4px; background: ${bgColor}; color: ${textColor}; font-size: 0.85rem; font-weight: bold; border: 1px solid ${isReady ? '#86efac' : (isWorking ? '#fca5a5' : '#e2e8f0')};">
+            ${name}: ${iconText}
+        </span>`;
+    });
+    statusHtml += `</div>`;
+
+    const myStatus = readyStatus[currentUserEmail] || '대기 중';
+    const amIReady = myStatus === '완료';
+    statusHtml += `<div>
+        <button onclick="markAsReady()" style="background: ${amIReady ? '#10b981' : '#ea580c'}; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.95rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            ${amIReady ? '✅ 내 판정 저장 완료' : '💾 내 판정 최종 저장하기'}
+        </button>
+    </div></div>`;
+
+    externalHtml += statusHtml;
+    const externalContainer = document.getElementById('table-external-controls');
+    if(externalContainer) externalContainer.innerHTML = externalHtml;
+
     updateStep2Total();
-    document.getElementById('btn-next-to-step3').style.display = 'inline-block';
+    const nextBtn = document.getElementById('btn-next-to-step3');
+    if (nextBtn) {
+        nextBtn.style.display = 'inline-block';
+        if (allReady) {
+            nextBtn.style.opacity = '1'; nextBtn.style.cursor = 'pointer'; nextBtn.onclick = handleNextToPath1Result;
+            nextBtn.innerHTML = "분할점수 산출하기 (M자 그룹화) ➡️"; nextBtn.style.background = "#ea580c";
+        } else {
+            nextBtn.style.opacity = '0.5'; nextBtn.style.cursor = 'not-allowed';
+            nextBtn.innerHTML = "🔒 모두 '저장 완료' 시 산출 가능"; nextBtn.style.background = "#64748b";
+        }
+    }
     parsedScores = baseQuestions;
+    setTimeout(initDiffShiftClick, 100); 
 }
 
-// ✨ 드롭다운을 바꾸는 순간 내 점수가 클라우드로 즉시 자동 저장되는 마법 함수
 async function saveMyInput(qIdx, levelValue) {
     if (!currentProjectId || currentEditingAssessmentIndex === -1) return;
     try {
         const docRef = db.collection('user_projects').doc(currentProjectId);
-        const doc = await docRef.get();
-        if(doc.exists) {
+
+        // 🔒 마법의 자물쇠(트랜잭션) 시작
+        await db.runTransaction(async (transaction) => {
+            const doc = await transaction.get(docRef);
+            if(!doc.exists) return;
+
             let assessments = doc.data().assessments;
             let asm = assessments[currentEditingAssessmentIndex];
-            
+
             if (!asm.teacherInputs) asm.teacherInputs = {};
             if (!asm.teacherInputs[auth.currentUser.email]) asm.teacherInputs[auth.currentUser.email] = [];
-            
-            while(asm.teacherInputs[auth.currentUser.email].length <= qIdx) { asm.teacherInputs[auth.currentUser.email].push({}); }
+
+            while(asm.teacherInputs[auth.currentUser.email].length <= qIdx) { 
+                asm.teacherInputs[auth.currentUser.email].push({}); 
+            }
             asm.teacherInputs[auth.currentUser.email][qIdx] = { level: levelValue };
-            
-            await docRef.update({ assessments: assessments });
-            // onSnapshot이 켜져있어 수정 즉시 내 화면도, 남의 화면도 예쁘게 자동 갱신됩니다!
-        }
+
+            // 💡 [버그 수정] false 대신 '작성 중'이라는 글자가 정확히 들어가도록 수정했습니다.
+            if(asm.readyStatus && asm.readyStatus[auth.currentUser.email]) {
+                asm.readyStatus[auth.currentUser.email] = '작성 중'; 
+            }
+
+            transaction.update(docRef, { assessments: assessments });
+        });
     } catch(e) { console.error("입력 저장 실패", e); }
 }
 
@@ -3596,6 +4057,11 @@ async function copyAiLevelsToMine() {
                 asm.teacherInputs[userEmail][idx].level = q.level || 'C'; 
             });
 
+            // 💡 일괄 복사를 눌렀다면 수정사항이 생겼으므로 '작성 중'으로 되돌립니다.
+            if(asm.readyStatus && asm.readyStatus[userEmail]) {
+                asm.readyStatus[userEmail] = false;
+            }
+
             await docRef.update({ assessments: assessments });
             // onSnapshot이 작동 중이라 화면은 스스로 짠! 하고 바뀝니다.
         }
@@ -3615,24 +4081,914 @@ async function updateBaseDifficulty(qIdx, diffValue) {
         }
     } catch(e) { console.error("난이도 갱신 실패", e); }
 }
-// ✨ 5번 요구사항: 시험지 뷰어를 표 아래로 옮기고 열고 닫는 함수
 function toggleExamViewer() {
     const wrapper = document.getElementById('exam-inspector-wrapper');
-    const container = document.getElementById('score-table-container');
+    const controls = document.getElementById('table-external-controls');
     const toggleBtn = document.getElementById('exam-viewer-toggle-btn');
+    const applyBtnContainer = document.getElementById('external-apply-btn-zone'); 
     
-    if (!wrapper || !container) return;
+    if (!wrapper || !controls) return;
 
-    // 💡 마법: 원래 위에 있던 시험지 창(wrapper)을 표(container) 바로 아래로 이사시킵니다!
-    if (wrapper.parentNode !== container.parentNode || wrapper.previousSibling !== container) {
-        container.parentNode.insertBefore(wrapper, container.nextSibling);
+    // 💡 시험지가 이동할 때 버튼도 위치를 계산해서 따라갑니다.
+    if (wrapper.parentNode !== controls.parentNode || wrapper.previousSibling !== controls) {
+        // 시험지를 표 아래로 이동시킴
+        controls.parentNode.insertBefore(wrapper, controls.nextSibling);
+        
+        // 시험지가 아래로 갔으므로, 반영 버튼은 시험지 '위쪽(top)'에 놓습니다. (스크롤 밖 우측 상단)
+        if(applyBtnContainer) {
+            wrapper.parentNode.insertBefore(applyBtnContainer, wrapper);
+        }
     }
 
     if (wrapper.style.display === 'none') {
         wrapper.style.display = 'flex';
         if(toggleBtn) toggleBtn.innerText = "📄 시험지 닫기 🔼";
+        // 부드럽게 화면을 버튼 위치로 이동
+        toggleBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } else {
         wrapper.style.display = 'none';
         if(toggleBtn) toggleBtn.innerText = "📄 시험지 파일 및 편집 확인 🔽";
+    }
+}
+
+async function markAsReady() {
+    if (!currentProjectId || currentEditingAssessmentIndex === -1) return;
+    try {
+        const docRef = db.collection('user_projects').doc(currentProjectId);
+        
+        // 1. 빈칸이 있는지 먼저 슬쩍 확인합니다.
+        const docForCheck = await docRef.get();
+        if(!docForCheck.exists) return;
+        
+        const asmCheck = docForCheck.data().assessments[currentEditingAssessmentIndex];
+        const baseLen = asmCheck.parsedScores ? asmCheck.parsedScores.length : 0;
+        const myInputs = asmCheck.teacherInputs?.[auth.currentUser.email] || [];
+        const filledCount = myInputs.filter(i => i && i.level).length;
+
+        let statusToSave = '완료';
+        if(filledCount < baseLen) {
+            if(!confirm("⚠️ 아직 성취수준을 판정하지 않은 빈칸이 있습니다.\n현재까지의 내용을 '임시 저장(작성 중)' 상태로 두시겠습니까?")) return;
+            statusToSave = '작성 중'; 
+        }
+
+        // 🔒 마법의 자물쇠(트랜잭션) 시작
+        await db.runTransaction(async (transaction) => {
+            const doc = await transaction.get(docRef);
+            if (!doc.exists) return;
+
+            let assessments = doc.data().assessments;
+            let asm = assessments[currentEditingAssessmentIndex];
+
+            if (!asm.readyStatus) asm.readyStatus = {};
+            asm.readyStatus[auth.currentUser.email] = statusToSave; 
+            
+            transaction.update(docRef, { assessments: assessments });
+        });
+        
+        // 알림은 자물쇠가 무사히 풀린 뒤에 띄웁니다.
+        alert("✅ 내 판정 상황이 안전하게 저장되었습니다.");
+
+    } catch(e) { alert("저장 실패: " + e.message); }
+}
+
+async function applyBatchDifficulty() {
+    // 1. 현재 사용자가 선택한 난이도 값('상', '중', '하')을 변수에 임시 저장합니다.
+    const val = document.getElementById('batch-diff-val').value;
+    const cbs = document.querySelectorAll('.diff-batch-cb:checked');
+    if(cbs.length === 0) { alert("선택된 문항이 없습니다. 왼쪽 체크박스를 선택해주세요."); return; }
+
+    try {
+        const docRef = db.collection('user_projects').doc(currentProjectId);
+        const doc = await docRef.get();
+        if(doc.exists) {
+            let assessments = doc.data().assessments;
+            cbs.forEach(cb => {
+                const idx = parseInt(cb.getAttribute('data-idx'));
+                assessments[currentEditingAssessmentIndex].parsedScores[idx].difficulty = val;
+            });
+            await docRef.update({ assessments: assessments });
+        }
+    } catch(e) { 
+        alert("일괄 적용 실패: " + e.message); 
+    }
+
+}
+
+function initDiffShiftClick() {
+    const checkboxes = document.querySelectorAll('.diff-batch-cb');
+    let lastChecked = null;
+    checkboxes.forEach(cb => {
+        cb.addEventListener('click', function(e) {
+            if (!lastChecked) { lastChecked = this; return; }
+            if (e.shiftKey) {
+                const start = Array.from(checkboxes).indexOf(this);
+                const end = Array.from(checkboxes).indexOf(lastChecked);
+                checkboxes.forEach((checkbox, i) => {
+                    if (i >= Math.min(start, end) && i <= Math.max(start, end)) {
+                        checkbox.checked = lastChecked.checked;
+                    }
+                });
+            }
+            lastChecked = this;
+        });
+    });
+}
+
+// ==========================================
+// 📸 [추가] 이미지 조각을 DB 저장용으로 아주 작게 압축하는 함수
+// ==========================================
+function compressCaptureImage(base64Str, callback) {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 600; // 가로를 600px로 제한 (용량 다이어트)
+        let width = img.width;
+        let height = img.height;
+
+        if (width > MAX_WIDTH) {
+            height = Math.round((height * MAX_WIDTH) / width);
+            width = MAX_WIDTH;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // 화질을 50%로 낮춰서 텍스트 길이를 대폭 줄임
+        const compressed = canvas.toDataURL('image/jpeg', 0.5);
+        callback(compressed);
+    };
+}
+
+// ==========================================
+// 🔄 [추가] 시험지 문항 저작권 회피 변형 및 저장 스크립트 (+ 캡처 이미지 포함)
+// ==========================================
+async function transformAndSaveExamToBank() {
+    if(extractedQuestionsArray.length === 0) return;
+    if(!confirm("추출된 문항들을 AI 변형 문항으로 재구성하여 '문제 서랍(DB)'에 저장하시겠습니까?\\n(첨부된 그림 조각들도 함께 저장되어 성취평가제 신뢰도 제고에 활용됩니다.)")) return;
+
+    if (!requireApiKey()) return;
+    const apiKey = localStorage.getItem('gemini_api_key');
+
+    const btn = document.querySelector('button[onclick="transformAndSaveExamToBank()"]');
+    const originalBtnText = btn ? btn.innerText : "💾 문항 전체 변형하여 문제은행에 기여하기";
+    if(btn) {
+        btn.innerText = "⏳ AI가 정밀 분석 및 필드 정보를 채워 저장 중입니다...";
+        btn.disabled = true;
+    }
+
+    try {
+        let standardsInfo = "";
+        for (const key in subjectData) {
+            if (subjectData[key].standards && subjectData[key].standards.length > 0) {
+                standardsInfo += `\\n--- ${subjectData[key].title} ---\\n`;
+                standardsInfo += subjectData[key].standards.map(s => `${s.code} ${s.desc}`).join('\\n');
+            }
+        }
+
+        let promptText = `당신은 2022 개정 교육과정 수학과 수석 교사입니다. 
+다음은 시험지에서 추출한 문항들입니다. 각 문항의 저작권을 침해하지 않도록 유사한 개념을 묻되 숫자나 상황을 바꾼 '변형 문항'을 만들고, 정답을 구하세요.
+또한, 제공된 <성취기준 목록>과 <평가 루브릭>을 참고하여 이 문항의 가장 적절한 성취기준 코드와 상세한 판정 이유를 작성해 주세요.
+
+<성취기준 목록>
+${standardsInfo}
+
+<평가 루브릭>
+${systemRubric}
+
+반드시 아래 규칙을 지켜서 출력하세요.
+각 문항마다 구분선(===)을 긋고, 아래 형식을 정확히 지켜주세요.
+변형문제: [수식은 $ 기호 사용]
+변형정답: [정답]
+성취기준코드: [예: 10공수2-01-01, 찾기 어려우면 '코드없음']
+판정이유: [AI가 평가 루브릭을 바탕으로 판단한 이 문항의 성취수준 판정 이유]
+\\n\\n`;
+
+        extractedQuestionsArray.forEach((q, idx) => {
+            promptText += `[문항 ${idx+1}]\\n원본: ${q.text}\\n---\\n`;
+        });
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }], generationConfig: { temperature: 0.15, topP: 0.95 } })
+        });
+
+        await checkApiError(response);
+        const data = await response.json();
+        const aiResult = data.candidates[0].content.parts[0].text;
+
+        const blocks = aiResult.split('===').map(b => b.trim()).filter(b => b.length > 0);
+        let savedCount = 0;
+        
+        let subject = document.getElementById('cut-score-subject')?.value || currentSubject || "uncategorized";
+
+        for (let i = 0; i < Math.min(blocks.length, extractedQuestionsArray.length); i++) {
+            const block = blocks[i];
+            const originalData = extractedQuestionsArray[i]; 
+
+            const qMatch = block.match(/변형문제:\\s*([\\s\\S]*?)(?=변형정답:|$)/);
+            const aMatch = block.match(/변형정답:\\s*([\\s\\S]*?)(?=성취기준코드:|$)/);
+            const cMatch = block.match(/성취기준코드:\\s*([\\s\\S]*?)(?=판정이유:|$)/);
+            const rMatch = block.match(/판정이유:\\s*([\\s\\S]*)/);
+
+            let finalQ = qMatch ? qMatch[1].trim() : originalData.text;
+            let finalA = aMatch ? aMatch[1].trim() : "정답 정보 없음";
+            let finalCode = cMatch ? cMatch[1].replace(/\\[|\\]/g, '').trim() : "코드없음"; 
+            let finalReason = rMatch ? rMatch[1].trim() : "AI가 교육과정 루브릭을 바탕으로 분석한 문항입니다.";
+
+            let levelMatch = originalData.text.match(/\\[수준\\]\\s*(A\\+|[A-E])/);
+            let lvl = levelMatch ? levelMatch[1] : "C";
+            if(lvl === "A+") lvl = "A";
+
+            const saveData = {
+                subject: subject,
+                standard_code: finalCode, 
+                question: finalQ,
+                answer: finalA,          
+                level: lvl, 
+                reason: finalReason,     
+                source: "📄 시험지 일괄 변형 저장",
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            if (originalData.image) {
+                await new Promise(resolve => {
+                    compressCaptureImage(originalData.image, (compressed) => {
+                        saveData.image = compressed; 
+                        resolve();
+                    });
+                });
+            }
+
+            await db.collection('transformed_bank').add(saveData);
+            savedCount++;
+        }
+
+        alert(`🎉 총 ${savedCount}개의 문항이 모든 필드(코드, 정답, 이유)를 갖춘 채 완벽하게 저장되었습니다!`);
+
+    } catch (error) {
+        alert("변형 저장 중 오류 발생: " + error.message);
+    } finally {
+        if(btn) {
+            btn.innerText = originalBtnText;
+            btn.disabled = false;
+        }
+    }
+}
+
+// ✅ [신규 추가] 저장 버튼을 눌렀을 때만 변형 문항 생성을 시작하고 화면을 초기화합니다.
+async function triggerSaveBackgroundAndReset() {
+    const apiKey = localStorage.getItem('gemini_api_key');
+    
+    // 현재 분석된 텍스트가 없으면 중단
+    if (!apiKey || !currentChatContext) {
+        alert("분석된 데이터가 없습니다.");
+        return;
+    }
+
+    const btn = document.getElementById('save-variant-btn');
+    const originalText = btn ? btn.innerText : "";
+
+    try {
+        if (btn) {
+            btn.disabled = true;
+            btn.innerText = "⏳ AI가 문항을 변형하여 저장 중입니다...";
+        }
+
+        // 선생님이 동의하셨으므로, 이제 비로소 백그라운드에서 저장을 시작합니다.
+        // 유저를 기다리게 하지 않기 위해 .then() 방식을 사용하여 비동기로 처리합니다.
+        processAndSaveBackground(currentChatContext, apiKey).then(() => {
+            console.log("✅ 변형 문항 데이터베이스 저장 완료");
+        }).catch(err => {
+            console.error("❌ 저장 중 오류 발생:", err);
+        });
+
+        // 사용자에게는 즉시 알림을 주고 화면을 다음 분석을 위해 비워줍니다.
+        alert("✅ 문항 분석 결과가 문제은행에 기여되었습니다!\n(AI가 저작권 보호를 위해 문항을 변형하여 안전하게 보관합니다.)");
+        
+        // 분석 결과 화면 리셋 (main.js에 이미 정의된 함수 호출)
+        resetAnalysis();
+
+    } catch (e) {
+        alert("저장 처리 중 오류가 발생했습니다: " + e.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerText = originalText;
+        }
+    }
+}
+// ==========================================
+// 🌌 관리자 전용: 궁극의 만능 서랍 제어 로직 (동적 필터 적용)
+// ==========================================
+
+function escapeCSV(str) {
+    if (str === undefined || str === null) return '""';
+    let cleanStr = str.toString();
+    return `"${cleanStr.replace(/"/g, '""')}"`;
+}
+
+// ✨ [신규] 서랍을 선택하면 그에 맞는 하위 분류 드롭다운을 자동으로 세팅하는 함수
+function updateUniversalFilter() {
+    const drawerSelect = document.getElementById('universal-drawer-select').value;
+    const drawerInput = document.getElementById('universal-drawer-input');
+    const filterSelect = document.getElementById('universal-filter-select');
+    
+    // '직접 입력' 모드 처리
+    if (drawerSelect === 'custom') {
+        drawerInput.value = '';
+        drawerInput.readOnly = false;
+        drawerInput.focus();
+        filterSelect.innerHTML = '<option value="all">전체 다운로드 (필터 없음)</option>';
+        filterSelect.style.background = '#f1f5f9';
+    } else {
+        drawerInput.value = drawerSelect;
+        drawerInput.readOnly = true;
+        
+        // 문제 은행이나 성취기준 서랍이면 과목별 필터 제공!
+        if (drawerSelect === 'transformed_bank' || drawerSelect === 'standards_2022') {
+            filterSelect.innerHTML = `
+                <option value="all">🌐 전체 과목 한 번에 보기</option>
+                <option value="common1">📘 공통수학1</option>
+                <option value="common2">📘 공통수학2</option>
+                <option value="algebra">📗 대수</option>
+                <option value="calculus1">📙 미적분Ⅰ</option>
+                <option value="stats">📊 확률과 통계</option>
+                <option value="uncategorized">📦 미분류 보관함</option>
+            `;
+            filterSelect.style.background = '#fffbeb';
+        } else {
+            // 다른 서랍은 기본적으로 전체 다운로드만 제공
+            filterSelect.innerHTML = '<option value="all">🌐 전체 다운로드 (세부 필터 미지원 서랍)</option>';
+            filterSelect.style.background = '#f1f5f9';
+        }
+    }
+}
+
+// 1. 분류가 적용된 데이터를 스마트하게 분석하여 엑셀로 다운로드
+async function downloadUniversalData() {
+    const collectionName = document.getElementById('universal-drawer-input').value.trim();
+    const filterVal = document.getElementById('universal-filter-select').value;
+    
+    if (!collectionName) {
+        alert("서랍 이름을 확인해 주세요.");
+        return;
+    }
+
+    const btn = document.querySelector('button[onclick="downloadUniversalData()"]');
+    const originalText = btn.innerText;
+    btn.innerText = "⏳ 데이터 구조 분석 및 필터링 중...";
+
+    try {
+        // ✨ 필터값에 따라 DB 쿼리(요청)를 다르게 날립니다.
+        let query = db.collection(collectionName);
+        if (filterVal !== 'all' && (collectionName === 'transformed_bank' || collectionName === 'standards_2022')) {
+            query = query.where('subject', '==', filterVal);
+        }
+
+        const snapshot = await query.get();
+        if (snapshot.empty) {
+            alert(`해당 조건('${filterVal}')에 일치하는 데이터가 없습니다.`);
+            return;
+        }
+
+        // 모든 필드명 긁어모으기
+        let allKeysSet = new Set();
+        snapshot.forEach(doc => { Object.keys(doc.data()).forEach(key => allKeysSet.add(key)); });
+        const headers = Array.from(allKeysSet); 
+
+        // 엑셀 만들기
+        let csvContent = "\uFEFF고유 ID(수정금지)," + headers.join(",") + "\n";
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            let rowValues = [escapeCSV(doc.id)]; 
+
+            headers.forEach(header => {
+                let val = data[header];
+                if (typeof val === 'object' && val !== null) {
+                    if (val.toDate) val = val.toDate().toLocaleString(); 
+                    else val = JSON.stringify(val); 
+                }
+                rowValues.push(escapeCSV(val));
+            });
+            csvContent += rowValues.join(",") + "\n";
+        });
+
+        const filterName = filterVal === 'all' ? '전체' : filterVal;
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `만능백업_${collectionName}_${filterName}_${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+
+    } catch (error) { alert("다운로드 실패: " + error.message); } 
+    finally { btn.innerText = originalText; }
+}
+
+// 2. 만능 스마트 업로드 (그대로 유지)
+async function uploadUniversalData(event) {
+    const file = event.target.files[0];
+    if(!file) return;
+
+    const collectionName = document.getElementById('universal-drawer-input').value.trim();
+    if (!collectionName) {
+        alert("저장할 대상 서랍 이름이 비어있습니다.");
+        event.target.value = ""; return;
+    }
+
+    if(!confirm(`[${collectionName}] 서랍에 엑셀 데이터를 밀어 넣습니다.\n엑셀의 첫 번째 줄(열 이름)이 데이터베이스의 필드명으로 적용됩니다.`)) {
+        event.target.value = ""; return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
+            
+            if (jsonData.length < 2) { alert("데이터가 없습니다."); return; }
+
+            const headers = jsonData[0]; 
+            if (headers[0] !== "고유 ID(수정금지)") {
+                alert("경고: A열의 이름이 '고유 ID(수정금지)'가 아닙니다. 다운받은 양식을 사용해 주세요.");
+                return;
+            }
+
+            let updateCount = 0; let insertCount = 0;
+
+            for (let i = 1; i < jsonData.length; i++) {
+                const row = jsonData[i];
+                if (!row || row.length === 0) continue;
+
+                const docId = row[0] ? row[0].toString().trim() : "";
+                let rowData = {};
+                let hasData = false;
+
+                for (let j = 1; j < headers.length; j++) {
+                    const fieldName = headers[j];
+                    if (!fieldName) continue;
+
+                    let val = row[j];
+                    if (val === undefined || val === "") continue; 
+
+                    if (typeof val === 'string' && (val.trim().startsWith('{') || val.trim().startsWith('['))) {
+                        try { val = JSON.parse(val.trim()); } catch (e) { }
+                    }
+                    rowData[fieldName] = val;
+                    hasData = true;
+                }
+
+                if (!hasData) continue; 
+
+                if (docId) {
+                    await db.collection(collectionName).doc(docId).set(rowData, { merge: true });
+                    updateCount++;
+                } else {
+                    await db.collection(collectionName).add(rowData);
+                    insertCount++;
+                }
+            }
+
+            alert(`🚀 [${collectionName}] 만능 업로드 완료!\n\n- 내용 덮어쓰기: ${updateCount}건\n- 신규 문서 추가: ${insertCount}건`);
+            document.getElementById('universal-bulk-upload-input').value = "";
+        } catch(error) {
+            alert("만능 업로드 에러: " + error.message);
+            document.getElementById('universal-bulk-upload-input').value = "";
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+// 💡 스크립트 맨 아랫부분 window.onload 안에 아래 함수 호출을 꼭 추가해주세요!
+// 기존 onload 내부 끝부분에 추가:
+// updateUniversalFilter();
+
+// 평가 이름과 비율만 수정하는 안전한 함수
+async function editAssessmentInfo(index) {
+    const docRef = db.collection('user_projects').doc(currentProjectId);
+    const doc = await docRef.get();
+    let assessments = doc.data().assessments;
+    let asm = assessments[index];
+
+    const newName = prompt("새로운 평가명을 입력하세요:", asm.name);
+    if(newName === null || newName.trim() === "") return;
+
+    const newWeight = prompt("새로운 반영 비율(%)을 숫자로만 입력하세요:", asm.weight);
+    if(newWeight === null || newWeight.trim() === "" || isNaN(newWeight)) return;
+
+    asm.name = newName.trim();
+    asm.weight = parseFloat(newWeight);
+
+    try {
+        await docRef.update({ assessments: assessments });
+        alert("✅ 평가명과 반영 비율이 수정되었습니다.\n⚠️ 중요: 비율이 변경되었다면, 우측의 [산출/수정] 버튼을 눌러 들어간 뒤 다시 한번 [💾 결과 저장하기]를 눌러주셔야 최종 점수가 새 비율에 맞게 재계산됩니다.");
+        loadProjectDetails(); // 화면 새로고침
+    } catch(e) {
+        alert("수정 실패: " + e.message);
+    }
+}
+
+// 👉 엑셀형 일괄 수정(Inline Edit) 상태 제어 변수
+let isGlobalEditMode = false;
+
+// 👉 일괄 수정 모드 켜기/끄기
+function toggleGlobalEditMode() {
+    isGlobalEditMode = !isGlobalEditMode;
+    const btn = document.getElementById('global-edit-btn');
+    
+    // 화면에 보이는 텍스트(span)와 숨겨진 입력창(input)을 모두 가져옵니다.
+    const nameSpans = document.querySelectorAll('.display-name');
+    const nameInputs = document.querySelectorAll('.edit-name-input');
+    const weightSpans = document.querySelectorAll('.display-weight');
+    const weightInputs = document.querySelectorAll('.edit-weight-input');
+
+    if (isGlobalEditMode) {
+        // 수정 모드로 변신!
+        btn.innerHTML = "💾 변경사항 저장하기";
+        btn.style.background = "#10b981"; // 초록색으로 변경
+        
+        nameSpans.forEach(el => el.style.display = 'none');
+        nameInputs.forEach(el => el.style.display = 'inline-block');
+        weightSpans.forEach(el => el.style.display = 'none');
+        weightInputs.forEach(el => el.style.display = 'inline-block');
+    } else {
+        // 저장 모드 돌입!
+        btn.innerHTML = "⏳ DB에 저장 중...";
+        btn.disabled = true;
+        saveGlobalEdits(nameInputs, weightInputs);
+    }
+}
+
+// 👉 수정된 내용을 DB에 저장하는 함수
+async function saveGlobalEdits(nameInputs, weightInputs) {
+    try {
+        const docRef = db.collection('user_projects').doc(currentProjectId);
+        const doc = await docRef.get();
+        
+        if (doc.exists) {
+            let assessments = doc.data().assessments;
+
+            // 각 줄의 input 창에서 값을 가져와 DB 배열에 덮어씁니다.
+            // data-idx를 쓰기 때문에 목록 순서가 바뀌어 있어도 엉뚱한 곳에 저장되지 않습니다!
+            nameInputs.forEach((input, i) => {
+                const idx = parseInt(input.getAttribute('data-idx'));
+                const newName = input.value.trim();
+                const newWeight = parseFloat(weightInputs[i].value) || 0;
+
+                if (newName) assessments[idx].name = newName;
+                assessments[idx].weight = newWeight;
+            });
+
+            await docRef.update({ assessments: assessments });
+            alert("✅ 모든 평가명과 반영 비율이 일괄 수정되었습니다!\n(⚠️ 비율이 바뀌었으니, 각 평가의 [산출/수정] 버튼을 눌러 들어간 뒤 최종 점수를 한 번 더 '저장'해야 컷오프 점수가 다시 계산됩니다.)");
+        }
+    } catch (e) {
+        alert("수정 실패: " + e.message);
+    } finally {
+        isGlobalEditMode = false;
+        loadProjectDetails(); // 표 다시 예쁘게 그리기
+    }
+}
+
+// ✨ 문제은행에 저장한 뒤, 곧바로 표에 반영하는 통합 함수
+async function saveBankAndApplyTable() {
+    await transformAndSaveExamToBank();
+    await sendAiResultsToTable();
+}
+
+// ✨ [신규 추가] 2022 개정 수학과 과목별 심층 언어 표지 루브릭 생성기
+function getSubjectSpecificRubric(subjectCode) {
+    let baseLinguisticMarkers = `
+[심층 언어적 표지 기준 (2022 개정 교육과정)]
+- A+수준 (초고난도/킬러): A수준을 뛰어넘는 극도의 인지적 복잡성을 요구하는 최상위권 변별용 문항. 단, 공식 성취수준 판정은 반드시 'A'로 출력하되, [판정 이유]의 맨 앞에 "[A+ 킬러문항]"이라는 꼬리표를 명시할 것.
+- A수준 (매우 우수): '다양하고 복잡한 맥락', '체계적으로', '이해하여 설명할 수 있다', '논리적으로 수행하고 과정을 설명할 수 있다'를 만족해야 함. (단순 정답 도출이 아닌 메타인지적 정당화 필수)
+- C수준 (보통): '알고', '이해한다', 일부 맥락에서 '해결할 수 있다' 수준.
+- E수준 (제한적): '부분적으로 안다', '안내된 절차에 따라 구할 수 있다' 조건 충족 시 부여. (교사의 스캐폴딩이 주어질 때 기능의 일부를 수행하는 문항)
+`;
+
+    let specificMarkers = "";
+
+    switch (subjectCode) {
+        case 'common1':
+            specificMarkers = `
+[공통수학1 특화 판별 기준]
+- 다항식/방정식: 원리와 과정을 '체계적으로' 그리고 '논리적으로' 설명하게 하는 구술/서술형 문항일 경우에만 A수준 판정.
+- 경우의 수: 다양한 방법으로 구하고, 그 방법을 논리적으로 설명할 수 있어야 A수준.
+- C/E수준 감별: 복합성을 제거한 '간단한' 상황에서의 정답 도출은 C, '안내된 절차에 따라' 연산하면 E수준.`;
+            break;
+        case 'common2':
+            specificMarkers = `
+[공통수학2 특화 판별 기준]
+- 도형의 방정식: 실생활과 연결하여 문제를 해결할 수 있어야 A수준.
+- 집합과 명제: 참/거짓을 판별하고 '그 이유를 설명'하며 체계적으로 수행해야 A수준 (대수학적 풀이를 넘어선 추론 역량).
+- 함수: 역함수 존재 조건 설명 및 성질 탐구 시 A수준. 안내된 절차에 따라 그래프를 그리는 정도면 E수준.`;
+            break;
+        case 'algebra':
+            specificMarkers = `
+[대수 특화 판별 기준]
+- 수열: 수학적 귀납법 원리를 설명하고, 다양한 명제를 '증명'할 수 있어야 A수준. 공식에 숫자를 대입하여 값을 산출하는 수준은 C.
+- 삼각함수: 사인/코사인법칙을 '증명'하고 활용해야 A수준.
+- 지수와 로그: 지수법칙을 이용해 식을 간단히 나타내면 A수준.`;
+            break;
+        case 'calculus1':
+            specificMarkers = `
+[미적분Ⅰ 특화 판별 기준]
+- 핵심은 '기하학적 의미의 설명'. 미분계수를 공식으로 계산하는 것은 C, 접선의 기울기나 속도 등 물리/기하학적 개념으로 번역해 해석하면 A수준.
+- 연속함수 성질 탐구 및 적분의 '유용성 인식'이 A수준의 지표.`;
+            break;
+        case 'stats':
+            specificMarkers = `
+[확률과 통계 특화 판별 기준]
+- 확률: '실생활과 연결하여' 구체적 현실 맥락을 확률적 모델로 구조화하면 A수준.
+- 통계: 정규분포와 표본비율의 관계 등을 '설명'하게 함으로써 통계적 통찰을 갖추었는지 확인해야 A수준.`;
+            break;
+        case 'calculus2':
+        case 'geometry':
+            specificMarkers = `
+[미적분Ⅱ/기하 (심화) 특화 판별 기준]
+- 미적분Ⅱ: 치환적분법 활용 및 급수 합 관계 탐구, 미분의 실생활 활용 및 유용성 인식이 A수준.
+- 기하: 작도의 원리를 이차곡선의 대수적 정의와 엄밀하게 일치시켜 '논리적으로 설명'하는 역량이 A수준. 단순 계산은 C수준 기초 기능.`;
+            break;
+        case 'ai-math':
+            specificMarkers = `
+[인공지능 수학 특화 판별 기준]
+- 경사하강법 등 인공지능의 학습 과정을 수학적 메커니즘으로 분해하여 '설명'할 수 있어야 A수준.
+- 단순히 데이터를 입력해 추세선을 얻는 기능적 작업은 C수준.`;
+            break;
+        default:
+            specificMarkers = "\n[타 교과 및 융합 과목 적용 기준]\n- 지필 고사를 넘어 '의사결정을 할 수 있다', '유용성을 인식한다' 등 실천 지향적 종결어미가 쓰인 경우 고차원적 수행평가(A수준)의 성격을 가짐.";
+            break;
+    }
+
+    return baseLinguisticMarkers + specificMarkers;
+}
+// ✨ [신규 추가] 과거 유사 문항 판정 데이터(RAG) 50개 불러오기 함수
+async function fetchReferenceQuestions(subjectCode) {
+    try {
+        // 현재 과목의 과거 기출/변형 문항을 최대 50개까지 가져옵니다.
+        const snapshot = await db.collection('transformed_bank')
+                                 .where('subject', '==', subjectCode)
+                                 .limit(50)
+                                 .get();
+                                 
+        if (snapshot.empty) return ""; // 데이터가 없으면 빈 칸 반환
+
+        let refText = "\n<과거 AI 판정 참고 데이터베이스 (일관성 유지용)>\n";
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            refText += `[과거 문항] ${data.question}\n[과거 판정 수준] ${data.level}\n[과거 판정 이유] ${data.reason}\n---\n`;
+        });
+        refText += "</과거 AI 판정 참고 데이터베이스>\n";
+        
+        return refText;
+    } catch (e) {
+        console.warn("참고 데이터 불러오기 실패:", e);
+        return "";
+    }
+}
+
+// ✨ [신규 추가] 문항 매칭 이의 제기 창 열기
+function openSpecificFeedbackPanel() {
+    const question = currentQuestions[currentLevelQ];
+    if (!question) return;
+
+    const panel = document.getElementById('specific-feedback-panel');
+    panel.style.display = 'block';
+
+    // 1. 현재 문항 정보 채워넣기 (화면에서 수식 렌더링 무시하고 글자만 추출)
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = question.q;
+    document.getElementById('fb-current-q').innerText = tempDiv.innerText;
+    document.getElementById('fb-current-std').innerText = currentStandardCode;
+    document.getElementById('fb-current-level').innerText = question.level;
+
+    // 2. 성취기준 드롭다운 목록 만들기 (현재 선택된 과목 기준)
+    const stdSelect = document.getElementById('fb-proposed-std');
+    stdSelect.innerHTML = '';
+    if (subjectData[currentSubject] && subjectData[currentSubject].standards) {
+        subjectData[currentSubject].standards.forEach(std => {
+            const opt = document.createElement('option');
+            opt.value = std.code;
+            opt.innerText = `${std.code} ${std.desc.substring(0, 15)}...`;
+            // 기본값은 현재 성취기준으로 세팅
+            if (std.code === currentStandardCode) opt.selected = true;
+            stdSelect.appendChild(opt);
+        });
+    }
+
+    // 3. 상태 초기화
+    document.getElementById('fb-proposed-level').value = question.level;
+    document.getElementById('fb-reason').value = '';
+    document.getElementById('fb-submit-btn').style.display = 'block';
+    document.getElementById('fb-loading-msg').style.display = 'none';
+}
+
+// ✨ [신규 추가] AI 검토 후 DB에 저장하기
+// ✨ 1. 문항 매칭 이의 제기 창에서 AI에게 의견 검토와 '공식 초안' 작성을 동시에 지시하는 함수
+async function submitSpecificFeedback() {
+    const proposedStd = document.getElementById('fb-proposed-std').value;
+    const proposedLevel = document.getElementById('fb-proposed-level').value;
+    const reason = document.getElementById('fb-reason').value.trim();
+    const questionText = currentQuestions[currentLevelQ].q;
+
+    if (!reason) {
+        alert("이의 제기를 위한 판정 이유를 작성해주세요.");
+        return;
+    }
+
+    if (!requireApiKey()) return;
+    const apiKey = localStorage.getItem('gemini_api_key');
+
+    // UI 로딩 상태로 변경
+    document.getElementById('fb-submit-btn').style.display = 'none';
+    document.getElementById('fb-loading-msg').style.display = 'block';
+
+    try {
+        // ✨ 마법의 프롬프트: 2단계 검토 절차 강제 및 명확한 포맷팅 요구
+        const prompt = `당신은 2022 개정 교육과정 평가 수석 위원입니다.
+문항 매칭 시스템을 사용하던 교사가 기존 판정에 이의를 제기했습니다.
+
+[문항 내용]: ${questionText}
+[기존 판정]: 기준(${currentStandardCode}), 수준(${currentQuestions[currentLevelQ].level})
+[교사 제안]: 기준(${proposedStd}), 수준(${proposedLevel})
+[교사 이유]: "${reason}"
+
+교사의 이의 제기를 다음 2단계 원칙에 따라 비판적으로 검토하세요:
+- 1단계: 국가 수준 평가 루브릭의 특화 기준 및 일반적 특성 최우선 적용
+- 2단계: AI의 교과 교육학적 수학적 추론을 통한 보완
+
+검토 후, 최종적으로 시스템 DB에 반영할 가장 완벽하고 타당한 결과를 도출하세요. 만약 원본에 정답이나 판정 이유가 누락되어 있다면 AI가 완벽하게 생성해서 채워 넣어야 합니다.
+반드시 아래의 대괄호 태그 양식을 그대로 사용하여 답변하세요.
+
+[검토결과]: 교사의 주장에 대한 2단계 원칙 기반의 논리적 검토 결과 (2~3문장)
+[최종성취기준]: 최종 판단한 성취기준 코드 (예: [10공수1-01-01])
+[최종성취수준]: A, B, C, D, E 중 택 1
+[최종정답]: 문항의 최종 정답 (수식은 $ 기호 사용)
+[최종판정이유]: 2단계 원칙이 적용된 정제된 판정 이유 한 문단`;
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.2, topP: 0.95 }
+            })
+        });
+
+        await checkApiError(response);
+        const data = await response.json();
+        const aiReviewText = data.candidates[0].content.parts[0].text;
+
+        const feedbackData = {
+            type: "문항 매칭 이의 제기",
+            question: questionText,
+            original_standard: currentStandardCode,
+            original_level: currentQuestions[currentLevelQ].level,
+            proposed_standard: proposedStd,
+            proposed_level: proposedLevel,
+            teacher_reason: reason,
+            ai_review: aiReviewText,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        await db.collection('developer_feedback').add(feedbackData);
+
+        alert("✅ 선생님의 분석과 AI의 심층 검토 결과가 시스템에 접수되었습니다! (관리자 페이지의 '의견확인'에서 조회 가능합니다)");
+        document.getElementById('specific-feedback-panel').style.display = 'none';
+
+    } catch (e) {
+        alert("의견 전송 중 오류가 발생했습니다: " + e.message);
+        document.getElementById('fb-submit-btn').style.display = 'block';
+        document.getElementById('fb-loading-msg').style.display = 'none';
+    }
+}
+// ✨ [신규 추가] 수행평가 하위 평가요소 줄 동적 생성 및 삭제, 실시간 자동 합산 엔진
+function addSubFactorRow(savedData = null) {
+    const container = document.getElementById('sub-factors-list');
+    const rowId = 'sub-factor-' + Date.now() + Math.random().toString(36).substr(2, 5);
+    
+    const row = document.createElement('div');
+    row.id = rowId;
+    row.className = 'sub-factor-row';
+    row.style.cssText = "background: #fbf7ff; border: 1px solid #e9d5ff; padding: 12px; border-radius: 8px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);";
+    
+    row.innerHTML = `
+        <div style="display: flex; gap: 8px; align-items: center;">
+            <input type="text" class="sub-factor-name" placeholder="요소명 (예: 가)" value="${savedData ? savedData.name : ''}" style="flex: 2; padding: 5px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.85rem;">
+            <input type="number" class="sub-factor-max" placeholder="배점" value="${savedData ? savedData.max : ''}" style="flex: 1; padding: 5px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.85rem; text-align: center;">
+            <button type="button" onclick="removeSubFactorRow('${rowId}')" style="background: #fee2e2; color: #ef4444; border: 1px solid #fca5a5; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: bold;">삭제</button>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; text-align: center; font-size: 0.8rem; color:#475569; font-weight: bold;">
+            <div>A<input type="number" class="sub-a" value="${savedData ? savedData.a : ''}" oninput="calculateSubFactorsTotal()" style="width:100%; padding:4px; text-align:center; border:1px solid #cbd5e1; border-radius:4px; margin-top:2px;"></div>
+            <div>B<input type="number" class="sub-b" value="${savedData ? savedData.b : ''}" oninput="calculateSubFactorsTotal()" style="width:100%; padding:4px; text-align:center; border:1px solid #cbd5e1; border-radius:4px; margin-top:2px;"></div>
+            <div>C<input type="number" class="sub-c" value="${savedData ? savedData.c : ''}" oninput="calculateSubFactorsTotal()" style="width:100%; padding:4px; text-align:center; border:1px solid #cbd5e1; border-radius:4px; margin-top:2px;"></div>
+            <div>D<input type="number" class="sub-d" value="${savedData ? savedData.d : ''}" oninput="calculateSubFactorsTotal()" style="width:100%; padding:4px; text-align:center; border:1px solid #cbd5e1; border-radius:4px; margin-top:2px;"></div>
+            <div>E<input type="number" class="sub-e" value="${savedData ? savedData.e : ''}" oninput="calculateSubFactorsTotal()" style="width:100%; padding:4px; text-align:center; border:1px solid #cbd5e1; border-radius:4px; margin-top:2px;"></div>
+        </div>
+    `;
+    container.appendChild(row);
+    calculateSubFactorsTotal();
+}
+
+function removeSubFactorRow(rowId) {
+    const row = document.getElementById(rowId);
+    if (row) row.remove();
+    calculateSubFactorsTotal();
+}
+
+function calculateSubFactorsTotal() {
+    const rows = document.querySelectorAll('.sub-factor-row');
+    const mainInputs = document.querySelectorAll('#manual-assessment-modal .main-cut-input');
+    
+    if (rows.length === 0) {
+        // 하위 요소가 없으면 기존 수동 입력창 해제
+        mainInputs.forEach(input => {
+            input.readOnly = false;
+            input.style.background = 'white';
+        });
+        return;
+    }
+
+    // 하위 요소들의 등급별 점수를 실시간 누적 합산
+    let totals = { a: 0, b: 0, c: 0, d: 0, e: 0 };
+    rows.forEach(row => {
+        totals.a += parseFloat(row.querySelector('.sub-a').value) || 0;
+        totals.b += parseFloat(row.querySelector('.sub-b').value) || 0;
+        totals.c += parseFloat(row.querySelector('.sub-c').value) || 0;
+        totals.d += parseFloat(row.querySelector('.sub-d').value) || 0;
+        totals.e += parseFloat(row.querySelector('.sub-e').value) || 0;
+    });
+
+    // 메인 최종 컷오프 인풋창에 합산값 대입 및 입력 방지 잠금
+    document.getElementById('manual-a').value = totals.a || '';
+    document.getElementById('manual-b').value = totals.b || '';
+    document.getElementById('manual-c').value = totals.c || '';
+    document.getElementById('manual-d').value = totals.d || '';
+    document.getElementById('manual-e').value = totals.e || '';
+
+    mainInputs.forEach(input => {
+        input.readOnly = true;
+        input.style.background = '#f1f5f9'; // 자동 완성되었음을 시각적으로 암시
+    });
+}
+
+// ✨ 3. 화면에 있는 입력창 값들을 그대로 읽어와서 진짜 DB를 수정하는 마법의 함수
+async function acceptFeedback(feedbackId) {
+    if(!confirm("현재 화면에 입력된 내용(기준, 수준, 정답, 이유)으로\n문제은행(DB)을 즉시 수정하시겠습니까?")) return;
+    
+    try {
+        const feedbackDoc = await db.collection('developer_feedback').doc(feedbackId).get();
+        if (!feedbackDoc.exists) return;
+        const fbData = feedbackDoc.data();
+        
+        // ✨ 화면에서 관리자가 최종 확인/수정한 4가지 데이터를 모두 가져옵니다.
+        const finalStd = document.getElementById(`admin-prop-std-${feedbackId}`).value.trim();
+        const finalLvl = document.getElementById(`admin-prop-lvl-${feedbackId}`).value.trim();
+        const finalAns = document.getElementById(`admin-prop-ans-${feedbackId}`).value.trim();
+        const finalReason = document.getElementById(`admin-prop-reason-${feedbackId}`).value.trim();
+        
+        const snapshot = await db.collection('transformed_bank')
+                                 .where('question', '==', fbData.question)
+                                 .get();
+                                 
+        if (snapshot.empty) {
+            alert("원본 문항을 찾을 수 없습니다. (이미 삭제되었거나 내용이 변경되었을 수 있습니다.)");
+            return;
+        }
+        
+        // ✨ 해당 문항의 4가지 필드를 완벽하게 덮어씁니다.
+        const targetDocId = snapshot.docs[0].id;
+        await db.collection('transformed_bank').doc(targetDocId).update({
+            standard_code: finalStd,
+            level: finalLvl,
+            answer: finalAns,
+            reason: finalReason
+        });
+        
+        // 처리 완료된 피드백 기록 지우기
+        await db.collection('developer_feedback').doc(feedbackId).delete();
+        
+        alert("✅ 관리자님의 검토 내용으로 문항 데이터가 성공적으로 수정되었습니다!");
+        openAdminFeedback(); // 창 새로고침
+        
+    } catch (e) {
+        alert("수락 처리 중 오류가 발생했습니다: " + e.message);
+    }
+}
+
+// ✨ 4. 반려 기능
+async function rejectFeedback(feedbackId) {
+    if(!confirm("이 의견을 반려(삭제)하시겠습니까?")) return;
+    try {
+        await db.collection('developer_feedback').doc(feedbackId).delete();
+        alert("🗑️ 의견이 반려되어 목록에서 삭제되었습니다.");
+        openAdminFeedback(); // 창 새로고침
+    } catch (e) {
+        alert("반려 처리 중 오류가 발생했습니다: " + e.message);
     }
 }
