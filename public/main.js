@@ -589,8 +589,6 @@ async function executeAnalysis() {
     const isLoggedIn = await checkLogin();
     if (!isLoggedIn) return;
 
-    if (!requireApiKey()) return; 
-
     if(document.getElementById('single-mode-ui')) document.getElementById('single-mode-ui').style.display = 'none';
     if(document.getElementById('multi-mode-ui')) document.getElementById('multi-mode-ui').style.display = 'none';
     document.getElementById('crop-canvas').style.display = 'none';
@@ -622,34 +620,31 @@ async function executeAnalysis() {
         };
 
         if (isSingleMode) {
-            bodyData.action = "analyze_single";
+            bodyData.action = "analyze_single"; // 깃발: 단일 분석 서랍 열기
             const box = (singleCropMode === 'multi' && cropBoxes.length > 0) ? cropBoxes[0] : null;
             lastAnalyzedSingleImage = getCroppedBase64(box); 
             bodyData.imageBase64 = lastAnalyzedSingleImage;
         } else {
-            bodyData.action = "analyze_multi";
+            bodyData.action = "analyze_multi"; // 깃발: 대량 분석 서랍 열기
             bodyData.images = cropBoxes.map(box => getCroppedBase64(box));
         }
 
-        // 🌟 비밀 마스터 백엔드로 안전하게 우회 호출
-        const workerUrl = "https://math-asa1.kthblacks11.workers.dev"; 
+        // 🌟 구글 주소 대신 선생님의 클라우드플레어 백엔드로 우회 신호 발송!
+        const workerUrl = "https://math-asa-backend.kthblacks11.workers.dev"; 
         const response = await fetch(workerUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(bodyData)
         });
 
-        await checkApiError(response);
+        if (!response.ok) throw new Error("백엔드 분석 연산 실패");
         const data = await response.json();
         const analysisText = data.candidates[0].content.parts[0].text;
         
         currentChatContext = analysisText; 
 
         const wrapper = document.getElementById('analysis-layout-wrapper');
-        if (wrapper) {
-            wrapper.style.position = 'relative'; 
-            wrapper.style.display = 'block'; 
-        }
+        if (wrapper) { wrapper.style.position = 'relative'; wrapper.style.display = 'block'; }
 
         const chatContainer = document.getElementById('ai-chat-container');
         if(chatContainer) {
@@ -684,10 +679,9 @@ async function executeAnalysis() {
 
     } catch (error) {
         console.error('API Error:', error);
-        let finalMsg = error.message;
         resultText.innerHTML = `<div style="padding: 15px; background-color: #fee2e2; border-left: 4px solid #ef4444; border-radius: 4px;">
             <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0;">🚨 분석 실패</p>
-            <p style="margin: 0; color: #7f1d1d;">${finalMsg}</p>
+            <p style="margin: 0; color: #7f1d1d;">${error.message}</p>
         </div>`;
     }
 }
@@ -1221,29 +1215,25 @@ async function sendChatMessage() {
     inputEl.value = '';
     historyEl.scrollTop = historyEl.scrollHeight;
 
-    if (!requireApiKey()) {
-        historyEl.innerHTML += `<div style="text-align: left; margin-bottom: 12px;"><span style="color: #dc2626; background: #fee2e2; padding: 10px; border-radius: 8px; display: inline-block; font-size: 0.9rem;">⚠️ API 키 등록이 필요합니다.</span></div>`;
-        return;
-    }
-
     const loadingId = 'loading-' + Date.now();
     historyEl.innerHTML += `<div id="${loadingId}" style="text-align: left; margin-bottom: 12px;"><span style="background: #f3f4f6; color: #4b5563; padding: 10px 14px; border-radius: 16px 16px 16px 0; display: inline-block; font-size: 0.9rem;">판정 기준을 엄격하게 재검토 중입니다... ⏳</span></div>`;
     historyEl.scrollTop = historyEl.scrollHeight;
 
     try {
-        const workerUrl = "https://math-asa1.kthblacks11.workers.dev";
+        // 🌟 챗봇 프롬프트를 전면 숨기고 클라우드플레어 챗봇 서랍(action: "chat_message") 호출!
+        const workerUrl = "https://math-asa-backend.kthblacks11.workers.dev";
         const response = await fetch(workerUrl, {
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                action: "chat_message",
+                action: "chat_message", // 깃발: 챗봇 대화 서랍 열기
                 currentChatContext: currentChatContext,
                 systemRubric: systemRubric,
                 message: message
             })
         });
         
-        await checkApiError(response); 
+        if (!response.ok) throw new Error("백엔드 챗봇 엔진 통신 실패");
         const result = await response.json();
         const aiReply = result.candidates[0].content.parts[0].text;
         
@@ -1254,9 +1244,13 @@ async function sendChatMessage() {
         const loadingEl = document.getElementById(loadingId);
         if(loadingEl) loadingEl.remove();
 
-        const formattedReply = aiReply.replace(/\*\*(.*?)\*\"/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+        const formattedReply = aiReply.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
         historyEl.innerHTML += `<div style="text-align: left; margin-bottom: 12px;"><span style="background: white; border: 1px solid var(--border); padding: 12px 16px; border-radius: 16px 16px 16px 0; display: inline-block; max-width: 85%;">${formattedReply}</span></div>`;
-        if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([historyEl]); }
+        
+        if (window.MathJax && window.MathJax.typesetPromise) { 
+            MathJax.typesetClear(); 
+            MathJax.typesetPromise([historyEl]); 
+        }
         historyEl.scrollTop = historyEl.scrollHeight;
 
     } catch(e) { 
