@@ -247,6 +247,10 @@ function handleImageUpload(event) {
 }
 
 function handlePaste(event) {
+    const activeTag = document.activeElement.tagName.toLowerCase();
+    if (activeTag === 'input' || activeTag === 'textarea') {
+        return; 
+    }    
     const items = (event.clipboardData || event.originalEvent.clipboardData).items;
     for (let index in items) {
         const item = items[index];
