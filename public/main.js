@@ -590,7 +590,6 @@ async function executeAnalysis() {
     if (!isLoggedIn) return;
 
     if (!requireApiKey()) return; 
-    const apiKey = localStorage.getItem('gemini_api_key');
 
     if(document.getElementById('single-mode-ui')) document.getElementById('single-mode-ui').style.display = 'none';
     if(document.getElementById('multi-mode-ui')) document.getElementById('multi-mode-ui').style.display = 'none';
@@ -613,106 +612,31 @@ async function executeAnalysis() {
         }
         const subjectSpecificRubric = getSubjectSpecificRubric(currentSubject);
         const enhancedSystemRubric = systemRubric + "\n" + subjectSpecificRubric;
-
-        let apiParts = [];
-        let isSingleMode = (analysisMainMode === 'single');
         const referenceDBText = await fetchReferenceQuestions(currentSubject);
-        // 💡 4번 지시사항 반영: 루브릭 안내 조립
-        let rubricGuidance = "";
-        if (systemRubric && systemRubric.trim().length > 10) {
-            rubricGuidance = `4. 성취수준 판정(A+~E):
-        - [1순위] 아래 제시된 <국가 수준 평가 루브릭>의 세부 기준을 엄격하게 최우선 적용하세요.
-        - [2순위] 루브릭에 명시되지 않은 예외적/융합적 문항의 경우, AI의 교과 교육학적 지식과 2022 개정 교육과정의 일반적 위계를 바탕으로 논리적으로 추론하여 판정하세요.
-        
-        <국가 수준 평가 루브릭>
-        ${systemRubric}`;
-        } else {
-            rubricGuidance = `4. 성취수준 판정(A+~E):
-        - 대한민국 2022 개정 교육과정의 일반적인 평가 위계와 교과 전문가적 지식을 바탕으로 최대한 일관성 있게 판정하세요.`;
-        }
+
+        let isSingleMode = (analysisMainMode === 'single');
+        let bodyData = {
+            standardsInfo: standardsInfo,
+            enhancedSystemRubric: enhancedSystemRubric,
+            referenceDBText: referenceDBText
+        };
 
         if (isSingleMode) {
+            bodyData.action = "analyze_single";
             const box = (singleCropMode === 'multi' && cropBoxes.length > 0) ? cropBoxes[0] : null;
             lastAnalyzedSingleImage = getCroppedBase64(box); 
-            
-            const prompt = `당신은 대한민국 최고의 수학 교사입니다. 문항을 엄밀히 분석하여 아래 대괄호 태그를 '토씨 하나 틀리지 말고' 사용하여 답변하세요. 마크다운 볼드체(**)를 태그 이름에 절대 사용하지 마세요.
-
-[원본 문제 추출]: 이미지에 있는 문제의 전체 텍스트와 수식을 추출하세요. (그래프/도형이 있다면 '[그림 및 그래프]' 라고 표기)
-
-[교과 및 단원]: 해당 문제의 교과명과 단원명을 명시하세요.
-
-[성취기준 및 수준]: 
-아래 제공된 <과목별 성취기준 목록>에서 가장 적합한 것을 고르세요. 
-성취수준 판정은 반드시 아래 제공된 <국가 수준 평가 루브릭>을 엄격하게 적용하여 다음 **2단계 하이브리드 방식**을 따르세요:
-- 1단계(1차 기준 적용): <국가 수준 평가 루브릭>의 교과 내용 요소별 특화 기준을 최우선 적용하고, 일반적 특성, 서술어, 수식어, MCP 판별 준거를 종합하여 1차 수준을 잡으세요.
-- 2단계(AI 자체 보완): 1차 기준만으로 명확한 판정이 어렵거나, 계산의 복잡성/사고의 도약 등 부가적인 요소가 있다면 AI의 수학적 추론을 추가로 반영하여 최종 A~E 수준을 확정하세요.
-
-반드시 아래의 3줄 형식으로 작성하세요.
-성취기준: [코드] 성취기준의 전체 내용
-성취수준: A~E 중 택 1
-판정 이유: "<국가 수준 평가 루브릭>의 [어떤 세부 기준]에 부합하며, 추가로 [AI의 수학적 근거]를 고려하여 판단함" 형태로 구체적으로 서술
-💡 중요: 만약 제공된 <과목별 성취기준 목록>에서 적절한 성취기준을 찾을 수 없다면(예: 미적분, 기하 등), [판정 이유]의 맨 마지막 줄에 반드시 "AI 판단 과목: [선수학습 또는 미적분 등 과목명]" 이라고 명시해주세요.
-
-<과목별 성취기준 목록>
-${standardsInfo}
-</과목별 성취기준 목록>
-
-<국가 수준 평가 루브릭>
-${enhancedSystemRubric}
-</국가 수준 평가 루브릭>
-
-${referenceDBText}
-
-[핵심 개념]: 문제 해결에 필요한 핵심 공식, 정리, 또는 수학적 원리를 글머리 기호(•)를 사용하여 2~3가지로 명확하고 깊이 있게 제시하세요.
-
-[상세 풀이]: 논리적 비약이나 생략 없이 가독성 좋은 단계별 풀이를 작성하세요. 반드시 '1단계:', '2단계:' 형식으로 문단을 시작하세요. 절대 '[상세 풀이]:' 라는 태그 이름을 변경하지 마세요.
-[분석 예시]
-[원본 문제 추출]: $x^2 - 4x + 4 = 0$의 해를 구하시오.
-[교과 및 단원]: 공통수학1, 다항식
-[성취기준 및 수준]:
-성취기준: [10공수1-01-01] 다항식의 사칙연산을 할 수 있다.
-성취수준: C
-판정 이유: "<국가 수준 평가 루브릭>의 [일반적 특성]에 부합하며, 추가로 [기본적인 이차방정식 풀이]를 고려하여 판단함"
-[핵심 개념]: • 완전제곱식의 이해
-[상세 풀이]: 
-1단계: 주어진 식을 인수분해한다.
-2단계: 해를 구한다.
-[중요 지침]: 모든 수식은 반드시 앞뒤로 $ 기호를 감싸서 LaTeX 문법으로 작성하세요.`;
-            apiParts.push({ text: prompt });
-            apiParts.push({ inlineData: { mimeType: "image/jpeg", data: lastAnalyzedSingleImage } });
+            bodyData.imageBase64 = lastAnalyzedSingleImage;
         } else {
-            const prompt = `당신은 대한민국 최고의 수학 교사입니다. 첨부된 ${cropBoxes.length}개의 이미지들은 각각 서로 다른 수학 문제입니다. 
-각 문제별로 명확하게 구분선(---)을 긋고 [문항 1], [문항 2] 형식으로 제목을 달아주세요.
-각 문항마다 풀이과정은 생략하고 아래 항목만 간결하게 요약 제시하세요. 수식은 반드시 $ 기호로 감싸서 LaTeX 문법으로 작성하세요.
-
-[분석 항목]
-0. 원본 문제 텍스트 (수식은 LaTeX 적용, 복잡한 그래프/도형은 '[그림 및 그래프]' 로 표기)
-1. 문항 내용 요약
-2. 과목 및 단원명 (2022 개정)
-3. 관련 성취기준 (코드 포함)
-4. 성취수준 (A/B/C/D/E) 및 판정 이유 (반드시 아래의 <국가 수준 평가 루브릭>을 먼저 대조한 후, 부족한 부분은 AI의 수학적 근거로 보완하여 서술하세요.)
-
-<과목별 성취기준 목록>
-${standardsInfo}
-</과목별 성취기준 목록>
-
-<국가 수준 평가 루브릭>
-${enhancedSystemRubric}
-</국가 수준 평가 루브릭>
-${referenceDBText}`;
-            apiParts.push({ text: prompt });
-            cropBoxes.forEach(box => {
-                apiParts.push({ inlineData: { mimeType: "image/jpeg", data: getCroppedBase64(box) } });
-            });
+            bodyData.action = "analyze_multi";
+            bodyData.images = cropBoxes.map(box => getCroppedBase64(box));
         }
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        // 🌟 비밀 마스터 백엔드로 안전하게 우회 호출
+        const workerUrl = "https://math-asa1.kthblacks11.workers.dev"; 
+        const response = await fetch(workerUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: apiParts }],
-                generationConfig: { temperature: 0.15, topP: 0.95, maxOutputTokens: 8192 }
-            })
+            body: JSON.stringify(bodyData)
         });
 
         await checkApiError(response);
@@ -721,26 +645,21 @@ ${referenceDBText}`;
         
         currentChatContext = analysisText; 
 
-        // ✨ 창이 늘어나지 않도록 wrapper를 기본 블록으로 되돌립니다. (leftPanel 조절 부분은 삭제!)
         const wrapper = document.getElementById('analysis-layout-wrapper');
         if (wrapper) {
             wrapper.style.position = 'relative'; 
             wrapper.style.display = 'block'; 
         }
 
-        // ✨ 챗봇을 오버레이(공중부양)로 띄웁니다.
         const chatContainer = document.getElementById('ai-chat-container');
         if(chatContainer) {
             chatContainer.style.display = 'flex';
-            chatContainer.style.position = 'absolute'; // 💡 화면을 밀어내지 않고 공중부양!
-            chatContainer.style.right = '-200px';           // 💡 우측 끝에 딱 붙임!
-            chatContainer.style.top = '0';             // 💡 위쪽 끝에 맞춤
-            
+            chatContainer.style.position = 'absolute'; 
+            chatContainer.style.right = '-200px';       
+            chatContainer.style.top = '0';             
             chatContainer.style.width = '350px'; 
-            chatContainer.style.height = 'fit-content'; // 💡 내용물 높이에 딱 맞춤 (녹색선 해결!)
-           
-            chatContainer.style.paddingBottom = '1rem'; // 💡 맨 아래 여백을 아주 살짝만 추가
-            
+            chatContainer.style.height = 'fit-content'; 
+            chatContainer.style.paddingBottom = '1rem'; 
             chatContainer.style.zIndex = '100';        
             chatContainer.style.backgroundColor = 'white';
             chatContainer.style.border = '1px solid #cbd5e1'; 
@@ -748,46 +667,28 @@ ${referenceDBText}`;
             chatContainer.style.boxShadow = '-5px 0 15px rgba(0,0,0,0.1)'; 
         }
         
-
-        // --- 이 부분을 찾아서 아래 내용으로 교체하세요 ---
         if (isSingleMode) {
             renderSophisticatedResult(analysisText, lastAnalyzedSingleImage);
-            
         } else {
             let rawText = analysisText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
             resultText.innerHTML = `<div style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); line-height: 1.8;">${rawText}</div>`;
-            
         }
 
-        // ✅ [추가] 분석이 성공적으로 끝나면 선생님의 동의를 구하는 버튼 영역을 화면에 표시합니다.
         const saveZone = document.getElementById('save-analysis-zone');
-        if (saveZone) {
-            saveZone.style.display = 'block';
-        }
+        if (saveZone) saveZone.style.display = 'block';
 
         if (window.MathJax) {
             MathJax.typesetClear();
             MathJax.typesetPromise([resultDiv]);
         }
-        
 
     } catch (error) {
         console.error('API Error:', error);
         let finalMsg = error.message;
-        if (error.name === 'TypeError' && finalMsg.includes('Failed to fetch')) {
-            finalMsg = "인터넷 연결이 불안정하거나 방화벽에 의해 차단되었습니다. 네트워크를 확인해주세요.";
-        }
-        
         resultText.innerHTML = `<div style="padding: 15px; background-color: #fee2e2; border-left: 4px solid #ef4444; border-radius: 4px;">
             <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0;">🚨 분석 실패</p>
             <p style="margin: 0; color: #7f1d1d;">${finalMsg}</p>
         </div>`;
-        
-        if (analysisMainMode === 'single') document.getElementById('single-mode-ui').style.display = 'block';
-        else {
-            document.getElementById('multi-mode-ui').style.display = 'block';
-            document.getElementById('crop-canvas').style.display = 'block';
-        }
     }
 }
 
@@ -871,13 +772,16 @@ function renderSophisticatedResult(rawText, base64Image) {
 
 async function processAndSaveBackground(analysisText, apiKey) {
     try {
-        const transformPrompt = "위 분석 결과를 바탕으로, 원본의 저작권을 침해하지 않게 숫자와 상황을 바꾼 '변형된 수학 문제' 1개를 생성하고 정답도 구하세요. \n\n반드시 아래 형식으로만 출력하세요:\n문제: [변형된 문제 내용]\n정답: [정답 내용]";
-        
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        const workerUrl = "https://math-asa1.kthblacks11.workers.dev"; 
+        const response = await fetch(workerUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: analysisText + "\n\n" + transformPrompt }] }] })
+            body: JSON.stringify({
+                action: "save_variant",
+                analysisText: analysisText
+            })
         });
+
         const result = await response.json();
         if (!result.candidates || result.candidates.length === 0) {
             console.warn("AI 변형 문항 생성 실패 (응답 없음). 조용히 넘어갑니다.");
@@ -885,7 +789,6 @@ async function processAndSaveBackground(analysisText, apiKey) {
         }
 
         const aiResponse = result.candidates[0].content.parts[0].text;
-        
         let finalQuestion = aiResponse;
         let finalAnswer = "정답 정보 없음";
         
@@ -904,26 +807,22 @@ async function processAndSaveBackground(analysisText, apiKey) {
             }
         }
 
-        // 선생님의 완벽한 A+ 처리 로직 (그대로 유지!)
         const levelMatch = analysisText.match(/성취수준:\s*(A\+|[A-E])/);
         let extractedLevel = levelMatch ? levelMatch[1] : "C";
 
-        // ✨ 선생님의 완벽한 기획 적용: A+라면 데이터베이스에는 A로 저장되도록 둔갑시킵니다!
         if (extractedLevel === "A+") {
             extractedLevel = "A"; 
         }
 
-        // 💡 [여기가 새로 추가된 부분입니다!] AI의 분석 결과 텍스트에서 '판정 이유'만 쏙 뽑아냅니다.
         const reasonMatch = analysisText.match(/판정 이유:\s*([\s\S]*?)(?=\[|$)/);
         let extractedReason = reasonMatch ? reasonMatch[1].trim() : "AI가 교육과정 루브릭을 바탕으로 분석한 문항입니다.";
 
-        // 💡 백그라운드 저장을 확실하게 기다려줍니다 (await)
         await db.collection('transformed_bank').add({
             subject: matchedSubject,
             question: finalQuestion,
             answer: finalAnswer, 
-            level: extractedLevel, // 둔갑시킨 A (또는 기존 A~E) 그대로 잘 저장됩니다!
-            reason: extractedReason, // 💡 [여기가 추가된 부분입니다!] 이제 판정이유도 DB에 완벽하게 들어갑니다.
+            level: extractedLevel, 
+            reason: extractedReason, 
             original_analysis: analysisText, 
             standard_code: stdCode,
             uid: auth.currentUser.uid,
@@ -934,7 +833,6 @@ async function processAndSaveBackground(analysisText, apiKey) {
 
     } catch (e) { 
         console.error("데이터 저장 실패:", e);
-        // 에러가 났을 때 원인을 화면에 띄워줍니다.
         alert("분석 결과 자동 저장 중 문제가 발생했습니다: " + e.message);
     }
 }
@@ -1259,8 +1157,10 @@ function openModal(std) {
 }
 
 async function reAnalyzeWithChat() {
-    const apiKey = localStorage.getItem('gemini_api_key');
-    if (!apiKey) return;
+    const isLoggedIn = await checkLogin();
+    if (!isLoggedIn) return;
+    if (!requireApiKey()) return;
+
     const chatHistory = document.getElementById('chat-history').innerText;
     if (!chatHistory) { alert("먼저 대화를 진행해주세요."); return; }
 
@@ -1271,20 +1171,19 @@ async function reAnalyzeWithChat() {
     resultText.innerHTML = '<div style="text-align:center; padding: 3rem; color: #3b82f6; font-weight: bold; font-size: 1.1rem;">AI 교사가 대화를 바탕으로 재분석 중입니다... ⏳</div>';
 
     try {
-        let prompt = "";
-        if (analysisMainMode === 'single') {
-            prompt = `당신은 대한민국 최고의 수학 교사입니다. \n처음 분석: ${currentChatContext}\n교사 대화 내역: ${chatHistory}\n\n대화를 깊이 분석하여 '최종 최적화 분석 결과'를 4가지 태그([교과 및 단원]:, [성취기준 및 수준]:, [핵심 개념]:, [상세 풀이]:)를 유지하여 답변하세요. 수식은 $ LaTeX를 사용하세요.`;
-        } else {
-            prompt = `당신은 대한민국 최고의 수학 교사입니다. \n처음 분석: ${currentChatContext}\n교사 대화 내역: ${chatHistory}\n\n대화를 깊이 분석하여 '최종 최적화 분석 결과'를 수정하여 답변하세요. 각 문항별로 명확하게 구분선(---)을 긋고 [문항 1], [문항 2] 형식으로 제목을 달아주세요. 수식은 $ LaTeX를 사용하세요.`;
-        }
-
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        const workerUrl = "https://math-asa1.kthblacks11.workers.dev";
+        const response = await fetch(workerUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: "reanalyze_chat",
+                analysisMainMode: analysisMainMode,
+                currentChatContext: currentChatContext,
+                chatHistory: chatHistory
+            })
         });
         
         await checkApiError(response); 
-
         const result = await response.json();
         const analysisText = result.candidates[0].content.parts[0].text;
         currentChatContext = analysisText;
@@ -1302,7 +1201,6 @@ async function reAnalyzeWithChat() {
                     </div>`;
             });
             imagesHtml += '</div>';
-
             resultText.innerHTML = `<div style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); line-height: 1.8;">${imagesHtml}${rawText}</div>`;
         }
 
@@ -1319,48 +1217,29 @@ async function sendChatMessage() {
     if(!message) return;
     
     const historyEl = document.getElementById('chat-history');
-    
     historyEl.innerHTML += `<div style="text-align: right; margin-bottom: 12px;"><span style="background: #e0e7ff; color: #1e40af; padding: 10px 14px; border-radius: 16px 16px 0 16px; display: inline-block; text-align: left; max-width: 80%">${message}</span></div>`;
     inputEl.value = '';
     historyEl.scrollTop = historyEl.scrollHeight;
 
-    // 🟢 스마트 검문소 배치!
     if (!requireApiKey()) {
         historyEl.innerHTML += `<div style="text-align: left; margin-bottom: 12px;"><span style="color: #dc2626; background: #fee2e2; padding: 10px; border-radius: 8px; display: inline-block; font-size: 0.9rem;">⚠️ API 키 등록이 필요합니다.</span></div>`;
         return;
     }
-    const apiKey = localStorage.getItem('gemini_api_key');
 
     const loadingId = 'loading-' + Date.now();
     historyEl.innerHTML += `<div id="${loadingId}" style="text-align: left; margin-bottom: 12px;"><span style="background: #f3f4f6; color: #4b5563; padding: 10px 14px; border-radius: 16px 16px 16px 0; display: inline-block; font-size: 0.9rem;">판정 기준을 엄격하게 재검토 중입니다... ⏳</span></div>`;
     historyEl.scrollTop = historyEl.scrollHeight;
 
     try {
-        const prompt = `당신은 대한민국 국가 수준 교육과정의 <평가 루브릭>을 엄격하게 수호하는 '수석 평가 위원'입니다.
-현재 문항에 대한 당신의 분석 상태는 다음과 같습니다:
----
-${currentChatContext}
----
-평가 루브릭:
-${systemRubric}
----
-
-[절대 방어 규칙]
-1. 사용자(교사)가 성취수준의 변경을 요청하거나 이의를 제기할 경우, 절대 무조건적으로 동의하지 마십시오. AI 특유의 '예스맨' 성향을 버리십시오.
-2. 사용자의 주장이 앞서 제공된 <평가 루브릭>의 '교과 내용 요소별 특화 기준', '일반적 특성', '서술어/수식어 위계' 및 '수학적 논리'에 완벽히 부합하는지 비판적으로 검증하십시오.
-3. ❌ [반려]: 사용자의 주장이 루브릭에 어긋나거나 논리적 비약이 있다면, 매우 정중하지만 단호하게 거절하십시오. 루브릭의 [어떤 세부 항목]에 위배되는지 명확한 근거를 들어 반박하고, "따라서 기존 판정을 유지합니다"라고 선언하십시오. 가독성을 위해 단락을 나누고 글머리 기호를 사용하세요.
-4. ✅ [수용]: 사용자의 주장이 루브릭 기준에 정확히 부합하고 타당성을 갖췄다면, "선생님의 의견이 타당합니다."라고 인정하고, 선생님의 의견이 반영된 [새로운 전체 분석 결과(성취기준, 수준, 판정이유, 핵심개념, 상세풀이)]를 다시 작성하여 제공하십시오.
-
-사용자의 메시지: "${message}"
-
-[수식 지침]: 수식은 반드시 $ 기호로 감싸서 LaTeX 문법을 사용하세요.`;
-        
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        const workerUrl = "https://math-asa1.kthblacks11.workers.dev";
+        const response = await fetch(workerUrl, {
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.1, topP: 0.9 } 
+                action: "chat_message",
+                currentChatContext: currentChatContext,
+                systemRubric: systemRubric,
+                message: message
             })
         });
         
@@ -1375,8 +1254,7 @@ ${systemRubric}
         const loadingEl = document.getElementById(loadingId);
         if(loadingEl) loadingEl.remove();
 
-        const formattedReply = aiReply.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
-
+        const formattedReply = aiReply.replace(/\*\*(.*?)\*\"/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
         historyEl.innerHTML += `<div style="text-align: left; margin-bottom: 12px;"><span style="background: white; border: 1px solid var(--border); padding: 12px 16px; border-radius: 16px 16px 16px 0; display: inline-block; max-width: 85%;">${formattedReply}</span></div>`;
         if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([historyEl]); }
         historyEl.scrollTop = historyEl.scrollHeight;
@@ -1384,7 +1262,6 @@ ${systemRubric}
     } catch(e) { 
         const loadingEl = document.getElementById(loadingId);
         if(loadingEl) loadingEl.remove();
-
         historyEl.innerHTML += `<div style="text-align: left; margin-bottom: 12px;"><span style="color: #dc2626; background: #fee2e2; padding: 10px; border-radius: 8px; display: inline-block; font-size: 0.9rem;">⚠️ ${e.message}</span></div>`; 
         historyEl.scrollTop = historyEl.scrollHeight;
     }
@@ -2458,7 +2335,6 @@ async function startExamAiAnalysis(base64Data) {
         document.getElementById('exam-loading').style.display = 'none'; 
         return; 
     }
-    const apiKey = localStorage.getItem('gemini_api_key');
     const loadingEl = document.getElementById('exam-loading');
     if (loadingEl) loadingEl.style.display = 'flex';
 
@@ -2466,31 +2342,17 @@ async function startExamAiAnalysis(base64Data) {
         const mimeTypeMatch = base64Data.match(/data:(.*?);base64/);
         const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : "image/jpeg";
         const base64Clean = base64Data.split(',')[1];
-
         const referenceDBText = await fetchReferenceQuestions(currentSubject);
-        // 💡 프롬프트에 A+ 판정 기준 추가!
-        const prompt = `이 파일은 시험지입니다. 1번 문항부터 마지막 문항까지 번호를 인식하여 텍스트를 추출해 주세요.
-        
-        [중요 지침]
-        1. 노이즈, 페이지 번호, 학교 마크 등은 무시하고 실제 문항만 추출하세요.
-        2. 사회/역사/과학/수학의 복잡한 그래프, 도표, 회로도, 그림등은 억지로 글자로 읽지 말고 단순하게 '[그림 및 도표]' 라고만 표기하세요.
-        3. 각 문항이 객관식인지 서답형인지 판단하여 객관식은 '1', '2', 서답형은 '서1', '서2' 형식으로 번호를 매겨주세요.
-        4. 문항의 텍스트 내용과 배점을 분석하여, 예상되는 성취수준(A+, A, B, C, D, E)을 AI가 직접 판단하여 기입하세요. (특히 아주 복잡하고 어려운 최고난도 킬러 문항인 경우 'A+' 로 판정하세요.)
-        5. 난이도는 교사가 직접 입력해야 하므로, 임의로 판단하지 말고 무조건 '선택하세요'라고 표기하세요.
-        6. ✨ 판정 시 아래 제공된 <과거 AI 판정 참고 데이터베이스>를 반드시 참고하여, 과거 선생님이 저장해둔 유사 문항의 수준과 최대한 일관성 있게 판정하세요.
-        
-        ${referenceDBText}
 
-        결과는 반드시 각 문항별로 구분선(---)을 사용하여 출력하고, 첫 줄은 아래 형식을 지켜주세요.
-        형식: [번호] 추출한번호 | [배점] 추출한점수점 | [수준] A+~E 중 택1 | [난이도] 선택하세요
-        (그 아래에 추출한 문제 텍스트 작성)`;
-
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        const workerUrl = "https://math-asa1.kthblacks11.workers.dev";
+        const response = await fetch(workerUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: mimeType, data: base64Clean } }] }],
-                generationConfig: { temperature: 0.1, topP: 0.95 } // ✨ AI의 일관성을 높이는 마법의 주문 추가!
+                action: "exam_analysis",
+                mimeType: mimeType,
+                base64Clean: base64Clean,
+                referenceDBText: referenceDBText
             })
         });
 
@@ -2529,14 +2391,12 @@ async function startExamAiAnalysis(base64Data) {
             if (fileData.includes("application/pdf")) {
                 if(imgEl) imgEl.style.display = 'none';
                 if(pdfEl) { 
-                    // 💡 fileData 대신 window.localExamUrl 사용!
                     pdfEl.src = window.localExamUrl || fileData; 
                     pdfEl.style.display = 'block'; 
                 }
             } else {
                 if(pdfEl) pdfEl.style.display = 'none';
                 if(imgEl) { 
-                    // 💡 fileData 대신 window.localExamUrl 사용!
                     imgEl.src = window.localExamUrl || fileData; 
                     imgEl.style.display = 'block'; 
                 }
@@ -4222,20 +4082,16 @@ function compressCaptureImage(base64Str, callback) {
     };
 }
 
-// ==========================================
-// 🔄 [추가] 시험지 문항 저작권 회피 변형 및 저장 스크립트 (+ 캡처 이미지 포함)
-// ==========================================
 async function transformAndSaveExamToBank() {
     if(extractedQuestionsArray.length === 0) return;
-    if(!confirm("추출된 문항들을 AI 변형 문항으로 재구성하여 '문제 서랍(DB)'에 저장하시겠습니까?\\n(첨부된 그림 조각들도 함께 저장되어 성취평가제 신뢰도 제고에 활용됩니다.)")) return;
+    if(!confirm("추출된 문항들을 AI 변형 문항으로 재구성하여 '문제 서랍(DB)'에 저장하시겠습니까?\n(첨부된 그림 조각들도 함께 저장되어 성취평가제 신뢰도 제고에 활용됩니다.)")) return;
 
     if (!requireApiKey()) return;
-    const apiKey = localStorage.getItem('gemini_api_key');
 
-    const btn = document.querySelector('button[onclick="transformAndSaveExamToBank()"]');
-    const originalBtnText = btn ? btn.innerText : "💾 문항 전체 변형하여 문제은행에 기여하기";
+    const btn = document.querySelector('button[onclick="saveBankAndApplyTable()"]') || document.querySelector('button[onclick="transformAndSaveExamToBank()"]');
+    const originalBtnText = btn ? btn.innerText : "💾 문제은행에 저장하고 표에 반영";
     if(btn) {
-        btn.innerText = "⏳ AI가 정밀 분석 및 필드 정보를 채워 저장 중입니다...";
+        btn.innerText = "⏳ AI가 일괄 저작권 변형 및 백엔드 연동 처리 중...";
         btn.disabled = true;
     }
 
@@ -4243,37 +4099,23 @@ async function transformAndSaveExamToBank() {
         let standardsInfo = "";
         for (const key in subjectData) {
             if (subjectData[key].standards && subjectData[key].standards.length > 0) {
-                standardsInfo += `\\n--- ${subjectData[key].title} ---\\n`;
-                standardsInfo += subjectData[key].standards.map(s => `${s.code} ${s.desc}`).join('\\n');
+                standardsInfo += `\n--- ${subjectData[key].title} ---\n`;
+                standardsInfo += subjectData[key].standards.map(s => `${s.code} ${s.desc}`).join('\n');
             }
         }
 
-        let promptText = `당신은 2022 개정 교육과정 수학과 수석 교사입니다. 
-다음은 시험지에서 추출한 문항들입니다. 각 문항의 저작권을 침해하지 않도록 유사한 개념을 묻되 숫자나 상황을 바꾼 '변형 문항'을 만들고, 정답을 구하세요.
-또한, 제공된 <성취기준 목록>과 <평가 루브릭>을 참고하여 이 문항의 가장 적절한 성취기준 코드와 상세한 판정 이유를 작성해 주세요.
+        let questionsPayload = extractedQuestionsArray.map(q => q.text);
 
-<성취기준 목록>
-${standardsInfo}
-
-<평가 루브릭>
-${systemRubric}
-
-반드시 아래 규칙을 지켜서 출력하세요.
-각 문항마다 구분선(===)을 긋고, 아래 형식을 정확히 지켜주세요.
-변형문제: [수식은 $ 기호 사용]
-변형정답: [정답]
-성취기준코드: [예: 10공수2-01-01, 찾기 어려우면 '코드없음']
-판정이유: [AI가 평가 루브릭을 바탕으로 판단한 이 문항의 성취수준 판정 이유]
-\\n\\n`;
-
-        extractedQuestionsArray.forEach((q, idx) => {
-            promptText += `[문항 ${idx+1}]\\n원본: ${q.text}\\n---\\n`;
-        });
-
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        const workerUrl = "https://math-asa1.kthblacks11.workers.dev";
+        const response = await fetch(workerUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }], generationConfig: { temperature: 0.15, topP: 0.95 } })
+            body: JSON.stringify({
+                action: "batch_transform",
+                standardsInfo: standardsInfo,
+                systemRubric: systemRubric,
+                questionsPayload: questionsPayload
+            })
         });
 
         await checkApiError(response);
@@ -4282,24 +4124,23 @@ ${systemRubric}
 
         const blocks = aiResult.split('===').map(b => b.trim()).filter(b => b.length > 0);
         let savedCount = 0;
-        
         let subject = document.getElementById('cut-score-subject')?.value || currentSubject || "uncategorized";
 
         for (let i = 0; i < Math.min(blocks.length, extractedQuestionsArray.length); i++) {
             const block = blocks[i];
             const originalData = extractedQuestionsArray[i]; 
 
-            const qMatch = block.match(/변형문제:\\s*([\\s\\S]*?)(?=변형정답:|$)/);
-            const aMatch = block.match(/변형정답:\\s*([\\s\\S]*?)(?=성취기준코드:|$)/);
-            const cMatch = block.match(/성취기준코드:\\s*([\\s\\S]*?)(?=판정이유:|$)/);
-            const rMatch = block.match(/판정이유:\\s*([\\s\\S]*)/);
+            const qMatch = block.match(/변형문제:\s*([\s\S]*?)(?=변형정답:|$)/);
+            const aMatch = block.match(/변형정답:\s*([\s\S]*?)(?=성취기준코드:|$)/);
+            const cMatch = block.match(/성취기준코드:\s*([\s\S]*?)(?=판정이유:|$)/);
+            const rMatch = block.match(/판정이유:\s*([\s\S]*)/);
 
             let finalQ = qMatch ? qMatch[1].trim() : originalData.text;
             let finalA = aMatch ? aMatch[1].trim() : "정답 정보 없음";
-            let finalCode = cMatch ? cMatch[1].replace(/\\[|\\]/g, '').trim() : "코드없음"; 
+            let finalCode = cMatch ? cMatch[1].replace(/[\[\]]/g, '').trim() : "코드없음"; 
             let finalReason = rMatch ? rMatch[1].trim() : "AI가 교육과정 루브릭을 바탕으로 분석한 문항입니다.";
 
-            let levelMatch = originalData.text.match(/\\[수준\\]\\s*(A\\+|[A-E])/);
+            let levelMatch = originalData.text.match(/\[수준\]\s*(A\+|[A-E])/);
             let lvl = levelMatch ? levelMatch[1] : "C";
             if(lvl === "A+") lvl = "A";
 
@@ -4327,7 +4168,7 @@ ${systemRubric}
             savedCount++;
         }
 
-        alert(`🎉 총 ${savedCount}개의 문항이 모든 필드(코드, 정답, 이유)를 갖춘 채 완벽하게 저장되었습니다!`);
+        alert(`🎉 완벽합니다! 총 ${savedCount}개의 시험지 문항이 완벽하게 백엔드 검증을 마친 뒤 저작권 회피 변형 문항으로 데이터베이스 서랍에 입고되었습니다.`);
 
     } catch (error) {
         alert("변형 저장 중 오류 발생: " + error.message);
@@ -4788,8 +4629,6 @@ function openSpecificFeedbackPanel() {
     document.getElementById('fb-loading-msg').style.display = 'none';
 }
 
-// ✨ [신규 추가] AI 검토 후 DB에 저장하기
-// ✨ 1. 문항 매칭 이의 제기 창에서 AI에게 의견 검토와 '공식 초안' 작성을 동시에 지시하는 함수
 async function submitSpecificFeedback() {
     const proposedStd = document.getElementById('fb-proposed-std').value;
     const proposedLevel = document.getElementById('fb-proposed-level').value;
@@ -4801,46 +4640,27 @@ async function submitSpecificFeedback() {
         return;
     }
 
-    if (!requireApiKey()) return;
-    const apiKey = localStorage.getItem('gemini_api_key');
-
-    // UI 로딩 상태로 변경
     document.getElementById('fb-submit-btn').style.display = 'none';
     document.getElementById('fb-loading-msg').style.display = 'block';
 
     try {
-        // ✨ 마법의 프롬프트: 2단계 검토 절차 강제 및 명확한 포맷팅 요구
-        const prompt = `당신은 2022 개정 교육과정 평가 수석 위원입니다.
-문항 매칭 시스템을 사용하던 교사가 기존 판정에 이의를 제기했습니다.
+        const workerUrl = "https://math-asa1.kthblacks11.workers.dev"; 
 
-[문항 내용]: ${questionText}
-[기존 판정]: 기준(${currentStandardCode}), 수준(${currentQuestions[currentLevelQ].level})
-[교사 제안]: 기준(${proposedStd}), 수준(${proposedLevel})
-[교사 이유]: "${reason}"
-
-교사의 이의 제기를 다음 2단계 원칙에 따라 비판적으로 검토하세요:
-- 1단계: 국가 수준 평가 루브릭의 특화 기준 및 일반적 특성 최우선 적용
-- 2단계: AI의 교과 교육학적 수학적 추론을 통한 보완
-
-검토 후, 최종적으로 시스템 DB에 반영할 가장 완벽하고 타당한 결과를 도출하세요. 만약 원본에 정답이나 판정 이유가 누락되어 있다면 AI가 완벽하게 생성해서 채워 넣어야 합니다.
-반드시 아래의 대괄호 태그 양식을 그대로 사용하여 답변하세요.
-
-[검토결과]: 교사의 주장에 대한 2단계 원칙 기반의 논리적 검토 결과 (2~3문장)
-[최종성취기준]: 최종 판단한 성취기준 코드 (예: [10공수1-01-01])
-[최종성취수준]: A, B, C, D, E 중 택 1
-[최종정답]: 문항의 최종 정답 (수식은 $ 기호 사용)
-[최종판정이유]: 2단계 원칙이 적용된 정제된 판정 이유 한 문단`;
-
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+        const response = await fetch(workerUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.2, topP: 0.95 }
+                action: "review",
+                questionText: questionText,
+                currentStandardCode: currentStandardCode,
+                currentLevel: currentQuestions[currentLevelQ].level,
+                proposedStd: proposedStd,
+                proposedLevel: proposedLevel,
+                reason: reason
             })
         });
 
-        await checkApiError(response);
+        if (!response.ok) throw new Error("백엔드 서버 통신 실패");
         const data = await response.json();
         const aiReviewText = data.candidates[0].content.parts[0].text;
 
@@ -4863,6 +4683,7 @@ async function submitSpecificFeedback() {
 
     } catch (e) {
         alert("의견 전송 중 오류가 발생했습니다: " + e.message);
+    } finally {
         document.getElementById('fb-submit-btn').style.display = 'block';
         document.getElementById('fb-loading-msg').style.display = 'none';
     }
