@@ -621,8 +621,8 @@ async function executeAnalysis() {
 
         let bodyData = {
             standardsInfo: standardsInfo,
-            enhancedSystemRubric: enhancedSystemRubric,
             referenceDBText: referenceDBText,
+            subject: currentSubject,
             apiKey: userApiKey 
         };
 
@@ -1238,7 +1238,7 @@ async function sendChatMessage() {
             body: JSON.stringify({ 
                 action: "chat_message", // 깃발: 챗봇 대화 서랍 열기
                 currentChatContext: currentChatContext,
-                systemRubric: systemRubric,
+                subject: currentSubject,
                 message: message,
                 apiKey: userApiKey
             })
@@ -1291,7 +1291,7 @@ async function syncPendingFeedback() {
 }
 
 let subjectData = {}; 
-let systemRubric = ""; 
+
 
 async function loadStandardsFromDB() {
     try {
@@ -1329,50 +1329,7 @@ async function loadStandardsFromDB() {
         }
         console.log("✅ 2/3: 성취기준 및 문항 로드 완료");
 
-        const rubricDoc = await db.collection('system_config').doc('evaluation_rubric').get();
-        if (rubricDoc.exists) {
-            const rData = rubricDoc.data();
-            
-            systemRubric = `
-[1] 일반적 특성 및 인지적 복잡성
-- A수준: ${rData.general_characteristics.A}
-- B수준: ${rData.general_characteristics.B}
-- C수준: ${rData.general_characteristics.C}
-- D수준: ${rData.general_characteristics.D}
-- E수준: ${rData.general_characteristics.E}
-
-[2] 핵심 서술어 및 종결어미 패턴
-- A수준: 동사(${rData.verbs_and_endings.A.verbs.join(', ')}), 어미(${rData.verbs_and_endings.A.ending})
-- B수준: 동사(${rData.verbs_and_endings.B.verbs.join(', ')}), 어미(${rData.verbs_and_endings.B.ending})
-- C수준: 동사(${rData.verbs_and_endings.C.verbs.join(', ')}), 어미(${rData.verbs_and_endings.C.ending})
-- D수준: 동사(${rData.verbs_and_endings.D.verbs.join(', ')}), 어미(${rData.verbs_and_endings.D.ending})
-- E수준: 동사(${rData.verbs_and_endings.E.verbs.join(', ')}), 어미(${rData.verbs_and_endings.E.ending})
-
-[3] 수식어 및 부사어 결합 조건
-- A수준: ${rData.modifiers.A.join(', ')}
-- B수준: ${rData.modifiers.B.join(', ')}
-- C수준: ${rData.modifiers.C.join(', ')}
-- D수준: ${rData.modifiers.D.join(', ')}
-- E수준: ${rData.modifiers.E.join(', ')}
-
-[4] MCP(최소 능력자) 판별 준거
-- A수준: ${rData.mcp_guidelines.A}
-- B수준: ${rData.mcp_guidelines.B}
-- C수준: ${rData.mcp_guidelines.C}
-- D수준: ${rData.mcp_guidelines.D}
-- E수준: ${rData.mcp_guidelines.E}
-
-[5] 교과 내용 요소별 특화 기준
-- 다항식: A(${rData.domain_specifics.polynomial.A}) / C(${rData.domain_specifics.polynomial.C}) / E(${rData.domain_specifics.polynomial.E})
-- 방정식과 부등식: A,B(${rData.domain_specifics.equation_inequality.A_B}) / C(${rData.domain_specifics.equation_inequality.C}) / D,E(${rData.domain_specifics.equation_inequality.D_E})
-- 행렬: A(${rData.domain_specifics.matrix.A}) / C(${rData.domain_specifics.matrix.C}) / E(${rData.domain_specifics.matrix.E})
-- 경우의 수: A(${rData.domain_specifics.combinatorics.A}) / C(${rData.domain_specifics.combinatorics.C}) / E(${rData.domain_specifics.combinatorics.E})
-
-[적용 지침]: ${rData.instructions}
-`;
-        }
-        console.log("✅ 3/3: AI 평가 루브릭 셋업 완료!");
-        
+               
     } catch(error) {
         console.error("DB 로딩 에러:", error);
     }
@@ -3359,6 +3316,14 @@ window.onload = async () => {
     syncPendingFeedback();       
     initChatResizer(); // 챗봇 리사이저 추가
     initCaptureEvents(); // 📸 그림 캡처 이벤트 생명 불어넣기 (추가됨)
+    const uploadArea = document.getElementById('upload-area');
+    if (uploadArea) {
+    // 클릭 이벤트뿐만 아니라 붙여넣기 이벤트도 해당 영역에만 집중시킵니다.
+    uploadArea.addEventListener('paste', handlePaste);
+    
+    // 친절한 UI: 사용자가 해당 영역을 클릭해서 포커스를 맞출 수 있도록 tabindex 추가
+    uploadArea.setAttribute('tabindex', '0'); 
+}
 };
 async function saveWrittenAssessmentShell() {
     const name = document.getElementById('written-assess-name').value.trim();
@@ -4121,7 +4086,7 @@ async function transformAndSaveExamToBank() {
             body: JSON.stringify({
                 action: "batch_transform",
                 standardsInfo: standardsInfo,
-                systemRubric: systemRubric,
+                subject: subject,
                 questionsPayload: questionsPayload,
                 apiKey: userApiKey
             })
@@ -4534,72 +4499,7 @@ async function saveBankAndApplyTable() {
     await sendAiResultsToTable();
 }
 
-// ✨ [신규 추가] 2022 개정 수학과 과목별 심층 언어 표지 루브릭 생성기
-function getSubjectSpecificRubric(subjectCode) {
-    let baseLinguisticMarkers = `
-[심층 언어적 표지 기준 (2022 개정 교육과정)]
-- A+수준 (초고난도/킬러): A수준을 뛰어넘는 극도의 인지적 복잡성을 요구하는 최상위권 변별용 문항. 단, 공식 성취수준 판정은 반드시 'A'로 출력하되, [판정 이유]의 맨 앞에 "[A+ 킬러문항]"이라는 꼬리표를 명시할 것.
-- A수준 (매우 우수): '다양하고 복잡한 맥락', '체계적으로', '이해하여 설명할 수 있다', '논리적으로 수행하고 과정을 설명할 수 있다'를 만족해야 함. (단순 정답 도출이 아닌 메타인지적 정당화 필수)
-- C수준 (보통): '알고', '이해한다', 일부 맥락에서 '해결할 수 있다' 수준.
-- E수준 (제한적): '부분적으로 안다', '안내된 절차에 따라 구할 수 있다' 조건 충족 시 부여. (교사의 스캐폴딩이 주어질 때 기능의 일부를 수행하는 문항)
-`;
 
-    let specificMarkers = "";
-
-    switch (subjectCode) {
-        case 'common1':
-            specificMarkers = `
-[공통수학1 특화 판별 기준]
-- 다항식/방정식: 원리와 과정을 '체계적으로' 그리고 '논리적으로' 설명하게 하는 구술/서술형 문항일 경우에만 A수준 판정.
-- 경우의 수: 다양한 방법으로 구하고, 그 방법을 논리적으로 설명할 수 있어야 A수준.
-- C/E수준 감별: 복합성을 제거한 '간단한' 상황에서의 정답 도출은 C, '안내된 절차에 따라' 연산하면 E수준.`;
-            break;
-        case 'common2':
-            specificMarkers = `
-[공통수학2 특화 판별 기준]
-- 도형의 방정식: 실생활과 연결하여 문제를 해결할 수 있어야 A수준.
-- 집합과 명제: 참/거짓을 판별하고 '그 이유를 설명'하며 체계적으로 수행해야 A수준 (대수학적 풀이를 넘어선 추론 역량).
-- 함수: 역함수 존재 조건 설명 및 성질 탐구 시 A수준. 안내된 절차에 따라 그래프를 그리는 정도면 E수준.`;
-            break;
-        case 'algebra':
-            specificMarkers = `
-[대수 특화 판별 기준]
-- 수열: 수학적 귀납법 원리를 설명하고, 다양한 명제를 '증명'할 수 있어야 A수준. 공식에 숫자를 대입하여 값을 산출하는 수준은 C.
-- 삼각함수: 사인/코사인법칙을 '증명'하고 활용해야 A수준.
-- 지수와 로그: 지수법칙을 이용해 식을 간단히 나타내면 A수준.`;
-            break;
-        case 'calculus1':
-            specificMarkers = `
-[미적분Ⅰ 특화 판별 기준]
-- 핵심은 '기하학적 의미의 설명'. 미분계수를 공식으로 계산하는 것은 C, 접선의 기울기나 속도 등 물리/기하학적 개념으로 번역해 해석하면 A수준.
-- 연속함수 성질 탐구 및 적분의 '유용성 인식'이 A수준의 지표.`;
-            break;
-        case 'stats':
-            specificMarkers = `
-[확률과 통계 특화 판별 기준]
-- 확률: '실생활과 연결하여' 구체적 현실 맥락을 확률적 모델로 구조화하면 A수준.
-- 통계: 정규분포와 표본비율의 관계 등을 '설명'하게 함으로써 통계적 통찰을 갖추었는지 확인해야 A수준.`;
-            break;
-        case 'calculus2':
-        case 'geometry':
-            specificMarkers = `
-[미적분Ⅱ/기하 (심화) 특화 판별 기준]
-- 미적분Ⅱ: 치환적분법 활용 및 급수 합 관계 탐구, 미분의 실생활 활용 및 유용성 인식이 A수준.
-- 기하: 작도의 원리를 이차곡선의 대수적 정의와 엄밀하게 일치시켜 '논리적으로 설명'하는 역량이 A수준. 단순 계산은 C수준 기초 기능.`;
-            break;
-        case 'ai-math':
-            specificMarkers = `
-[인공지능 수학 특화 판별 기준]
-- 경사하강법 등 인공지능의 학습 과정을 수학적 메커니즘으로 분해하여 '설명'할 수 있어야 A수준.
-- 단순히 데이터를 입력해 추세선을 얻는 기능적 작업은 C수준.`;
-            break;
-        default:
-            specificMarkers = "\n[타 교과 및 융합 과목 적용 기준]\n- 지필 고사를 넘어 '의사결정을 할 수 있다', '유용성을 인식한다' 등 실천 지향적 종결어미가 쓰인 경우 고차원적 수행평가(A수준)의 성격을 가짐.";
-            break;
-    }
-
-    return baseLinguisticMarkers + specificMarkers;
-}
 // ✨ [신규 추가] 과거 유사 문항 판정 데이터(RAG) 50개 불러오기 함수
 async function fetchReferenceQuestions(subjectCode) {
     try {
@@ -4689,6 +4589,7 @@ async function submitSpecificFeedback() {
                 proposedStd: proposedStd,
                 proposedLevel: proposedLevel,
                 reason: reason,
+                subject: currentSubject, 
                 apiKey: userApiKey
             })
         });
