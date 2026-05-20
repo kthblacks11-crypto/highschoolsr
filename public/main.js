@@ -617,10 +617,13 @@ async function executeAnalysis() {
         const referenceDBText = await fetchReferenceQuestions(currentSubject);
 
         let isSingleMode = (analysisMainMode === 'single');
+        const userApiKey = localStorage.getItem('gemini_api_key'); 
+
         let bodyData = {
             standardsInfo: standardsInfo,
             enhancedSystemRubric: enhancedSystemRubric,
-            referenceDBText: referenceDBText
+            referenceDBText: referenceDBText,
+            apiKey: userApiKey 
         };
 
         if (isSingleMode) {
@@ -770,13 +773,15 @@ function renderSophisticatedResult(rawText, base64Image) {
 
 async function processAndSaveBackground(analysisText, apiKey) {
     try {
-        const workerUrl = "https://math-asa1.kthblacks11.workers.dev"; 
+        const workerUrl = "https://math-asa-backend.kthblacks11.workers.dev"; 
+        const userApiKey = localStorage.getItem('gemini_api_key');
         const response = await fetch(workerUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 action: "save_variant",
-                analysisText: analysisText
+                analysisText: analysisText,
+                apiKey: userApiKey
             })
         });
 
@@ -816,14 +821,12 @@ async function processAndSaveBackground(analysisText, apiKey) {
         let extractedReason = reasonMatch ? reasonMatch[1].trim() : "AI가 교육과정 루브릭을 바탕으로 분석한 문항입니다.";
 
         await db.collection('transformed_bank').add({
-            subject: matchedSubject,
+            answer: finalAnswer,
+            level: extractedLevel,
             question: finalQuestion,
-            answer: finalAnswer, 
-            level: extractedLevel, 
-            reason: extractedReason, 
-            original_analysis: analysisText, 
+            reason: extractedReason,
             standard_code: stdCode,
-            uid: auth.currentUser.uid,
+            subject: matchedSubject,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
 
@@ -1169,7 +1172,8 @@ async function reAnalyzeWithChat() {
     resultText.innerHTML = '<div style="text-align:center; padding: 3rem; color: #3b82f6; font-weight: bold; font-size: 1.1rem;">AI 교사가 대화를 바탕으로 재분석 중입니다... ⏳</div>';
 
     try {
-        const workerUrl = "https://math-asa1.kthblacks11.workers.dev";
+        const workerUrl = "https://math-asa-backend.kthblacks11.workers.dev";
+        const userApiKey = localStorage.getItem('gemini_api_key');
         const response = await fetch(workerUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1177,7 +1181,8 @@ async function reAnalyzeWithChat() {
                 action: "reanalyze_chat",
                 analysisMainMode: analysisMainMode,
                 currentChatContext: currentChatContext,
-                chatHistory: chatHistory
+                chatHistory: chatHistory,
+                apiKey: userApiKey
             })
         });
         
@@ -1226,6 +1231,7 @@ async function sendChatMessage() {
     try {
         // 🌟 챗봇 프롬프트를 전면 숨기고 클라우드플레어 챗봇 서랍(action: "chat_message") 호출!
         const workerUrl = "https://math-asa-backend.kthblacks11.workers.dev";
+        const userApiKey = localStorage.getItem('gemini_api_key');
         const response = await fetch(workerUrl, {
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' },
@@ -1233,7 +1239,8 @@ async function sendChatMessage() {
                 action: "chat_message", // 깃발: 챗봇 대화 서랍 열기
                 currentChatContext: currentChatContext,
                 systemRubric: systemRubric,
-                message: message
+                message: message,
+                apiKey: userApiKey
             })
         });
         
@@ -2342,7 +2349,8 @@ async function startExamAiAnalysis(base64Data) {
         const base64Clean = base64Data.split(',')[1];
         const referenceDBText = await fetchReferenceQuestions(currentSubject);
 
-        const workerUrl = "https://math-asa1.kthblacks11.workers.dev";
+        const workerUrl = "https://math-asa-backend.kthblacks11.workers.dev";
+        const userApiKey = localStorage.getItem('gemini_api_key');
         const response = await fetch(workerUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2350,7 +2358,8 @@ async function startExamAiAnalysis(base64Data) {
                 action: "exam_analysis",
                 mimeType: mimeType,
                 base64Clean: base64Clean,
-                referenceDBText: referenceDBText
+                referenceDBText: referenceDBText,
+                apiKey: userApiKey
             })
         });
 
@@ -4104,7 +4113,8 @@ async function transformAndSaveExamToBank() {
 
         let questionsPayload = extractedQuestionsArray.map(q => q.text);
 
-        const workerUrl = "https://math-asa1.kthblacks11.workers.dev";
+        const workerUrl = "https://math-asa-backend.kthblacks11.workers.dev";
+        const userApiKey = localStorage.getItem('gemini_api_key');
         const response = await fetch(workerUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -4112,7 +4122,8 @@ async function transformAndSaveExamToBank() {
                 action: "batch_transform",
                 standardsInfo: standardsInfo,
                 systemRubric: systemRubric,
-                questionsPayload: questionsPayload
+                questionsPayload: questionsPayload,
+                apiKey: userApiKey
             })
         });
 
@@ -4384,6 +4395,29 @@ async function uploadUniversalData(event) {
 
                 if (!hasData) continue; 
 
+                // 💡 [안전장치] 문항 보관함(transformed_bank)일 경우 딱 7개 필드 포맷만 엄격히 강제함
+                if (collectionName === 'transformed_bank') {
+                    const permitted = ['answer', 'level', 'question', 'reason', 'standard_code', 'subject', 'timestamp'];
+                    let sanitizedData = {};
+                    
+                    permitted.forEach(field => {
+                        if (rowData[field] !== undefined) {
+                            sanitizedData[field] = rowData[field];
+                        }
+                    });
+
+                    // 💡 레벨이 소문자(a, b, c)로 들어오면 대문자로 자동 보정
+                    if (sanitizedData.level) {
+                        sanitizedData.level = sanitizedData.level.toString().toUpperCase().trim();
+                    }
+
+                    // 💡 엑셀 수정을 거치면서 꼬인 날짜 정보는 Firebase 서버 시간으로 안전하게 동기화
+                    sanitizedData.timestamp = firebase.firestore.FieldValue.serverTimestamp();
+                    
+                    rowData = sanitizedData;
+                }
+
+                // 🚀 정제된 데이터로 안전하게 DB 반영 (고유 ID가 있으면 덮어쓰기, 없으면 신규 추가)
                 if (docId) {
                     await db.collection(collectionName).doc(docId).set(rowData, { merge: true });
                     updateCount++;
@@ -4642,8 +4676,8 @@ async function submitSpecificFeedback() {
     document.getElementById('fb-loading-msg').style.display = 'block';
 
     try {
-        const workerUrl = "https://math-asa1.kthblacks11.workers.dev"; 
-
+        const workerUrl = "https://math-asa-backend.kthblacks11.workers.dev"; 
+        const userApiKey = localStorage.getItem('gemini_api_key');
         const response = await fetch(workerUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -4654,7 +4688,8 @@ async function submitSpecificFeedback() {
                 currentLevel: currentQuestions[currentLevelQ].level,
                 proposedStd: proposedStd,
                 proposedLevel: proposedLevel,
-                reason: reason
+                reason: reason,
+                apiKey: userApiKey
             })
         });
 
