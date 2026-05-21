@@ -18,6 +18,7 @@ let currentUploadedImageUrl = null;
 auth.onAuthStateChanged(async (user) => {
     const loginBtn = document.getElementById('login-btn');
     const logoutBtn = document.getElementById('logout-btn');
+    const deleteAccountBtn = document.getElementById('delete-account-btn'); // 🟢 탈퇴 버튼 불러오기
     const userInfo = document.getElementById('user-info');
     const adminFeedbackBtn = document.getElementById('admin-feedback-btn'); 
     const adminModeBtn = document.getElementById('admin-mode-btn'); 
@@ -26,6 +27,7 @@ auth.onAuthStateChanged(async (user) => {
         // 로그인 성공 시 UI 변경
         loginBtn.style.display = 'none';
         logoutBtn.style.display = 'inline-block';
+        if(deleteAccountBtn) deleteAccountBtn.style.display = 'inline-block'; // 🟢 탈퇴 버튼 보이기
         userInfo.innerText = user.displayName + " 선생님 환영합니다.";
         
         // 💡 페이지 로드 시 window.onload에서 데이터를 이미 불러오므로, 
@@ -45,6 +47,7 @@ auth.onAuthStateChanged(async (user) => {
         // 로그아웃 상태
         loginBtn.style.display = 'inline-block';
         logoutBtn.style.display = 'none';
+        if(deleteAccountBtn) deleteAccountBtn.style.display = 'none'; // 🟢 탈퇴 버튼 숨기기
         userInfo.innerText = "로그인이 필요합니다.";
         if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'none';
         if(adminModeBtn) adminModeBtn.style.display = 'none';
@@ -52,7 +55,7 @@ auth.onAuthStateChanged(async (user) => {
 });
 
 function showApiModal() {
-    const modal = document.getElementById('api-modal'); // index.html에 있는 ID 확인
+    const modal = document.getElementById('api-modal'); 
     if(modal) modal.style.display = 'flex';
 }
 
@@ -60,8 +63,35 @@ async function handleLogin() {
     try { await auth.signInWithPopup(provider); }
     catch (error) { alert("로그인에 실패했습니다."); }
 }
+
 function handleLogout() {
     if(confirm("로그아웃 하시겠습니까?")) { auth.signOut(); }
+}
+
+// ✨ 회원 탈퇴 기능을 수행하는 함수 추가
+async function handleDeleteAccount() {
+    const user = firebase.auth().currentUser;
+    
+    if (!user) {
+        alert("로그인된 상태가 아닙니다.");
+        return;
+    }
+    
+    // 다시 한번 경고창을 띄워 실수를 방지합니다.
+    if (confirm("정말로 탈퇴하시겠습니까?\\n탈퇴하시면 시스템에 저장된 모든 선생님의 개인 데이터가 즉시 삭제되며 복구할 수 없습니다.")) {
+        try {
+            await user.delete();
+            alert("회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.");
+            window.location.reload(); // 성공 시 화면을 새로고침하여 초기화
+        } catch (error) {
+            // 보안을 위해 오랫동안 로그인 상태였던 사용자는 재로그인을 요구할 수 있습니다.
+            if (error.code === 'auth/requires-recent-login') {
+                alert("안전한 탈퇴 처리를 위해 재로그인이 필요합니다.\\n로그아웃 후 다시 로그인하여 탈퇴를 진행해 주세요.");
+            } else {
+                alert("탈퇴 처리 중 오류가 발생했습니다: " + error.message);
+            }
+        }
+    }
 }
 
 let currentSubject = "common2";
@@ -612,8 +642,6 @@ async function executeAnalysis() {
                 standardsInfo += subjectData[key].standards.map(s => `${s.code} ${s.desc}`).join('\n');
             }
         }
-        const subjectSpecificRubric = getSubjectSpecificRubric(currentSubject);
-        const enhancedSystemRubric = systemRubric + "\n" + subjectSpecificRubric;
         const referenceDBText = await fetchReferenceQuestions(currentSubject);
 
         let isSingleMode = (analysisMainMode === 'single');
@@ -621,8 +649,8 @@ async function executeAnalysis() {
 
         let bodyData = {
             standardsInfo: standardsInfo,
+            subject: currentSubject, // 🌟 핵심! 백엔드가 스스로 판정할 수 있도록 과목 코드만 넘겨줍니다.
             referenceDBText: referenceDBText,
-            subject: currentSubject,
             apiKey: userApiKey 
         };
 
@@ -644,7 +672,13 @@ async function executeAnalysis() {
             body: JSON.stringify(bodyData)
         });
 
-        if (!response.ok) throw new Error("백엔드 분석 연산 실패");
+        // 🌟 가림막을 치우고 백엔드가 보내는 진짜 에러 메시지를 화면에 던지도록 수정!
+        if (!response.ok) {
+            const errData = await response.json();
+            const realError = errData.error?.message || errData.error || "알 수 없는 서버 오류";
+            throw new Error(`[서버 상세 에러] ${realError}`);
+        }
+        
         const data = await response.json();
         const analysisText = data.candidates[0].content.parts[0].text;
         
@@ -2857,7 +2891,7 @@ async function loadProjects() {
     listEl.innerHTML = '<p style="color: #64748b; grid-column: 1 / -1; text-align: center;">폴더를 불러오는 중...</p>';
 
     try {
-        const myOwnSnapshot = await db.collection('user_projects').where('uid', '==', user.uid).get();
+        const myOwnSnapshot = await db.collection('user_projects').where('ownerEmail', '==', user.email).get();
         const sharedSnapshot = await db.collection('user_projects').where('collaborators', 'array-contains', user.email).get();
         
         let myProjects = [];
@@ -2879,7 +2913,6 @@ async function loadProjects() {
 
         let html = '';
 
-        // 카드 그리기 공통 함수
         const renderCards = (projects, isOwnerList) => {
             let cardHtml = '';
             projects.forEach(data => {
@@ -2887,15 +2920,22 @@ async function loadProjects() {
                 let badges = data.assessments && data.assessments.length > 0 
                     ? [...data.assessments].sort((a,b)=> (a.type==='written'&&b.type!=='written')?-1:1).map(a => `<span style="display:inline-block; background:${a.type === 'written' ? '#3b82f6' : '#10b981'}; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:bold; margin-right:4px; margin-top:4px;">${a.name}</span>`).join('') 
                     : '<span style="font-size: 0.75rem; color: #94a3b8;">평가 내역 없음</span>';
-
-                // 1. 방장(Owner)일 때만 나타나는 삭제 및 초대 버튼
-                const deleteBtn = isOwnerList ? `<button onclick="deleteProject('${data.id}', event)" style="position: absolute; top: 15px; right: 15px; background: #fee2e2; color: #ef4444; border: none; padding: 2px 5px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.65rem; z-index: 10;">삭제</button>` : '';
-                const inviteBtn = isOwnerList ? `<button onclick="inviteCollaborator('${data.id}', event)" style="position: absolute; top: 42px; right: 15px; background: #dbeafe; color: #1e40af; border: none; padding: 2px 5px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.65rem; z-index: 10; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">🤝 선생님 초대</button>` : '';
-
-                // 2. 방장 여부에 따라 명단이 시작되는 높이 자동 조절 (방장이면 버튼 아래, 아니면 맨 위)
-                const listTop = isOwnerList ? '65px' : '10px';
+        
+                // 1. 첫째 줄: 폴더 삭제 버튼 단독 배치
+                const deleteBtn = isOwnerList ? `<button onclick="deleteProject('${data.id}', event)" style="position: absolute; top: 15px; right: 15px; background: #fee2e2; color: #ef4444; border: none; padding: 2px 5px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.65rem; z-index: 10;">폴더 삭제</button>` : '';
                 
-                // 3. 참여 명단 세로형 배치 및 글자 크기 축소
+                // 2. 둘째 줄: 팀원 초대와 팀원 삭제 버튼을 하나의 가로 상자(flex)로 묶어서 나란히 배치
+                const memberManagementBtns = isOwnerList ? `
+                    <div style="position: absolute; top: 42px; right: 15px; display: flex; gap: 4px; z-index: 10;">
+                        <button onclick="inviteCollaborator('${data.id}', event)" style="background: #dbeafe; color: #1e40af; border: none; padding: 2px 5px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.65rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">🤝 팀원 초대</button>
+                        <button onclick="kickFromProject('${data.id}', event)" style="background: #ffedd5; color: #c2410c; border: none; padding: 2px 5px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.65rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">🚫 팀원 삭제</button>
+                    </div>
+                ` : '';
+                
+                // 3. 방장 여부에 따라 명단이 시작되는 높이 자동 조절 (두 줄 배치로 바뀌었으므로 68px로 콤팩트하게 상향 조정)
+                const listTop = isOwnerList ? '68px' : '10px';
+                
+                // 4. 참여 명단 세로형 배치 및 글자 크기 축소
                 let memberHtml = `<div style="position: absolute; top: ${listTop}; right: 15px; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; z-index: 5;">`;
                 memberHtml += '<span style="font-size: 0.6rem; color: #64748b; font-weight: bold; margin-bottom: 2px;">👥 참여 명단:</span>';
                 const memberList = data.collaborators ? data.collaborators.map(e => e.split('@')[0]) : [user.email.split('@')[0]];
@@ -2904,15 +2944,15 @@ async function loadProjects() {
                     memberHtml += `<span style="font-size: 0.6rem; color: #10b981; font-weight: bold; background: #ecfdf5; padding: 2px 6px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); white-space: nowrap;">👤 ${member}</span>`;
                 });
                 memberHtml += '</div>';
-
-                // 4. 글씨가 우측 명단을 침범하지 않도록 padding-right: 110px 추가
+        
+                // 5. 글씨가 우측 명단을 침범하지 않도록 padding-right: 110px 추가
                 cardHtml += `
                 <div style="position: relative; border: 1px solid #cbd5e1; border-radius: 8px; padding: 1.5rem; background: white; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05); min-height: 120px;" 
                      onmouseover="this.style.borderColor='#3b82f6'; this.style.transform='translateY(-3px)';" 
                      onmouseout="this.style.borderColor='#cbd5e1'; this.style.transform='none';">
                      
                     ${deleteBtn}
-                    ${inviteBtn}
+                    ${memberManagementBtns}
                     ${memberHtml}
                     
                     <div onclick="openProject('${data.id}', '${data.name}')" style="padding-right: 110px;">
@@ -3662,6 +3702,39 @@ async function inviteCollaborator(projectId, event) {
         loadProjects(); // 화면 갱신해서 '👥 참여 교사: 2명' 등으로 업데이트
     } catch (e) {
         alert("초대 중 오류가 발생했습니다: " + e.message);
+    }
+}
+// 🚫 잘못 초대된 팀원 삭제 함수 (새로 추가)
+async function kickFromProject(projectId, event) {
+    event.stopPropagation(); // 💡 버튼 클릭 시 폴더 안으로 들어가는 현상 방지
+    
+    const doc = await db.collection('user_projects').doc(projectId).get();
+    if (!doc.exists) return;
+    
+    const collabs = doc.data().collaborators || [];
+    if (collabs.length === 0) {
+        alert("현재 초대된 팀원이 없습니다.");
+        return;
+    }
+
+    // 현재 팀원 목록을 보여주고 삭제할 이메일을 입력받음
+    let msg = "👥 [현재 참여 중인 팀원 목록]\n";
+    collabs.forEach((email, idx) => {
+        msg += `${idx + 1}. ${email}\n`;
+    });
+    msg += "\n삭제하려는 선생님의 이메일을 정확히 입력(복사/붙여넣기)해 주세요.";
+
+    const targetEmail = prompt(msg);
+    if (!targetEmail) return;
+
+    try {
+        await db.collection('user_projects').doc(projectId).update({
+            collaborators: firebase.firestore.FieldValue.arrayRemove(targetEmail.trim())
+        });
+        alert(`🗑️ [${targetEmail}] 선생님이 프로젝트에서 제외되었습니다.`);
+        loadProjects(); // 화면 새로고침하여 반영
+    } catch (error) {
+        alert("삭제에 실패했습니다: " + error.message);
     }
 }
 function renderCollaborativeTable(projectData, asm) {
