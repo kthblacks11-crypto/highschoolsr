@@ -1659,18 +1659,6 @@ const levelMeanings = {
     'E': '성취기준에 대한 이해가 부족하여, 기초적인 수학적 지식에 대한 보충 학습이 필요한 수준'
 };
 
-// 🌟 [공통] 단계 이동 함수 (이전 단계, 다음 단계 통합 관리)
-function goToStep(stepNum) {
-    [1, 2, 3, 4].forEach(n => {
-        const step = document.getElementById(`cut-score-step${n}`);
-        if(step) step.style.display = 'none';
-        const indicator = document.getElementById(`step${n}-indicator`);
-        if(indicator) indicator.style.color = '#cbd5e1';
-    });
-    document.getElementById(`cut-score-step${stepNum}`).style.display = 'block';
-    document.getElementById(`step${stepNum}-indicator`).style.color = 'var(--primary)';
-}
-
 // ------------------------------------------
 // [1단계] 평가 세팅
 // ------------------------------------------
@@ -2222,50 +2210,9 @@ function renderFinalCutScoreTable(aiResults) {
     calculateTotalCutScores();
 }
 
-// 길 2 전용 합산 로직 (M자 묶어치기)
-function calculateTotalCutScores() {
-    let totalA = 0, totalB = 0, totalC = 0, totalD = 0, totalE = 0;
-    let totalScore = 0;
 
-    document.querySelectorAll('.cut-score-row').forEach(row => {
-        const score = parseFloat(row.getAttribute('data-score')) || 0;
-        const count = parseInt(row.getAttribute('data-count')) || 1;
-        const groupTotalPoints = score * count; 
-        totalScore += groupTotalPoints;
-        
-        const pctA = (parseFloat(row.querySelector('.pct-A').value) || 0) / 100;
-        const pctB = (parseFloat(row.querySelector('.pct-B').value) || 0) / 100;
-        const pctC = (parseFloat(row.querySelector('.pct-C').value) || 0) / 100;
-        const pctD = (parseFloat(row.querySelector('.pct-D').value) || 0) / 100;
-        const pctE = (parseFloat(row.querySelector('.pct-E').value) || 0) / 100;
 
-        totalA += groupTotalPoints * pctA;
-        totalB += groupTotalPoints * pctB;
-        totalC += groupTotalPoints * pctC;
-        totalD += groupTotalPoints * pctD;
-        totalE += groupTotalPoints * pctE;
-    });
 
-    renderFinalScoreBoxes(totalA, totalB, totalC, totalD, totalE, totalScore);
-}
-
-// ==========================================
-// 📊 공통 함수: 최종 점수 박스 렌더링
-// ==========================================
-function renderFinalScoreBoxes(A, B, C, D, E, totalScore) {
-    const boxHtml = `
-        <div style="width: 100%; text-align: center; margin-bottom: 10px; color: #64748b;">(입력된 총 배점: ${totalScore.toFixed(1)}점)</div>
-        <div style="flex:1; padding:15px; background:#fef2f2; border: 2px solid #ef4444; border-radius:8px;"><strong>A수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#ef4444;">${A.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:15px; background:#fffbeb; border: 2px solid #f59e0b; border-radius:8px;"><strong>B수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#f59e0b;">${B.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:15px; background:#f0fdf4; border: 2px solid #22c55e; border-radius:8px;"><strong>C수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#22c55e;">${C.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:15px; background:#eff6ff; border: 2px solid #3b82f6; border-radius:8px;"><strong>D수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#3b82f6;">${D.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:15px; background:#f8fafc; border: 2px solid #94a3b8; border-radius:8px;"><strong>E수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#64748b;">${E.toFixed(2)}점</span></div>
-    `;
-    document.getElementById('final-cut-score-boxes').innerHTML = boxHtml;
-    document.getElementById('final-result-container').style.display = 'block';
-    const aiLoading = document.getElementById('final-ai-loading');
-    if(aiLoading) aiLoading.style.display = 'none';
-}
 
 // 🌟 길 1, 2 공통: 뒤로 가기 흐름 제어 함수 (수정됨)
 function goBackStep(currentStep) {
@@ -3194,7 +3141,7 @@ async function deleteAssessment(index) {
 
 // 🟢 [신규] 수행평가 수동 입력 로직
 function openManualAssessmentModal() { document.getElementById('manual-assessment-modal').style.display = 'flex'; }
-function closeManualAssessmentModal() { document.getElementById('manual-assessment-modal').style.display = 'none'; }
+
 
 let currentEditingManualIndex = -1;
 
