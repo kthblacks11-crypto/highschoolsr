@@ -4771,3 +4771,34 @@ async function rejectFeedback(feedbackId) {
         alert("반려 처리 중 오류가 발생했습니다: " + e.message);
     }
 }
+
+// ==========================================
+// 🌟 [핵심] Vite 모듈 환경에서 HTML 버튼들이 함수를 찾을 수 있도록 외부(window)로 연결해주는 마법의 다리 🌟
+// ==========================================
+const exposeToWindow = {
+    handleLogin, handleLogout, handleDeleteAccount, openFeedback, openAdminFeedback,
+    openAdminMode, openSettings, closeSettings, closeFeedback, closeModal,
+    closeAdminFeedback, saveApiKey, submitFeedback, changeSubject, showSection,
+    openAnalysisMode, startLevelMatching, checkLevelAnswer, nextLevelQuestion,
+    backToStandardSelection, saveChecklist, openModal, loadBookmark, openBookmarkModal,
+    closeBookmarkModal, createNewProject, backToProjectList, openManualAssessmentModal,
+    closeManualAssessmentModal, saveManualAssessment, generateEmptyScoreTable,
+    downloadScoreTemplate, handleExcelUpload, openAiHelper, handleExamUpload,
+    handleNextToPath1Result, goBackStep, saveAssessmentToProject, saveWrittenAssessmentShell,
+    addSubFactorRow, removeSubFactorRow, calculateSubFactorsTotal, saveStandardToDB,
+    loadStandardsForEdit, populateEditFields, updateStandardInDB, deleteStandardFromDB,
+    loadStandardsForQuestion, saveQuestionToDB, loadStandardsForManage, loadQuestionsForEdit,
+    populateQuestionEditFields, updateQuestionInDB, deleteQuestionFromDB, updateUniversalFilter,
+    downloadUniversalData, uploadUniversalData, handleImageUpload, setAnalysisMode,
+    executeAnalysis, triggerSaveBackgroundAndReset, resetAnalysis, sendChatMessage,
+    submitSpecificFeedback, acceptFeedback, rejectFeedback, updateMathPreview,
+    startPartialCapture, pasteImageToQuestion, saveBankAndApplyTable, sendAiResultsToTable,
+    deleteProject, inviteCollaborator, kickFromProject, openProject, toggleGlobalEditMode,
+    startEditAssessment, editManualAssessment, deleteAssessment, updateBaseDifficulty,
+    updateBaseScore, saveMyInput, copyAiLevelsToMine, applyBatchDifficulty,
+    calculateTotalCutScores, openSpecificFeedbackPanel, updateStep2Total, markAsReady, goToStep
+};
+
+for (const [fnName, fn] of Object.entries(exposeToWindow)) {
+    window[fnName] = fn;
+}
