@@ -2999,7 +2999,7 @@ async function openProject(projectId, projectName) {
     document.getElementById('dynamic-indicator-bar').style.display = 'none';
 
     // 프로젝트 상세 화면 띄우기
-    document.getElementById('project-detail-title').innerText = `📂 ${projectName}`;
+    document.getElementById('project-detail-title').innerHTML = `📂 ${projectName} <button class="save-btn" onclick="openMemoBoard()" style="width: auto; margin: 0 0 0 15px; padding: 0.4rem 0.8rem; font-size: 0.85rem; background: #f59e0b; display: inline-block;">💬 업무 메모 <span id="unread-memo-count" style="background: #ef4444; color: white; border-radius: 10px; padding: 2px 6px; font-size: 0.7rem; margin-left: 5px; display: none;">0</span></button>`;
     document.getElementById('project-detail-view').style.display = 'block';
 
     await loadProjectDetails();
@@ -3020,7 +3020,23 @@ async function loadProjectDetails() {
     try {
         const doc = await db.collection('user_projects').doc(currentProjectId).get();
         if(doc.exists) {
-            renderProjectAssessments(doc.data().assessments || []);
+            const data = doc.data();
+            renderProjectAssessments(data.assessments || []);
+            
+            // 💡 안 읽은 메모 개수 계산해서 뱃지에 표시하기
+            const memos = data.memos || [];
+            const userEmail = auth.currentUser.email;
+            const unreadCount = memos.filter(m => m.authorEmail !== userEmail && !(m.readBy || []).includes(userEmail)).length;
+            
+            const badge = document.getElementById('unread-memo-count');
+            if (badge) {
+                if (unreadCount > 0) {
+                    badge.innerText = unreadCount;
+                    badge.style.display = 'inline-block';
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
         }
     } catch(e) {
         listEl.innerHTML = '<p style="color:red; text-align:center;">데이터를 불러오는 데 실패했습니다.</p>';
@@ -4796,9 +4812,131 @@ const exposeToWindow = {
     deleteProject, inviteCollaborator, kickFromProject, openProject, toggleGlobalEditMode,
     startEditAssessment, editManualAssessment, deleteAssessment, updateBaseDifficulty,
     updateBaseScore, saveMyInput, copyAiLevelsToMine, applyBatchDifficulty,
-    calculateTotalCutScores, openSpecificFeedbackPanel, updateStep2Total, markAsReady, goToStep
+    calculateTotalCutScores, openSpecificFeedbackPanel, updateStep2Total, markAsReady, goToStep, openMemoBoard, closeMemoBoard, submitMemo
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
     window[fnName] = fn;
+}
+
+// ==========================================
+// 💬 협업 업무 메모 (쪽지) 시스템
+// ==========================================
+let unsubscribeMemos = null;
+
+function openMemoBoard() {
+    document.getElementById('memo-modal').style.display = 'flex';
+    
+    if (unsubscribeMemos) unsubscribeMemos();
+    
+    // 💡 실시간 감시 (카톡처럼 다른 사람이 쓰면 바로 뜸)
+    unsubscribeMemos = db.collection('user_projects').doc(currentProjectId).onSnapshot(doc => {
+        if (doc.exists) {
+            const data = doc.data();
+            const memos = data.memos || [];
+            renderMemos(memos);
+            markMemosAsRead(memos); // 모달을 여는 순간, 안 읽은 메모들을 '읽음' 처리
+        }
+    });
+}
+
+function closeMemoBoard() {
+    document.getElementById('memo-modal').style.display = 'none';
+    if (unsubscribeMemos) {
+        unsubscribeMemos();
+        unsubscribeMemos = null;
+    }
+    loadProjectDetails(); // 창을 닫을 때 메인 화면의 '안 읽은 개수 뱃지'를 갱신
+}
+
+function renderMemos(memos) {
+    const listEl = document.getElementById('memo-list');
+    const currentUserEmail = auth.currentUser.email;
+
+    if (memos.length === 0) {
+        listEl.innerHTML = '<div style="text-align:center; color:#94a3b8; margin-top: 40%;">아직 등록된 메모가 없습니다.<br>동료 선생님께 첫 메모를 남겨보세요!</div>';
+        return;
+    }
+
+    let html = '';
+    memos.forEach(memo => {
+        const isMe = memo.authorEmail === currentUserEmail;
+        const align = isMe ? 'flex-end' : 'flex-start';
+        const bgColor = isMe ? '#fef3c7' : '#f1f5f9';
+        const borderColor = isMe ? '#fde68a' : '#e2e8f0';
+        const nameStr = isMe ? '나' : memo.authorName;
+
+        // 💡 핵심 로직: 내가 쓴 글이 아닐 때만 카운트 (작성자는 읽음 수에서 제외)
+        const readCount = (memo.readBy || []).filter(e => e !== memo.authorEmail).length;
+        const readBadge = readCount > 0 ? `<span style="font-size:0.75rem; color:#f59e0b; font-weight:bold; margin: 0 4px;">읽음 ${readCount}</span>` : '';
+
+        // 시간 포맷 (오전 10:30)
+        const timeStr = memo.timestamp ? new Date(memo.timestamp).toLocaleTimeString('ko-KR', {hour: '2-digit', minute:'2-digit'}) : '';
+
+        html += `
+        <div style="display: flex; flex-direction: column; align-items: ${align}; margin-bottom: 15px;">
+            <span style="font-size: 0.8rem; color: #64748b; margin-bottom: 4px; font-weight: bold;">${nameStr}</span>
+            <div style="display: flex; align-items: flex-end; flex-direction: ${isMe ? 'row-reverse' : 'row'};">
+                <div style="background: ${bgColor}; border: 1px solid ${borderColor}; padding: 10px 14px; border-radius: 12px; max-width: 250px; font-size: 0.95rem; word-break: break-all; white-space: pre-wrap; color: #1e293b; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">${memo.text}</div>
+                <div style="display: flex; flex-direction: column; align-items: ${isMe ? 'flex-end' : 'flex-start'}; margin: 0 6px;">
+                    ${readBadge}
+                    <span style="font-size: 0.7rem; color: #94a3b8;">${timeStr}</span>
+                </div>
+            </div>
+        </div>`;
+    });
+    listEl.innerHTML = html;
+    listEl.scrollTop = listEl.scrollHeight; // 새로운 글이 오면 맨 아래로 자동 스크롤
+}
+
+async function submitMemo() {
+    const inputEl = document.getElementById('memo-input');
+    const text = inputEl.value.trim();
+    if (!text) return;
+
+    const user = auth.currentUser;
+    const newMemo = {
+        id: 'memo_' + Date.now() + Math.random().toString(36).substr(2, 5),
+        text: text,
+        authorEmail: user.email,
+        authorName: user.email.split('@')[0], // 아이디 앞부분만 이름으로 사용
+        timestamp: new Date().toISOString(),
+        readBy: [] // 처음엔 아무도 안 읽은 상태 (빈 배열)
+    };
+
+    inputEl.value = ''; // 전송 후 입력창 즉시 비우기
+
+    try {
+        await db.collection('user_projects').doc(currentProjectId).update({
+            memos: firebase.firestore.FieldValue.arrayUnion(newMemo)
+        });
+    } catch(e) {
+        alert("메모 전송 실패: " + e.message);
+    }
+}
+
+async function markMemosAsRead(memos) {
+    const userEmail = auth.currentUser.email;
+    let needsUpdate = false;
+    let updatedMemos = [...memos];
+
+    // 내가 쓴 글이 아닌데, 아직 내 이메일이 '읽음' 목록에 없다면 목록에 내 이메일 추가!
+    updatedMemos = updatedMemos.map(memo => {
+        if (memo.authorEmail !== userEmail && !(memo.readBy || []).includes(userEmail)) {
+            needsUpdate = true;
+            return { ...memo, readBy: [...(memo.readBy || []), userEmail] };
+        }
+        return memo;
+    });
+
+    // 갱신할 게 있으면 DB 덮어쓰기
+    if (needsUpdate) {
+        try {
+            await db.collection('user_projects').doc(currentProjectId).update({
+                memos: updatedMemos
+            });
+        } catch(e) {
+            console.error("읽음 처리 실패:", e);
+        }
+    }
 }

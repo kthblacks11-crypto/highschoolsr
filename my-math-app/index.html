@@ -794,4 +794,22 @@
     <div id="fb-loading-msg" style="display: none; text-align: center; margin-top: 10px; font-size: 0.85rem; color: #ea580c; font-weight: bold;">AI 수석 위원이 선생님의 의견을 검토 중입니다... ⏳</div>
 </div>
 
+<div class="modal" id="memo-modal">
+    <div class="modal-content" style="max-width: 450px; background: #f8fafc; height: 600px; display: flex; flex-direction: column; padding: 1.5rem;">
+        <span class="close-btn" onclick="closeMemoBoard()" style="top: 1rem; right: 1.5rem;">&times;</span>
+        <h2 style="margin-top: 0; color: #f59e0b; font-size: 1.3rem;">💬 협업 업무 메모</h2>
+        <p style="font-size: 0.85rem; color: #64748b; margin-top: -10px; margin-bottom: 10px;">이 폴더에 참여 중인 선생님들과 실시간으로 소통하세요.</p>
+        
+        <div id="memo-list" style="flex: 1; overflow-y: auto; background: white; padding: 1rem; border-radius: 8px; border: 1px solid #cbd5e1; margin-bottom: 1rem; display: flex; flex-direction: column; gap: 10px;">
+            </div>
+        
+        <div style="display: flex; gap: 8px;">
+            <textarea id="memo-input" rows="2" placeholder="팀원들에게 남길 메모를 작성하세요... (Shift+Enter로 줄바꿈)" 
+                      style="flex: 1; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px; resize: none; font-family: inherit; font-size: 0.9rem;"
+                      onkeypress="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); submitMemo(); }"></textarea>
+            <button class="save-btn" onclick="submitMemo()" style="width: auto; margin: 0; background: #f59e0b; padding: 0 1.2rem; font-weight: bold;">전송</button>
+        </div>
+    </div>
+</div>
+
 </body>
