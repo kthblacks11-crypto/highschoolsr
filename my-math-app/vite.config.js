@@ -12,7 +12,7 @@ export default defineConfig({
         compact: true,
         controlFlowFlattening: true,
         deadCodeInjection: true,
-        debugProtection: true,
+        debugProtection: false,
         stringArray: true,
         stringArrayEncoding: ['base64'],
       },
