@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "public": "public",
+    "public": "my-math-app/dist",
     "ignore": [
       "firebase.json",
       "**/.*",
