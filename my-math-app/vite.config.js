@@ -21,7 +21,15 @@ export default defineConfig({
         description: '오프라인 분할점수 산출 및 성취기준 분석 도구',
         theme_color: '#1e3a8a',
         background_color: '#f8fafc',
-        display: 'standalone', // 인터넷 창이 아니라 진짜 앱처럼 열리게 함
+        display: 'standalone',
+        // 👇 이 부분이 추가되어야 브라우저가 앱으로 인정해 줍니다!
+        icons: [
+          {
+            src: 'favicon.svg', // public 폴더에 있는 선생님의 아이콘 파일
+            sizes: '192x192 512x512',
+            type: 'image/svg+xml'
+          }
+        ]
       }
     }),
     
