@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2022 개정교육과정 고등학교 수학-성취기준 매칭 시스템</title>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+        MathJax = { tex: { inlineMath: [['$','$'], ['\\(','\\)']] }, svg: { fontCache: 'global' } };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+    <link rel="stylesheet" href="./src/style.css">
+</head>
+<body>
+
+    <header>
+        <div class="header-container">
+            <div class="header-title-group">
+                <h1 id="main-title" style="margin-bottom: 0;">2022 개정교육과정 고등학교 수학</h1>
+                <div id="system-title" style="font-size: 1.2rem; font-weight: 700; color: #bae6fd; margin-top: 5px; letter-spacing: -0.5px;">성취기준 매칭 시스템</div>
+                <p id="main-subtitle" style="margin-top: 10px;">과목을 선택하면 단원명이 표시됩니다.</p>
+            </div>
+            
+            <div class="header-actions">
+                <span id="user-info" style="color: white; font-size: 0.75rem; margin-right: 5px;"></span>
+                <button id="login-btn" class="settings-btn" onclick="handleLogin()">🔑 구글 아이디로 시작</button>
+                <button id="logout-btn" class="settings-btn" onclick="handleLogout()" style="display:none;">로그아웃</button>
+                <button id="delete-account-btn" onclick="handleDeleteAccount()" style="display: none; background-color: #ef4444; color: white; border: none; padding: 0.6rem 1rem; border-radius: 8px; cursor: pointer; font-weight: bold; margin-left: 5px;">회원탈퇴</button>
+                <button class="settings-btn feedback-btn" onclick="openFeedback()">💡 의견보내기</button>
+                <button id="admin-feedback-btn" class="settings-btn" onclick="openAdminFeedback()" style="display:none;">📥 의견확인</button>
+                <button id="admin-mode-btn" class="settings-btn" onclick="openAdminMode()" style="display:none;">🛠️ 관리도구</button>
+                <button class="settings-btn" onclick="openSettings()">⚙️ API 가져오기</button>
+            </div>
+            <div style="position: absolute; bottom: -5px; right: 1rem; font-size: 0.8rem; color: #cbd5e1;">
+                개발자(thkim, <a href="mailto:kthblacks11@gmail.com" style="color: #bae6fd; text-decoration: underline;">메일보내기</a>)
+            </div>
+        </div>
+    </header>
+
+<div class="subject-selector">
+  <label for="math-subjects">과목 선택 (2022 개정): </label>
+  <select id="math-subjects" onchange="changeSubject()">
+    <optgroup label="공통 과목">
+      <option value="common1">공통수학1</option>
+      <option value="common2" selected>공통수학2</option>
+    </optgroup>
+    <optgroup label="일반 선택">
+      <option value="algebra">대수</option>
+      <option value="calculus1">미적분Ⅰ</option>
+      <option value="stats">확률과 통계</option>
+    </optgroup>
+    <optgroup label="진로/융합 선택">
+      <option value="calculus2">미적분Ⅱ</option>
+      <option value="geometry">기하</option>
+      <option value="ai-math">인공지능 수학</option>
+    </optgroup>
+    <option value="uncategorized">📦 미분류 보관함</option>
+  </select>
+</div>
+
+<div class="container">
+    <div class="tabs">
+        <button class="tab-btn active" onclick="showSection('dashboard')">성취기준과 성취수준</button>
+        <button class="tab-btn" onclick="showSection('checklist')">📋 나의 체크리스트</button>
+        <button class="tab-btn" onclick="openAnalysisMode('single')" style="color: #2563eb; font-weight: bold;">🔍 한 문제 상세분석</button>
+        <button class="tab-btn" onclick="openAnalysisMode('multi')" style="color: #8b5cf6; font-weight: bold;">📑 여러 문제 요약분석</button>
+        <button class="tab-btn" onclick="showSection('bookmark')" style="color: #10b981; font-weight: bold;">🔖 북마크 문항 보기</button>
+        <button class="tab-btn" onclick="showSection('cut-score')" style="color: #ea580c; font-weight: bold;">📊 분할점수 산출</button>
+    </div>
+
+    <div id="dashboard" class="section active">
+        <h2>성취기준 목록</h2>
+        <div id="card-container"></div>
+    </div>
+
+    <div id="quiz" class="section">
+        <h2>성취수준 분석기</h2>
+        <div id="quiz-standard-selection">
+            <p style="text-align:center; margin-bottom:1.5rem;">분석할 성취기준을 선택하세요.</p>
+            <div id="quiz-standard-list"></div>
+        </div>
+        <div id="quiz-level-matching" style="display: none;">
+            <button class="save-btn" onclick="backToStandardSelection()" style="margin-bottom: 1rem; background:none; border:none; color:var(--primary); cursor:pointer; font-size:1rem; width: auto; padding: 0; font-weight: bold;">&larr; 성취기준 다시 선택</button>
+            <div class="quiz-layout">
+                <div class="guide-side" id="achievement-levels-side"></div>
+                <div class="quiz-side">
+                    <div class="quiz-container">
+                        <h3 id="selected-standard-info" style="margin-top:0; font-size:0.95rem; color:var(--text-light); text-align:center; margin-bottom: 1rem;"></h3>
+                        <div class="question-box" id="level-question-text">문제를 불러오는 중...</div>
+                        <p style="text-align: center; font-weight: bold; margin-bottom: 1rem; font-size: 0.95rem;">이 문항의 성취수준을 판정하세요.</p>
+                        <div class="options" id="level-options"></div>
+                        <div id="level-feedback"></div>
+                        <button class="save-btn" id="next-q-btn" onclick="nextLevelQuestion()" style="margin-top:1rem; display: none;">다음 문항 보기</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="checklist" class="section">
+        <h2>수업 진행 체크리스트</h2>
+        <div id="checklist-container"></div>
+        <button class="save-btn" onclick="saveChecklist()">진행 상황 저장하기</button>
+    </div>
+    <!-- 👇 북마크 문항 보기 화면 추가 👇 -->
+    <div id="bookmark" class="section">
+        <h2>북마크 문항 모아보기</h2>
+        <div class="quiz-container">
+            <div style="background: #f0fdf4; padding: 1rem; border-radius: 8px; border-left: 4px solid #10b981; margin-bottom: 1.5rem;">
+                <p style="margin: 0; font-size: 0.9rem; color: #065f46;">
+                    과목과 성취수준을 선택하면, 데이터베이스에 등록된 모든 문항(선생님 등록/AI 변형)을 한눈에 모아볼 수 있습니다.
+                </p>
+            </div>
+
+           
+
+            <div style="margin-top: 1.5rem; text-align: center;">
+                <p style="font-weight: bold; margin-bottom: 1rem; color: var(--primary);">조회할 성취수준을 선택하세요</p>
+                <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                    <button class="level-badge bg-high" style="cursor:pointer; padding: 10px 25px; font-size: 1.2rem; border:none;" onclick="loadBookmark('A')">A</button>
+                    <button class="level-badge bg-high" style="cursor:pointer; padding: 10px 25px; font-size: 1.2rem; background:#f87171; border:none;" onclick="loadBookmark('B')">B</button>
+                    <button class="level-badge bg-mid" style="cursor:pointer; padding: 10px 25px; font-size: 1.2rem; border:none;" onclick="loadBookmark('C')">C</button>
+                    <button class="level-badge bg-low" style="cursor:pointer; padding: 10px 25px; font-size: 1.2rem; background:#4ade80; border:none;" onclick="loadBookmark('D')">D</button>
+                    <button class="level-badge bg-low" style="cursor:pointer; padding: 10px 25px; font-size: 1.2rem; border:none;" onclick="loadBookmark('E')">E</button>
+                </div>
+            </div>
+
+            <div id="bookmark-list" style="margin-top: 2rem; display: grid; gap: 10px;">
+                <!-- DB에서 불러온 문항 리스트가 나타납니다 -->
+            </div>
+        </div>
+
+</div> 
+<div id="cut-score" class="section">
+    <h2>📊 성취평가제 분할점수 산출 (AI 마법사)</h2>
+    
+    <div id="dynamic-indicator-bar" style="display: none; justify-content: space-between; background: white; padding: 1rem 2rem; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 1.5rem; font-weight: bold;">
+    </div>    
+
+    <div id="cut-score-dashboard" class="cut-score-card">
+        <h3 style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem; display: flex; justify-content: space-between; align-items: center;">
+            <span>📂 나의 평가 프로젝트 (폴더)</span>
+            <button class="save-btn" onclick="createNewProject()" style="width: auto; margin: 0; padding: 0.5rem 1rem; font-size: 0.9rem; background: #2563eb;">+ 새 폴더 만들기</button>
+        </h3>
+        
+        <div style="margin-bottom: 1.5rem; background: #f0fdf4; padding: 1rem; border-radius: 8px; border-left: 4px solid #10b981;">
+            💡 <strong>학교별, 학기별로 폴더를 만들어보세요!</strong><br>
+            <span style="font-size: 0.9rem; color: #475569;">예: '2026학년도 1학기 A고' 폴더를 만들고, 그 안에 중간고사, 기말고사, 수행평가를 저장하여 최종 합산할 수 있습니다.</span>
+        </div>
+
+        <div id="project-folder-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem;">
+            <p style="color: #64748b; grid-column: 1 / -1; text-align: center; padding: 2rem;">폴더를 불러오는 중입니다... ⏳</p>
+        </div>
+    </div>
+    <div id="project-detail-view" class="cut-score-card" style="display: none;">
+        <h3 id="project-detail-title" style="color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 0.8rem; margin-top:0;">
+            프로젝트 상세
+        </h3>
+        <button class="btn-step-prev" onclick="backToProjectList()" style="margin-bottom: 1.5rem;">◀ 폴더 목록으로</button>
+
+        <div>
+            <h4 style="margin-bottom: 0.5rem; color: #334155;">📌 이 폴더에 등록된 평가 목록</h4>
+            <div id="project-assessment-list">
+                </div>
+        </div>
+
+        <div style="background: #f0fdf4; border: 2px solid #22c55e; border-radius: 8px; padding: 1.5rem; margin-top: 1.5rem; text-align: center;">
+            <h3 style="margin:0 0 1rem 0; color:#166534;">🏆 학기말 최종 예상 분할점수</h3>
+            <div id="project-final-cut-scores" style="display: flex; gap: 10px; justify-content: space-around; flex-wrap: wrap;">
+                </div>
+            <p id="weight-warning" style="color: #ef4444; font-weight: bold; margin-top: 15px; display: none; background: #fee2e2; padding: 10px; border-radius: 8px;">
+                ⚠️ 등록된 평가의 반영 비율 합계가 100%가 아닙니다. 점검해 주세요!
+            </p>
+        </div>
+
+        <div style="margin-top: 2rem; display: flex; gap: 1rem;">
+            <button class="save-btn" onclick="document.getElementById('written-assessment-modal').style.display='flex'" style="flex: 1; margin: 0; background: #ea580c;">📝 지필평가 (AI 분석) 추가</button>
+            <button class="save-btn" onclick="openManualAssessmentModal()" style="flex: 1; margin: 0; background: #8b5cf6;">✍️ 수행평가 (직접 입력) 추가</button>
+        </div>
+    </div>    
+    
+
+    <div id="cut-score-step2" class="cut-score-card" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 20px;">
+            <h3 style="margin: 0; color: #1e3a8a;">문항별 배점 및 성취수준 입력</h3>
+            <button class="btn-step-prev" onclick="document.getElementById('project-detail-view').style.display='block'; document.getElementById('cut-score-step2').style.display='none';" style="margin: 0; padding: 6px 12px; font-size: 0.9rem;">◀ 폴더로 돌아가기</button>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <div style="font-weight:bold;">객관식: <input type="number" id="choice-count" value="20" style="width:50px; text-align:center;"> 문항</div>
+                <div style="font-weight:bold;">서답형: <input type="number" id="short-count" value="5" style="width:50px; text-align:center;"> 문항</div>
+                <button class="btn-step-prev" onclick="generateEmptyScoreTable()" style="color:var(--primary); border-color:var(--primary);">✨ 표 생성</button>
+                <button class="btn-step-prev" onclick="downloadScoreTemplate()">📥 양식 다운로드</button>
+                <button class="btn-step-prev" onclick="document.getElementById('excel-upload').click()" style="background:#10b981; color:white; border:none;">📤 엑셀 업로드</button>
+                <input type="file" id="excel-upload" accept=".csv, .xlsx, .xls" style="display:none;" onchange="handleExcelUpload(event)">
+                
+                <button class="save-btn" onclick="openAiHelper()" style="margin:0; width:auto; background:#8b5cf6; padding:0.6rem 1.2rem;">🤖 AI 도우미 (상세분석)</button>
+            </div>
+            
+            <div style="background: #fffbeb; border: 2px solid #f59e0b; padding: 8px 15px; border-radius: 8px; font-weight: bold; color: #92400e;">
+                현재 총 배점: <span id="step2-total-score" style="font-size: 1.3rem; color: #ea580c;">0.0</span> / 100 점
+            </div>
+        </div>
+    
+        <div id="ai-helper-zone" style="display:none; background:#f8fafc; border:2px dashed #8b5cf6; border-radius:8px; padding:1.5rem; margin-bottom:1.5rem;">
+            <h4 style="margin-top:0; color:#6d28d9;">🤖 AI 시험지 정밀 분석기</h4>
+            <p style="font-size:0.85rem; color:#475569;">시험지 이미지를 올리면 AI가 문항과 배점, 예상 성취수준을 추출하여 아래 표에 자동으로 채워줍니다.</p>
+            <input type="file" id="exam-file" accept="image/*,application/pdf" onchange="handleExamUpload(event)">
+            <div id="exam-loading" style="display:none; color:#ea580c; font-weight:bold; margin-top:10px;">AI가 분석 중입니다... ⏳</div>
+        </div>
+        <div id="action-btn-top-zone" style="text-align: right; margin-bottom: 10px; display: none;"></div>
+        
+        <div id="exam-inspector-wrapper" style="display:none; gap: 1.5rem; height: 600px; margin-bottom: 1.5rem;">
+            <div id="exam-viewer-left" style="flex: 1; background: #f1f5f9; border-radius: 12px; overflow: auto; position: relative; height: 100%; min-height: 600px;">
+                <img id="exam-img-display" src="" style="width: 100%; display: none;">
+                <embed id="exam-pdf-display" src="" type="application/pdf" width="100%" height="100%" style="display: none;">
+                <canvas id="exam-capture-canvas" style="position: absolute; top: 0; left: 0; display: none;"></canvas>
+            </div>
+            <div id="exam-editor-right" style="flex: 1.2; overflow-y: auto; background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid #cbd5e1;">
+                <p style="font-weight: bold; color: #ea580c; margin-top: 0;">💡 AI가 추출한 문항입니다. 수정 후 아래 반영 버튼을 누르세요.</p>
+                <div id="extracted-questions-list" style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1rem;"></div>
+            </div>
+        </div>
+        
+        <div id="action-btn-bottom-zone" style="text-align: right; margin-bottom: 15px; display: none;"></div>
+        <div id="score-table-container" style="max-height: 500px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 1.5rem;">
+            <p style="text-align:center; padding: 2rem; color: #94a3b8;">[표 생성]을 누르거나 엑셀/AI 분석을 시작하세요.</p>
+        </div>
+        
+        <div id="table-external-controls" style="margin-bottom: 1.5rem;"></div>
+        
+        <div style="display: flex; justify-content: flex-end;">
+            <button id="btn-next-to-step3" class="save-btn" onclick="handleNextToPath1Result()" style="width: auto; background: #ea580c; display:none;">분할점수 산출하기 (M자 그룹화) ➡️</button>
+        </div>
+    </div>   
+
+    <div id="cut-score-step4" class="cut-score-card" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 20px;">
+            <h3 style="margin: 0; color: #1e3a8a;">3단계: 최종 예상 분할점수 산출</h3>
+            <button class="btn-step-prev" onclick="goBackStep(4)" style="margin: 0; padding: 6px 12px; font-size: 0.9rem;">◀ 이전 단계로</button>
+        </div>
+        <div id="final-ai-loading" style="display: none; text-align: center; padding: 2rem;">
+            <p style="font-weight: bold; color: #10b981;">최종 결과 산출 중... ⏳</p>
+        </div>
+        <div id="final-result-container" style="display: none;">
+            <div style="overflow-x: auto; margin-bottom: 2rem;">
+                <table class="score-table">
+                    <thead style="background: #f1f5f9;">
+                        <tr><th>문항</th><th>배점</th><th>AI 판정</th><th>A (%)</th><th>B (%)</th><th>C (%)</th><th>D (%)</th><th>E (%)</th></tr>
+                    </thead>
+                    <tbody id="cut-score-result-table"></tbody>
+                </table>
+            </div>
+            <div id="final-cut-score-boxes" style="display: flex; gap: 10px; justify-content: space-around;"></div>
+            
+            <div id="save-to-project-zone" style="margin-top: 2rem; padding: 1.5rem; background: #fffbeb; border-radius: 12px; border: 1px solid #fde68a; text-align: center;">
+                <p style="font-weight: bold; color: #92400e; margin-bottom: 1rem;">✨ 이 산출 결과를 현재 폴더에 덮어써서 최종 저장하시겠습니까?</p>
+                <div style="display: flex; gap: 10px; justify-content: center; max-width: 500px; margin: 0 auto;">
+                    <div id="current-assessment-info" style="flex: 2; padding: 0.8rem; background: white; border-radius: 8px; border: 1px solid #cbd5e1; color: #334155; font-weight: bold; text-align: left;">평가 정보 불러오는 중...</div>
+                    <button class="save-btn" onclick="saveAssessmentToProject()" style="flex: 1; margin: 0; background: #ea580c;">💾 결과 저장하기</button>
+                </div>
+            </div>
+
+    </div>
+</div>
+
+</div>    <div id="admin-dashboard" class="section">
+        <h2>🛠️ 데이터 관리자 모드</h2>
+        
+        <div class="quiz-container" style="max-width: 800px; margin: 0 auto;">
+            <div style="background: #fffbeb; padding: 1rem; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 1.5rem;">
+                <p style="margin: 0; font-size: 0.9rem; color: #92400e;">
+                    성취기준 정보를 입력하고 저장하면 즉시 <strong>Firestore DB</strong>에 반영됩니다.
+                </p>
+            </div>
+    
+            <div class="admin-form-group">
+                <label>과목 선택</label>
+                <select id="admin-subject" class="option-btn" style="text-align: left; padding: 0.8rem;">
+                    <option value="common1">공통수학1</option>
+                    <option value="common2">공통수학2</option>
+                    <option value="algebra">대수</option>
+                    <option value="calculus1">미적분Ⅰ</option>
+                    <option value="stats">확률과 통계</option>
+                </select>
+            </div>
+    
+            <div class="admin-form-group" style="margin-top: 1rem;">
+                <label>성취기준 코드</label>
+                <input type="text" id="admin-code" placeholder="예: [10공수2-01-01]" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;">
+            </div>
+    
+            <div class="admin-form-group" style="margin-top: 1rem;">
+                <label>성취기준 내용 (desc)</label>
+                <textarea id="admin-desc" rows="2" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;"></textarea>
+            </div>
+    
+            <h4 style="margin-top: 2rem; border-bottom: 2px solid var(--primary); padding-bottom: 0.5rem;">📊 성취수준 설명 (Levels)</h4>
+            <div style="display: grid; gap: 10px; margin-top: 1rem;">
+                <input type="text" id="admin-level-high" placeholder="A (상) 수준 설명">
+                <input type="text" id="admin-level-b" placeholder="B (우수) 수준 설명">
+                <input type="text" id="admin-level-mid" placeholder="C (중) 수준 설명">
+                <input type="text" id="admin-level-d" placeholder="D (미흡) 수준 설명">
+                <input type="text" id="admin-level-low" placeholder="E (하) 수준 설명">
+            </div>
+    
+            <button class="save-btn" onclick="saveStandardToDB()" style="background: #ef4444; margin-top: 2rem;">🚀 DB에 새로운 성취기준 저장하기</button>
+            <hr style="margin: 3rem 0; border: 1px dashed #cbd5e1;">
+            <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: #10b981;">✏️ 기존 성취기준 수정 및 삭제하기</h3>
+            <div style="background: #f0fdf4; padding: 1.5rem; border-radius: 8px; border: 1px solid #86efac; margin-bottom: 3rem;">
+                
+                <div style="display: flex; gap: 10px; margin-bottom: 1rem;">
+                    <div style="flex: 1;">
+                        <label style="font-weight: bold; font-size: 0.9rem;">1. 과목 선택</label>
+                        <select id="admin-edit-subject" class="option-btn" style="text-align: left; padding: 0.8rem; width: 100%;" onchange="loadStandardsForEdit()">
+                            <option value="">-- 과목을 선택하세요 --</option>
+                            <option value="common1">공통수학1</option>
+                            <option value="common2">공통수학2</option>
+                            <option value="algebra">대수</option>
+                            <option value="calculus1">미적분Ⅰ</option>
+                            <option value="stats">확률과 통계</option>
+                        </select>
+                    </div>
+                    <div style="flex: 2;">
+                        <label style="font-weight: bold; font-size: 0.9rem;">2. 수정할 성취기준 불러오기</label>
+                        <select id="admin-edit-standard" class="option-btn" style="text-align: left; padding: 0.8rem; width: 100%;" onchange="populateEditFields()">
+                            <option value="">앞에서 과목을 먼저 선택해 주세요</option>
+                        </select>
+                    </div>
+                </div>
+    
+                <div id="admin-edit-fields" style="display: none; background: white; padding: 1rem; border-radius: 8px; border: 1px dashed #cbd5e1;">
+                    <div class="admin-form-group">
+                        <label>성취기준 코드</label>
+                        <input type="text" id="edit-code" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;">
+                    </div>
+                    <div class="admin-form-group" style="margin-top: 1rem;">
+                        <label>성취기준 내용 (desc)</label>
+                        <textarea id="edit-desc" rows="2" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;"></textarea>
+                    </div>
+                    
+                    <h4 style="margin-top: 1.5rem; border-bottom: 2px solid #10b981; padding-bottom: 0.5rem; color: #047857;">📊 성취수준 설명 수정</h4>
+                    <div style="display: grid; gap: 10px; margin-top: 1rem;">
+                        <input type="text" id="edit-level-high" placeholder="A (상) 수준 설명">
+                        <input type="text" id="edit-level-b" placeholder="B (우수) 수준 설명">
+                        <input type="text" id="edit-level-mid" placeholder="C (중) 수준 설명">
+                        <input type="text" id="edit-level-d" placeholder="D (미흡) 수준 설명">
+                        <input type="text" id="edit-level-low" placeholder="E (하) 수준 설명">
+                    </div>
+                    
+                    <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                        <button class="save-btn" onclick="updateStandardInDB()" style="background: #10b981; flex: 2; margin: 0;">💾 수정한 내용으로 덮어쓰기</button>
+                        <button class="save-btn" onclick="deleteStandardFromDB()" style="background: #ef4444; flex: 1; margin: 0;">🗑️ 이 성취기준 삭제</button>
+                    </div>
+                </div>
+            </div>
+        <h3 style="margin-bottom: 1rem; color: var(--primary);">📝 기존 성취기준에 '문항' 추가하기</h3>
+
+        <div class="admin-form-group">
+            <label>1. 과목 선택 (문항을 넣을 과목)</label>
+            <select id="admin-q-subject" class="option-btn" style="text-align: left; padding: 0.8rem;" onchange="loadStandardsForQuestion()">
+                <option value="">-- 과목을 먼저 선택하세요 --</option>
+                <option value="common1">공통수학1</option>
+                <option value="common2">공통수학2</option>
+                <option value="algebra">대수</option>
+                <option value="calculus1">미적분Ⅰ</option>
+                <option value="stats">확률과 통계</option>
+            </select>
+        </div>
+
+        <div class="admin-form-group" style="margin-top: 1rem;">
+            <label>2. 성취기준 선택</label>
+            <select id="admin-q-standard" class="option-btn" style="text-align: left; padding: 0.8rem;">
+                <option value="">위에서 과목을 선택하면 목록이 나타납니다</option>
+            </select>
+        </div>
+
+        <div class="admin-form-group" style="margin-top: 1rem;">
+            <label>3. 문항 내용 (수식은 $기호 사용)</label>
+            <textarea id="admin-q-text" rows="3" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;"></textarea>
+        </div>
+        <div class="admin-form-group" style="margin-top: 1rem;">
+            <label>3-1. 정답</label>
+            <input type="text" id="admin-q-answer" placeholder="예: $x=3$" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;">
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 1rem;">
+            <div class="admin-form-group" style="flex: 1;">
+                <label>4. 판정 수준</label>
+                <select id="admin-q-level" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;">
+                    <option value="high">A (상)</option>
+                    <option value="b">B (우수)</option>
+                    <option value="mid">C (중)</option>
+                    <option value="d">D (미흡)</option>
+                    <option value="low">E (하)</option>
+                </select>
+            </div>
+            <div class="admin-form-group" style="flex: 3;">
+                <label>5. 판정 이유 (해설)</label>
+                <input type="text" id="admin-q-reason" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;">
+            </div>
+        </div>
+
+        <button class="save-btn" onclick="saveQuestionToDB()" style="background: #3b82f6; margin-top: 2rem;">➕ 선택한 성취기준에 문항 추가하기</button>
+
+        <div style="max-width: 800px; margin: 1.5rem auto 0 auto; border-top: 2px dashed #cbd5e1; padding-top: 2rem;">
+            
+            <h3 style="margin-bottom: 1rem; color: #3b82f6;">✏️ 등록된 '문항' 수정 및 삭제하기</h3>
+            <div class="admin-form-group">
+                <label>1. 과목 및 성취기준 선택</label>
+                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                    <select id="admin-manage-q-subject" class="option-btn" style="flex: 1;" onchange="loadStandardsForManage()">
+                        <option value="">-- 과목 선택 --</option>
+                        <option value="common1">공통수학1</option>
+                        <option value="common2">공통수학2</option>
+                        <option value="algebra">대수</option>
+                        <option value="calculus1">미적분Ⅰ</option>
+                        <option value="stats">확률과 통계</option>
+                    </select>
+                    <select id="admin-manage-q-standard" class="option-btn" style="flex: 2;" onchange="loadQuestionsForEdit()">
+                        <option value="">과목을 선택하세요</option>
+                    </select>
+                </div>
+                
+                <label>2. 수정할 문항 선택</label>
+                <select id="admin-manage-q-list" class="option-btn" style="width: 100%; margin-bottom: 1rem;" onchange="populateQuestionEditFields()">
+                    <option value="">성취기준을 선택하세요</option>
+                </select>
+            </div>
+
+            <div id="question-edit-fields" style="display: none; background: #f8fafc; padding: 1.2rem; border-radius: 8px; border: 1px solid #cbd5e1;">
+                <div class="admin-form-group">
+                    <label>문항 내용 (수식 $ 사용)</label>
+                    <textarea id="manage-q-text" rows="3" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;"></textarea>
+                </div>
+                <div class="admin-form-group" style="margin-top: 1rem;">
+                    <label>정답</label>
+                    <input type="text" id="manage-q-answer" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;">
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 1rem;">
+                    <div style="flex: 1;">
+                        <label>판정 수준</label>
+                        <select id="manage-q-level" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;">
+                            <option value="A">A (상)</option>
+                            <option value="B">B (우수)</option>
+                            <option value="C">C (중)</option>
+                            <option value="D">D (미흡)</option>
+                            <option value="E">E (하)</option>
+                        </select>
+                    </div>
+                    <div style="flex: 3;">
+                        <label>판정 이유 (해설)</label>
+                        <input type="text" id="manage-q-reason" style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;">
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 1.5rem;">
+                    <button class="save-btn" onclick="updateQuestionInDB()" style="background: #3b82f6; flex: 2; margin:0;">💾 문항 내용 수정 저장</button>
+                    <button class="save-btn" onclick="deleteQuestionFromDB()" style="background: #ef4444; flex: 1; margin:0;">🗑️ 이 문항 삭제</button>
+                </div>
+            </div>
+        </div> </div>
+        <div style="max-width: 800px; margin: 3rem auto 0 auto; border-top: 2px dashed #8b5cf6; padding-top: 2rem;">
+            <h3 style="margin-bottom: 1rem; color: #6d28d9;">🌌 궁극의 만능 서랍 제어기 (동적 필터 지원)</h3>
+            <div style="background: #f5f3ff; padding: 1.5rem; border-radius: 8px; border: 1px solid #ddd6fe;">
+                <p style="margin-top: 0; font-size: 0.9rem; color: #4c1d95; font-weight: bold;">
+                    💡 [작동 원리] 서랍을 선택하면 하위 분류가 자동으로 나타납니다. 원하는 분류만 쏙 빼서 엑셀로 고치고 스마트 업로드 하세요!
+                </p>
+                
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="font-weight: bold; color: #1e293b; font-size: 0.9rem;">1. 대상 서랍(Collection) 선택</label>
+                    <div style="display: flex; gap: 10px; margin-top: 5px; margin-bottom: 15px;">
+                        <select id="universal-drawer-select" class="option-btn" style="flex: 1; padding: 0.6rem; margin: 0;" onchange="updateUniversalFilter()">
+                            <option value="transformed_bank">🗂️ 문제 은행 서랍 (transformed_bank)</option>
+                            <option value="standards_2022">뼈대: 성취기준/수준 (standards_2022)</option>
+                            <option value="subjects">뼈대: 과목 설정 (subjects)</option>
+                            <option value="user_projects">사용자 프로젝트 (user_projects)</option>
+                            <option value="developer_feedback">의견 및 피드백 (developer_feedback)</option>
+                            <option value="custom">✏️ 직접 이름 입력하기...</option>
+                        </select>
+                        <input type="text" id="universal-drawer-input" value="transformed_bank" placeholder="서랍 이름 영문 입력" style="flex: 1; padding: 0.6rem; border-radius: 8px; border: 1px solid var(--border);" readonly>
+                    </div>
+        
+                    <label style="font-weight: bold; color: #1e293b; font-size: 0.9rem;">2. 세부 분류 (과목 필터링)</label>
+                    <div style="display: flex; gap: 10px; margin-top: 5px;">
+                        <select id="universal-filter-select" class="option-btn" style="flex: 1; padding: 0.6rem; margin: 0; background: #fffbeb; border-color: #fde68a;">
+                            </select>
+                    </div>
+                </div>
+        
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button class="save-btn" onclick="downloadUniversalData()" style="background: #8b5cf6; flex: 1; margin: 0;">📥 이 분류만 엑셀로 뽑기</button>
+                    <button class="save-btn" onclick="document.getElementById('universal-bulk-upload-input').click()" style="background: #10b981; flex: 1; margin: 0;">📤 만능 스마트 업로드 (덮어쓰기)</button>
+                    <input type="file" id="universal-bulk-upload-input" accept=".csv, .xlsx, .xls" style="display: none;" onchange="uploadUniversalData(event)">
+                </div>
+                
+                <p style="margin: 10px 0 0 0; font-size: 0.8rem; color: #dc2626; font-weight: bold;">
+                    ⚠️ 객체나 배열(예: 성취수준 상세내용)은 엑셀에서 { } 나 [ ] 형태의 문자로 보입니다. 안의 텍스트만 조심해서 수정해 주세요.
+                </p>
+            </div>
+        </div>
+    
+    </div>
+
+    <div id="problem-analysis" class="section">
+        <h2>문제 분석하기</h2>
+        
+        <div id="analysis-layout-wrapper" style="display: flex; gap: 1.5rem; align-items: flex-start;">
+            <div class="quiz-container" style="flex: 1; min-width: 300px; margin: 0;">
+                <h2 id="analysis-title" style="margin-bottom: 1rem;">🔍 한 문제 상세 분석</h2>
+
+                <div id="service-summary" style="margin-bottom: 15px; padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 0.85rem; text-align: left; color: #334155;">
+                    <strong style="color: #2563eb;">[상세 분석 제공 내용]</strong><br>과목, 단원명, 성취기준, 성취수준, 판정이유, 핵심개념, 단계별 문제풀이
+                </div>
+
+                <div id="upload-area" style="border: 2px dashed #cbd5e1; border-radius: 12px; padding: 2rem; text-align: center; margin-bottom: 1.5rem; cursor: pointer;" onclick="document.getElementById('problem-image').click()">
+                    
+                    <div id="upload-placeholder">
+                        <span style="font-size: 3rem;">📸</span>
+                        <p style="margin-top: 1rem; font-weight: bold; color: var(--primary);">사진 찍기, 업로드 또는 붙여넣기(Ctrl+V)</p>
+                        <p style="font-size: 0.8rem; color: var(--text-light); margin: 0;">문제를 AI가 분석하여 성취기준과 연결해줍니다.</p>
+                    </div>
+
+                    <div id="preview-container" style="display: none; margin-bottom: 1rem; text-align: center; touch-action: none;" onclick="event.stopPropagation()">
+                        <div style="display: inline-block; position: relative; max-width: 100%;">
+                            <img id="image-preview" src="" alt="Preview" style="display: block; max-width: 100%; max-height: 600px; width: auto; pointer-events: none; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                            <canvas id="crop-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; z-index: 10; display: none; border-radius: 8px;"></canvas>
+                            
+                            <div id="crop-msg" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.7); color: white; padding: 12px 20px; border-radius: 20px; font-weight: bold; pointer-events: none; display: none; z-index: 20; text-align: center; font-size: 0.95rem; white-space: nowrap; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+                                ✏️ 분석할 문제를 네모 상자를 그려주세요!
+                            </div>
+                        </div>
+                    </div>
+                    <input type="file" id="problem-image" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
+                </div>
+
+                <div id="single-mode-ui" style="display: none;">
+                    <div id="mode-selector" style="display: flex; gap: 10px; margin-bottom: 0.5rem;">
+                        <button class="save-btn" onclick="setAnalysisMode('single')" style="background: #10b981; flex: 1; margin: 0;">✅ 한 문항만 있음</button>
+                        <button class="save-btn" onclick="setAnalysisMode('multi')" style="background: #f59e0b; flex: 1; margin: 0;">✂️ 영역 선택하기</button>
+                    </div>
+                    <p id="analysis-warning" style="display: block; margin: 0 0 1.5rem 0; font-size: 0.85rem; color: #dc2626; text-align: center; font-weight: bold; line-height: 1.5;">
+                        ⚠️ 여러 문제가 함께 찍히면 분석에 오류가 발생할 수 있습니다.<br>여러 문제일 경우 가급적 <span style="color:#f59e0b;">'✂️ 영역 선택하기'</span>를 이용해 한 문제만 지정해 주세요.
+                    </p>
+                    <button class="save-btn" id="analyze-single-btn" onclick="executeAnalysis()" style="display: none; width: 100%; background: #2563eb;">✨ AI 한 문제 상세 분석 시작</button>
+                </div>
+
+                <div id="multi-mode-ui" style="display: none;">
+                    <div style="background: #fffbeb; padding: 1rem; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 1rem;">
+                        <p style="margin: 0; font-size: 0.9rem; color: #92400e; font-weight: bold;">
+                            💡 드래그하여 여러 문제에 각각 네모 상자를 그려주세요.<br>
+                            상자 테두리를 잡아 크기를 미세조정할 수 있습니다.
+                        </p>
+                    </div>
+                    <div style="text-align: center; margin-bottom: 1rem;">
+                        <span id="crop-count" style="font-weight: bold; color: #ef4444; background: #fee2e2; padding: 8px 20px; border-radius: 20px; font-size: 1.1rem;">0개 영역 지정됨</span>
+                    </div>
+                    <button class="save-btn" id="analyze-multi-btn" onclick="executeAnalysis()" style="display: none; width: 100%; background: #8b5cf6;">🚀 지정된 모든 문제 요약 분석 시작</button>
+                </div>
+
+                <div id="analysis-result" style="display: none; margin-top: 2rem; padding: 1.5rem; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0;">
+                    <h3 style="color: var(--primary); margin-bottom: 1rem; border-bottom: 2px solid var(--primary); padding-bottom: 0.5rem;">🤖 AI 분석 결과</h3>
+                    
+                    <div id="save-analysis-zone" style="display: none; margin-bottom: 1.5rem; text-align: center; background: #f0fdf4; padding: 1.5rem; border-radius: 8px; border: 1px solid #bbf7d0;">
+                        <h4 style="margin: 0 0 10px 0; color: #166534; font-size: 1.1rem;">💡 성취평가제 신뢰도 제고에 기여해 주세요!</h4>
+                        <p style="margin: 0 0 1.5rem 0; font-size: 0.9rem; color: #15803d; line-height: 1.6;">
+                            선생님께서 검토하신 이 문항을 문제은행에 공유해 주시겠습니까?<br>
+                            공유된 데이터는 저작권 준수를 위해 AI가 상황을 변형하여 보관하며, <strong style="color: #ef4444;">향후 선생님들의 성취수준 판정 신뢰도를 높이는 귀중한 예시 자료</strong>로 활용됩니다.
+                        </p>
+                        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                            <button class="save-btn" id="save-variant-btn" onclick="triggerSaveBackgroundAndReset()" style="background: #10b981; margin: 0; width: auto; padding: 0.8rem 1.5rem; font-size: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">💾 변형하여 저장 후 다음 분석</button>
+                            <button class="save-btn" onclick="resetAnalysis()" style="background: #64748b; margin: 0; width: auto; padding: 0.8rem 1.5rem; font-size: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">🗑️ 저장하지 않고 다음 분석</button>
+                        </div>
+                    </div>
+
+                    <div id="result-text" style="font-size: 0.95rem; color: var(--text);"></div>
+                </div>
+            </div>
+            
+            <div id="ai-chat-container" style="flex: 1; display: none; flex-direction: column; background: white; border-left: 1px solid var(--border); position: relative;">
+                <div class="chat-resizer" id="chat-resizer-left"></div>
+                <div class="resizer-guide">◀ 드래그하여 넓히기</div>
+                <h3 style="margin-top:0; color: var(--primary); display:flex; align-items:center; gap:0.5rem; font-size:1.1rem;">
+                    <span>🤖</span> AI 조수와 판정 토론하기
+                </h3>
+                <div style="background: #fffbeb; padding: 1rem; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 1rem;">
+                    <p style="margin: 0; font-size: 0.85rem; color: #92400e; line-height: 1.6;">
+                        <strong>💡 "AI 판정이 내 생각과 다른데?"</strong><br>
+                        선생님의 교육적 판단과 다르다면, 아래 채팅창에 의견을 제시해 보세요! 교사의 피드백을 수용하여 논리적으로 답변하고 결과를 업데이트합니다.
+                    </p>
+                </div>
+                <div id="chat-history" style="height: 400px; overflow-y: auto; background: white; padding: 1rem; border-radius: 8px; border: 1px solid #cbd5e1; margin-bottom: 1rem; font-size: 0.95rem; line-height: 1.6;"></div>
+                <div style="display: flex; gap: 0.5rem;">
+                    <input type="text" id="chat-input" placeholder="이유나 의견을 입력하세요..." style="flex: 1; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px;" onkeypress="if(event.key==='Enter') sendChatMessage()">
+                    <button onclick="sendChatMessage()" style="background: var(--primary); color: white; border: none; padding: 0.8rem 1.2rem; border-radius: 8px; cursor: pointer; font-weight:bold;">전송</button>
+                </div>
+            </div> 
+        </div>
+    </div>
+
+
+
+<div class="modal" id="feedback-modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <span class="close-btn" onclick="closeFeedback()">&times;</span>
+        <h2 style="margin-top: 0; color: #10b981;">💡 개발자에게 의견 보내기</h2>
+        <p style="font-size: 0.9rem; color: var(--text-light); margin-bottom: 1rem;">시스템 개선 사항, 추가할 기능, 버그 등을 자유롭게 남겨주세요. 남겨주신 의견은 데이터베이스에 안전하게 전달됩니다.</p>
+        <textarea id="feedback-message" rows="5" placeholder="여기에 의견을 작성해 주세요..." style="width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px; box-sizing: border-box; margin-bottom: 1rem; font-family: inherit; resize: vertical;"></textarea>
+        <button class="save-btn" onclick="submitFeedback()" style="background: #10b981;">의견 전송하기</button>
+    </div>
+</div>
+
+<div class="modal" id="admin-feedback-modal">
+    <div class="modal-content" style="max-width: 600px; background: #f8fafc;">
+        <span class="close-btn" onclick="closeAdminFeedback()">&times;</span>
+        <h2 style="margin-top: 0; color: var(--primary);">📥 접수된 의견 목록 (관리자용)</h2>
+        <div id="admin-feedback-list" style="max-height: 400px; overflow-y: auto; margin-top: 1rem;">
+            </div>
+    </div>
+</div>
+
+<div class="modal" id="settings-modal">
+    <div class="modal-content" style="max-width: 600px;">
+        <span class="close-btn" onclick="closeSettings()">&times;</span>
+        <h2 style="margin-top: 0; color: var(--primary);">⚙️ 구글 AI API 키 설정</h2>
+        
+        <div style="background: #f8fafc; padding: 1.2rem; border-radius: 10px; border: 1px solid #cbd5e1; margin-bottom: 1.5rem; font-size: 0.95rem; line-height: 1.6;">
+            <p style="margin-top: 0; font-weight: bold; color: #1e293b; font-size: 1.05rem;">💡 API 키란 무엇인가요?</p>
+            <p style="color: #475569; margin-bottom: 1.5rem;">이 시스템은 구글의 최신 인공지능을 사용해 문제를 정밀하게 분석합니다. 인공지능을 무료로 사용하기 위한 일종의 <strong>'개인 전용 출입증'</strong>이 바로 API 키입니다.</p>
+
+            <p style="margin-top: 0; font-weight: bold; color: #1e293b; font-size: 1.05rem;">🚀 1분 만에 API 키 발급받는 방법 (초보자용)</p>
+            <ol style="margin: 0; padding-left: 1.5rem; color: #334155; margin-bottom: 1.5rem;">
+                <li style="margin-bottom: 0.8rem;">
+                    아래 파란색 링크를 클릭해 구글 AI 스튜디오로 이동하세요. (구글 로그인 필요)<br>
+                    👉 <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: #2563eb; font-weight: bold; text-decoration: underline;">[구글 AI 스튜디오 바로가기]</a>
+                </li>
+                <li style="margin-bottom: 0.8rem;">
+                    화면 오른쪽 위에 있는 <strong>[API 키 만들기]</strong> 버튼을 클릭하세요.
+                </li>
+                <li style="margin-bottom: 0.8rem; background: #fffbeb; padding: 0.8rem; border-radius: 6px; border-left: 4px solid #f59e0b;">
+                    <strong>(핵심)</strong> 화면 가운데 '새 키 만들기' 창이 뜹니다. <strong>'Default Gemini Project'</strong> 을 그대로 두고 바로 아래의<strong>[키 만들기]</strong>버튼을 누르세요. <br>
+                    <span style="font-size: 0.85rem; color: #92400e;">* 만약 여러 곳에 API를 사용하시는 경우 [+ 프로젝트 만들기]를 선택해서 API키를 구분해서 관리하세요.(키 생성까지 5~10초 소요)</span>
+                </li>
+                <li style="margin-bottom: 0.8rem;">
+                    'AIzaSy...' 로 시작하는 아주 긴 비밀번호가 생성됩니다. 그 옆의 <strong>[복사 아이콘(문서가 겹친 모양)]</strong>을 누르세요.
+                </li>
+                <li>
+                    다시 이 화면으로 돌아와서, 아래 빈칸에 복사한 키를 붙여넣기(Ctrl+V) 하세요!
+                </li>
+            </ol>
+
+            <div style="background: #fff7ed; padding: 1rem; border-radius: 8px; border: 1px solid #fed7aa;">
+                <p style="margin: 0 0 0.5rem 0; font-weight: bold; color: #9a3412;">⚠️ 사용 중 '무료 할당량 초과' 에러가 뜬다면?</p>
+                <p style="margin: 0; font-size: 0.9rem; color: #7c2d12;">
+                    한도를 다 썼다는 뜻이니 당황하지 마세요! <strong>위 사이트에 다시 접속해서 똑같이 새 키를 하나 더 발급받아 아래 칸에 새로 덮어쓰기</strong> 해주시면 계속 무료로 사용할 수 있습니다.
+                </p>
+            </div>
+        </div>
+
+        <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #0f172a;">🔑 복사한 API 키 입력</label>
+        <input type="password" id="api-key-input" placeholder="이곳을 클릭하고 Ctrl+V 를 눌러 붙여넣으세요" style="width: 100%; padding: 0.8rem; border: 2px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; margin-bottom: 1rem; font-size: 1rem;">
+        
+        <button class="save-btn" onclick="saveApiKey()">설정 저장하고 분석 시작하기</button>
+    </div>
+</div>
+
+<div class="modal" id="level-modal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal()">&times;</span>
+        <h2 id="modal-title">성취수준</h2>
+        <p id="modal-desc" style="color:var(--text-light); margin-bottom: 1.5rem; font-weight: bold;"></p>
+        <div class="level-row"><span class="level-badge bg-high">A</span> <span id="level-high"></span></div>
+        <div class="level-row"><span class="level-badge bg-high" style="background:#f87171">B</span> <span id="level-b"></span></div>
+        <div class="level-row"><span class="level-badge bg-mid">C</span> <span id="level-mid"></span></div>
+        <div class="level-row"><span class="level-badge bg-low" style="background:#4ade80">D</span> <span id="level-d"></span></div>
+        <div class="level-row"><span class="level-badge bg-low">E</span> <span id="level-low"></span></div>
+    </div>
+</div>
+<!-- 👇 문항 상세 정보 팝업(모달) 👇 -->
+<div class="modal" id="bookmark-modal">
+    <div class="modal-content" style="max-width: 700px;">
+        <span class="close-btn" onclick="closeBookmarkModal()">&times;</span>
+        <h2 style="margin-top: 0; color: var(--primary);" id="bm-modal-title">문항 상세 정보</h2>
+        <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 1rem; font-size: 1.05rem;" id="bm-modal-q">
+        </div>
+        <div style="background: #f0fdf4; padding: 1.2rem; border-radius: 8px; border-left: 4px solid #10b981; margin-bottom: 1rem;">
+            <strong style="color: #047857;">[판정 이유]</strong>
+            <p id="bm-modal-reason" style="margin: 0.5rem 0 0 0; color: #166534; line-height: 1.6;"></p>
+        </div>
+        <div id="bm-modal-answer" style="background: #fffbeb; padding: 1.2rem; border-radius: 8px; border-left: 4px solid #f59e0b;">
+            <strong style="color: #b45309;">[정답 및 풀이]</strong>
+            <p id="bm-modal-answer-text" style="margin: 0.5rem 0 0 0; color: #92400e; line-height: 1.6;"></p>
+        </div>
+    </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+<div class="modal" id="written-assessment-modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <span class="close-btn" onclick="document.getElementById('written-assessment-modal').style.display='none'">&times;</span>
+        <h2 style="margin-top: 0; color: #ea580c;">📝 지필평가 (AI 분석) 껍데기 생성</h2>
+        <div style="background: #f8fafc; padding: 1.2rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #cbd5e1; font-size: 0.9rem;">
+            <strong style="color: #334155;">💡 지필평가 추가 안내</strong><br>
+            평가 이름과 반영 비율만 먼저 만들고, 목록에서 '산출/수정' 버튼을 눌러 문항 분석을 시작하세요.
+        </div>
+        <div style="display: flex; gap: 10px; margin-bottom: 1.5rem;">
+            <input type="text" id="written-assess-name" placeholder="예: 1회 고사" style="flex: 2; padding: 0.8rem; border: 1px solid #cbd5e1; border-radius: 8px;">
+            <input type="number" id="written-assess-weight" placeholder="비율(%)" style="flex: 1; padding: 0.8rem; border: 1px solid #cbd5e1; border-radius: 8px;">
+        </div>
+        <button class="save-btn" onclick="saveWrittenAssessmentShell()" style="background: #ea580c; margin: 0;">➕ 목록에 추가하기</button>
+    </div>
+</div>
+<div class="modal" id="manual-assessment-modal">
+    <div class="modal-content" style="max-width: 520px;">
+        <span class="close-btn" onclick="closeManualAssessmentModal()">&times;</span>
+        <h2 style="margin-top: 0; color: #8b5cf6;">✍️ 수행평가 (직접 입력) 추가</h2>
+        <div style="background: #f8fafc; padding: 1.2rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #cbd5e1; font-size: 0.9rem;">
+            <strong style="color: #334155;">💡 수행평가 입력 안내</strong><br>
+            100점 만점 기준으로 각 성취수준(A~E)별 예상 컷오프 점수를 입력하세요. <br>
+            하위 평가요소(예: 가, 나, 다)가 분절되어 있다면 아래 버튼을 눌러 요소를 구성하세요. 시스템이 자동으로 최종 분할점수를 합산해 줍니다.
+        </div>
+        <div style="display: flex; gap: 10px; margin-bottom: 1rem;">
+            <input type="text" id="manual-assess-name" placeholder="예: 포트폴리오 평가" style="flex: 2; padding: 0.8rem; border: 1px solid #cbd5e1; border-radius: 8px;">
+            <input type="number" id="manual-assess-weight" placeholder="비율(%)" style="flex: 1; padding: 0.8rem; border: 1px solid #cbd5e1; border-radius: 8px;">
+        </div>
+        
+        <div style="margin-bottom: 1rem; text-align: left;">
+            <button type="button" onclick="addSubFactorRow()" style="background: #f3e8ff; color: #6b21a8; border: 1px dashed #c084fc; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85rem; transition: 0.2s;" onmouseover="this.style.background='#e9d5ff'" onmouseout="this.style.background='#f3e8ff'">➕ 하위 평가요소 추가 (선택)</button>
+        </div>
+        <div id="sub-factors-list" style="margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; padding-right: 5px;"></div>
+        
+        <p style="text-align: center; margin-bottom: 0.5rem; font-weight: bold; font-size: 0.9rem; color: #475569;">[ 100점 만점 기준 최종 컷오프 점수 ]</p>
+        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-bottom: 1.5rem; text-align: center;">
+            <div><label style="font-weight:bold; color:#ef4444;">A</label><input type="number" id="manual-a" class="main-cut-input" placeholder="80" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; text-align: center; font-weight: bold;"></div>
+            <div><label style="font-weight:bold; color:#f59e0b;">B</label><input type="number" id="manual-b" class="main-cut-input" placeholder="70" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; text-align: center; font-weight: bold;"></div>
+            <div><label style="font-weight:bold; color:#22c55e;">C</label><input type="number" id="manual-c" class="main-cut-input" placeholder="60" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; text-align: center; font-weight: bold;"></div>
+            <div><label style="font-weight:bold; color:#3b82f6;">D</label><input type="number" id="manual-d" class="main-cut-input" placeholder="50" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; text-align: center; font-weight: bold;"></div>
+            <div><label style="font-weight:bold; color:#64748b;">E</label><input type="number" id="manual-e" class="main-cut-input" placeholder="40" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; text-align: center; font-weight: bold;"></div>
+        </div>
+        <button class="save-btn" onclick="saveManualAssessment()" style="background: #8b5cf6; margin: 0;">💾 수행평가 목록에 저장하기</button>
+    </div>
+</div>
+
+</div>
+<canvas id="capture-overlay" style="display:none; position:fixed; top:0; left:0; z-index:99999; cursor:crosshair;"></canvas>
+
+<div id="specific-feedback-panel" style="display: none; position: fixed; top: 120px; right: 20px; width: 340px; background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); border: 1px solid var(--border); z-index: 9999; padding: 1.5rem; max-height: 80vh; overflow-y: auto;">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 15px;">
+        <h3 style="margin: 0; color: #ea580c; font-size: 1.1rem;">🙋 판정 이의 제기</h3>
+        <span style="cursor: pointer; font-size: 1.5rem; color: #94a3b8;" onclick="document.getElementById('specific-feedback-panel').style.display='none'">&times;</span>
+    </div>
+    
+    <div style="font-size: 0.85rem; color: #475569; margin-bottom: 15px; background: #f8fafc; padding: 10px; border-radius: 8px;">
+        <strong>현재 문항:</strong>
+        <div id="fb-current-q" style="margin-top: 5px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;"></div>
+    </div>
+
+    <label style="font-weight: bold; font-size: 0.95rem; color: #1e293b;">📌 성취기준 변경 제안</label>
+    <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 15px; margin-top: 8px;">
+        <div style="font-size: 0.85rem; color: #475569; background: #f1f5f9; padding: 8px 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
+            현재: <strong id="fb-current-std" style="color: #2563eb; display: block; margin-top: 4px;"></strong>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="color: #ea580c; font-size: 1.1rem;">▶</span>
+            <select id="fb-proposed-std" style="flex: 1; padding: 0.6rem; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; background: white;"></select>
+        </div>
+    </div>
+
+    <label style="font-weight: bold; font-size: 0.95rem; color: #1e293b;">📊 성취수준 변경 제안</label>
+    <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; margin-top: 8px;">
+        <div style="font-size: 0.85rem; color: #475569; background: #f1f5f9; padding: 8px 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
+            현재: <strong id="fb-current-level" style="color: #2563eb; font-size: 1.1rem; margin-left: 5px;"></strong>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="color: #ea580c; font-size: 1.1rem;">▶</span>
+            <select id="fb-proposed-level" style="flex: 1; padding: 0.6rem; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; background: white;">
+                <option value="A">A (상)</option>
+                <option value="B">B (우수)</option>
+                <option value="C">C (중)</option>
+                <option value="D">D (미흡)</option>
+                <option value="E">E (하)</option>
+            </select>
+        </div>
+    </div>
+
+    <label style="font-weight: bold; font-size: 0.9rem; color: #1e293b;">✍️ 판정 이유 및 의견</label>
+    <textarea id="fb-reason" rows="4" placeholder="이 문항이 제안하신 기준과 수준에 더 부합한다고 생각하시는 논리적 이유를 적어주세요." style="width: 100%; padding: 0.8rem; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box; margin-top: 5px; margin-bottom: 15px; font-family: inherit; font-size: 0.85rem;"></textarea>
+
+    <button id="fb-submit-btn" class="save-btn" onclick="submitSpecificFeedback()" style="background: #ea580c; margin: 0; padding: 0.8rem;">🚀 AI 검토 및 시스템에 전송</button>
+    <div id="fb-loading-msg" style="display: none; text-align: center; margin-top: 10px; font-size: 0.85rem; color: #ea580c; font-weight: bold;">AI 수석 위원이 선생님의 의견을 검토 중입니다... ⏳</div>
+</div>
+
+</body>
