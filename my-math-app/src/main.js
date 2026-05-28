@@ -678,7 +678,7 @@ async function executeAnalysis() {
         const workerUrl = "https://script.google.com/macros/s/AKfycbzJt0A5bM_OkCXvZVzN2u0dfY-oLn8_7NlY_dZfrPl_cY7V-qJJDIGhEs35mWRKK5IM/exec"; 
         const response = await fetch(workerUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify(bodyData)
         });
 
@@ -821,7 +821,7 @@ async function processAndSaveBackground(analysisText, apiKey) {
         const userApiKey = localStorage.getItem('gemini_api_key');
         const response = await fetch(workerUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify({
                 action: "save_variant",
                 analysisText: analysisText,
@@ -1352,7 +1352,7 @@ async function reAnalyzeWithChat() {
         const userApiKey = localStorage.getItem('gemini_api_key');
         const response = await fetch(workerUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify({
                 action: "reanalyze_chat",
                 analysisMainMode: analysisMainMode,
@@ -1410,7 +1410,7 @@ async function sendChatMessage() {
         const userApiKey = localStorage.getItem('gemini_api_key');
         const response = await fetch(workerUrl, {
             method: 'POST', 
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify({ 
                 action: "chat_message", // 깃발: 챗봇 대화 서랍 열기
                 currentChatContext: currentChatContext,
@@ -2435,7 +2435,7 @@ async function startExamAiAnalysis(base64Data) {
         
         const response = await fetch(workerUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify({
                 action: "exam_analysis",
                 mimeType: mimeType,
@@ -4262,7 +4262,7 @@ async function transformAndSaveExamToBank() {
         
         const response = await fetch(workerUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify({
                 action: "batch_transform",
                 standardsInfo: standardsInfo,
@@ -4760,7 +4760,7 @@ async function submitSpecificFeedback() {
         const userApiKey = localStorage.getItem('gemini_api_key');
         const response = await fetch(workerUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify({ 
                 action: "review",
                 questionText: questionText,
