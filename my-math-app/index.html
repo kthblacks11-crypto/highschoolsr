@@ -511,7 +511,22 @@
                 <div id="service-summary" style="margin-bottom: 15px; padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 0.85rem; text-align: left; color: #334155;">
                     <strong style="color: #2563eb;">[상세 분석 제공 내용]</strong><br>과목, 단원명, 성취기준, 성취수준, 판정이유, 핵심개념, 단계별 문제풀이
                 </div>
-
+                <div id="common-passage-section" style="margin-bottom: 15px; border: 2px solid #a5b4fc; border-radius: 8px; background: #eef2ff; overflow: hidden;">
+                    <button onclick="toggleCommonPassageTray()" style="width: 100%; padding: 12px; background: transparent; color: #3730a3; border: none; cursor: pointer; font-weight: bold; display: flex; justify-content: center; align-items: center; gap: 8px; transition: 0.2s;" onmouseover="this.style.background='#e0e7ff'" onmouseout="this.style.background='transparent'">
+                        <span id="tray-icon">📚</span> [클릭] 국어/영어 공통 지문 보관함 열기
+                    </button>
+                    <div id="common-passage-tray" style="display: none; border-top: 1px solid #c7d2fe; padding: 15px; background: white; text-align: center;">
+                        <p style="color: #475569; font-size: 0.85rem; margin-top: 0; margin-bottom: 15px;">
+                            💡 긴 지문을 여러 장 찍어 이곳에 담아두세요. 아래에서 31번, 32번 문제만 교체하며 연속 분석이 가능합니다!
+                        </p>
+                        <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 15px;">
+                            <input type="file" id="passage-file-input" multiple accept="image/*" style="display: none;" onchange="handlePassageFiles(event)">
+                            <button onclick="document.getElementById('passage-file-input').click()" style="padding: 6px 12px; background: #64748b; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">📁 이미지 파일 추가</button>
+                            <button onclick="pastePassageFromClipboard()" style="padding: 6px 12px; background: #f1f5f9; border: 1px solid #cbd5e1; color: #334155; border-radius: 4px; cursor: pointer; font-size: 0.85rem; font-weight: bold;">📋 캡처 붙여넣기 (Ctrl+V)</button>
+                        </div>
+                        <div id="passage-thumbnails" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; min-height: 20px;"></div>
+                    </div>
+                </div>
                 <div id="upload-area" style="border: 2px dashed #cbd5e1; border-radius: 12px; padding: 2rem; text-align: center; margin-bottom: 1.5rem; cursor: pointer;" onclick="document.getElementById('problem-image').click()">
                     
                     <div id="upload-placeholder">

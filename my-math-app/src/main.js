@@ -599,6 +599,8 @@ function resetAnalysis() {
     if (mainContainer) {
         mainContainer.style.maxWidth = ''; // 💡 인위적으로 늘렸던 너비를 완전히 제거하여 원래 크기(1240px)로 되돌림!
     }
+    commonPassages = [];
+    if(document.getElementById('passage-thumbnails')) document.getElementById('passage-thumbnails').innerHTML = '';
 }
 
 async function checkApiError(response) {
@@ -661,6 +663,7 @@ async function executeAnalysis() {
             standardsInfo: standardsInfo,
             subject: currentSubject, // 🌟 핵심! 백엔드가 스스로 판정할 수 있도록 과목 코드만 넘겨줍니다.
             referenceDBText: referenceDBText,
+            commonImages: commonPassages,
             apiKey: userApiKey 
         };
 
@@ -5125,7 +5128,84 @@ function toggleAccordion(index) {
         targetHeader.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 }
+// ==========================================
+// 📚 공통 지문 보관함 엔진 (국어/영어 장문 및 세트 문항 완벽 대응)
+// ==========================================
+let commonPassages = []; // 압축된 지문 이미지(Base64)들을 누적해서 담아둘 배열
 
+function toggleCommonPassageTray() {
+    const tray = document.getElementById('common-passage-tray');
+    const icon = document.getElementById('tray-icon');
+    if (tray.style.display === 'none') {
+        tray.style.display = 'block';
+        icon.innerText = '📂';
+    } else {
+        tray.style.display = 'none';
+        icon.innerText = '📚';
+    }
+}
+
+// 📁 파일 탐색기로 올리기
+function handlePassageFiles(event) {
+    const files = event.target.files;
+    for (let i = 0; i < files.length; i++) {
+        processPassageFile(files[i]);
+    }
+}
+
+// 📋 버튼 눌러서 클립보드 이미지 바로 붙여넣기
+async function pastePassageFromClipboard() {
+    try {
+        const clipboardItems = await navigator.clipboard.read();
+        let foundImage = false;
+        for (const clipboardItem of clipboardItems) {
+            for (const type of clipboardItem.types) {
+                if (type.startsWith('image/')) {
+                    const blob = await clipboardItem.getType(type);
+                    processPassageFile(blob);
+                    foundImage = true;
+                }
+            }
+        }
+        if (!foundImage) alert("클립보드에 복사된 그림이 없습니다.\n먼저 [윈도우키 + Shift + S] 로 지문을 캡처해 주세요.");
+    } catch (err) {
+        alert("클립보드 접근 권한이 차단되어 있습니다. 브라우저 주소창 왼쪽 자물쇠 아이콘에서 권한을 허용해 주세요.");
+    }
+}
+
+// 이미지를 받아서 선생님의 압축엔진(compressCaptureImage)으로 용량을 줄인 뒤 서랍에 넣기
+function processPassageFile(blob) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const base64Str = e.target.result;
+        // 기존 시스템에 있는 압축 함수 활용
+        compressCaptureImage(base64Str, (compressed) => {
+            commonPassages.push(compressed);
+            renderPassageThumbnails();
+        });
+    };
+    reader.readAsDataURL(blob);
+}
+
+// 보관함에 썸네일 예쁘게 그려주기
+function renderPassageThumbnails() {
+    const container = document.getElementById('passage-thumbnails');
+    container.innerHTML = '';
+    commonPassages.forEach((base64, idx) => {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = "position: relative; width: 80px; height: 80px; border-radius: 6px; overflow: hidden; border: 1px solid #cbd5e1; box-shadow: 0 2px 4px rgba(0,0,0,0.1);";
+        wrap.innerHTML = `
+            <img src="${base64}" style="width: 100%; height: 100%; object-fit: cover;">
+            <button onclick="removePassage(${idx})" style="position: absolute; top: 2px; right: 2px; background: rgba(239,68,68,0.9); color: white; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center;">&times;</button>
+        `;
+        container.appendChild(wrap);
+    });
+}
+
+function removePassage(index) {
+    commonPassages.splice(index, 1);
+    renderPassageThumbnails();
+}
 // ==========================================
 // 🌟 [최종 업데이트] Vite 모듈 환경에서 HTML 버튼들이 함수를 찾을 수 있도록 외부(window)로 연결해주는 마법의 다리
 // ==========================================
@@ -5154,7 +5234,8 @@ const exposeToWindow = {
     
    
     changeGroup, openMemoBoard, closeMemoBoard, submitMemo, changeSubject, showAiReason,
-    toggleDictionaryPanel, changeDictGroup, loadDictionaryStandards, toggleAccordion
+    toggleDictionaryPanel, changeDictGroup, loadDictionaryStandards, toggleAccordion,
+    oggleCommonPassageTray, handlePassageFiles, pastePassageFromClipboard, removePassage
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
