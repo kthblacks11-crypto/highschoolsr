@@ -283,3 +283,30 @@ header {
     cursor: crosshair;
     display: none;
 }
+/* ==========================================
+   📚 교과군 탭 버튼 및 비활성화 상태 스타일
+   ========================================== */
+   .group-btn {
+    background: white;
+    color: var(--text-light);
+}
+.group-btn:hover {
+    background: #f1f5f9;
+}
+/* 선택된 교과군 강조 */
+.group-btn.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    box-shadow: 0 4px 6px rgba(30, 58, 138, 0.2);
+}
+
+/* 흑백 처리된 (문항 없는) 버튼 스타일 */
+.save-btn.disabled-btn {
+    background: #e2e8f0 !important;
+    color: #94a3b8 !important;
+    cursor: not-allowed !important;
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    transform: none !important;
+}

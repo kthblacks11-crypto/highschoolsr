@@ -920,23 +920,118 @@ function showSection(id) {
     }
 }
 
-function changeSubject() {
-    currentSubject = document.getElementById('math-subjects').value;
+// ==========================================
+// 📚 2022 개정 교육과정 전체 교과/과목 매핑 데이터
+// ==========================================
+let currentGroup = 'math'; 
+let currentSubjectQCount = {}; // 💡 과목별 문항 개수 미리 저장소
+
+const curriculumMap = {
+    'math': {
+        '공통 과목': [{id: 'common1', name: '공통수학1'}, {id: 'common2', name: '공통수학2'}, {id: 'basic_math1', name: '기본수학1'}, {id: 'basic_math2', name: '기본수학2'}],
+        '일반 선택': [{id: 'algebra', name: '대수'}, {id: 'calculus1', name: '미적분Ⅰ'}, {id: 'stats', name: '확률과 통계'}],
+        '진로 선택': [{id: 'geometry', name: '기하'}, {id: 'calculus2', name: '미적분Ⅱ'}, {id: 'econ_math', name: '경제 수학'}, {id: 'ai-math', name: '인공지능 수학'}, {id: 'job_math', name: '직무 수학'}],
+        '융합 선택': [{id: 'math_culture', name: '수학과 문화'}, {id: 'prac_stats', name: '실용 통계'}, {id: 'math_task', name: '수학과제 탐구'}],
+        '기타': [{id: 'uncategorized', name: '📦 미분류 보관함'}]
+    },
+    'korean': {
+        '공통 과목': [{id: 'kor_common1', name: '공통국어1'}, {id: 'kor_common2', name: '공통국어2'}],
+        '일반 선택': [{id: 'kor_speech', name: '화법과 언어'}, {id: 'kor_read_write', name: '독서와 작문'}, {id: 'kor_lit', name: '문학'}],
+        '진로 선택': [{id: 'kor_theme', name: '주제 탐구 독서'}, {id: 'kor_lit_media', name: '문학과 영상'}, {id: 'kor_job', name: '직무 의사소통'}],
+        '융합 선택': [{id: 'kor_debate', name: '독서 토론과 글쓰기'}, {id: 'kor_media', name: '매체 의사소통'}, {id: 'kor_life', name: '언어생활 탐구'}]
+    },
+    'english': {
+        '공통 과목': [{id: 'eng_common1', name: '공통영어1'}, {id: 'eng_common2', name: '공통영어2'}, {id: 'eng_basic1', name: '기본영어1'}, {id: 'eng_basic2', name: '기본영어2'}],
+        '일반 선택': [{id: 'eng_1', name: '영어Ⅰ'}, {id: 'eng_2', name: '영어Ⅱ'}, {id: 'eng_read_write', name: '영어 독해와 작문'}],
+        '진로 선택': [{id: 'eng_lit', name: '영미 문학 읽기'}, {id: 'eng_pres', name: '영어 발표와 토론'}, {id: 'eng_adv', name: '심화 영어'}, {id: 'eng_adv_rw', name: '심화 영어 독해와 작문'}, {id: 'eng_job', name: '직무 영어'}],
+        '융합 선택': [{id: 'eng_life', name: '실생활 영어 회화'}, {id: 'eng_media', name: '미디어 영어'}, {id: 'eng_world', name: '세계 문화와 영어'}]
+    },
+    'social': {
+        '공통 과목': [{id: 'history1', name: '한국사1'}, {id: 'history2', name: '한국사2'}, {id: 'soc_common1', name: '통합사회1'}, {id: 'soc_common2', name: '통합사회2'}],
+        '일반 선택': [{id: 'soc_citizen', name: '세계시민과 지리'}, {id: 'soc_world', name: '세계사'}, {id: 'soc_culture', name: '사회와 문화'}, {id: 'soc_ethics', name: '현대사회와 윤리'}],
+        '진로 선택': [{id: 'soc_geo_kor', name: '한국지리 탐구'}, {id: 'soc_city', name: '도시의 미래 탐구'}, {id: 'soc_asia', name: '동아시아 역사 기행'}, {id: 'soc_pol', name: '정치'}, {id: 'soc_law', name: '법과 사회'}, {id: 'soc_econ', name: '경제'}, {id: 'soc_think', name: '윤리와 사상'}, {id: 'soc_human', name: '인문학과 윤리'}, {id: 'soc_inter', name: '국제 관계의 이해'}],
+        '융합 선택': [{id: 'soc_travel', name: '여행지리'}, {id: 'soc_modern', name: '역사로 탐구하는 현대 세계'}, {id: 'soc_prob', name: '사회문제 탐구'}, {id: 'soc_finance', name: '금융과 경제생활'}, {id: 'soc_eth_prob', name: '윤리문제 탐구'}, {id: 'soc_climate', name: '기후변화와 지속가능한 세계'}]
+    },
+    'science': {
+        '공통 과목': [{id: 'sci_common1', name: '통합과학1'}, {id: 'sci_common2', name: '통합과학2'}, {id: 'sci_exp1', name: '과학탐구실험1'}, {id: 'sci_exp2', name: '과학탐구실험2'}],
+        '일반 선택': [{id: 'sci_phy', name: '물리학'}, {id: 'sci_chem', name: '화학'}, {id: 'sci_bio', name: '생명과학'}, {id: 'sci_earth', name: '지구과학'}],
+        '진로 선택': [{id: 'sci_mech', name: '역학과 에너지'}, {id: 'sci_electro', name: '전자기와 양자'}, {id: 'sci_matter', name: '물질과 에너지'}, {id: 'sci_chem_re', name: '화학 반응의 세계'}, {id: 'sci_cell', name: '세포와 물질대사'}, {id: 'sci_gene', name: '생물의 유전'}, {id: 'sci_earth_sys', name: '지구시스템과학'}, {id: 'sci_space', name: '행성우주과학'}],
+        '융합 선택': [{id: 'sci_history', name: '과학의 역사와 문화'}, {id: 'sci_climate', name: '기후변화와 환경생태'}, {id: 'sci_converge', name: '융합과학 탐구'}]
+    }
+};
+
+// 교과군(탭) 변경 시 호출
+function changeGroup(groupId) {
+    currentGroup = groupId;
+    
+    // 버튼 스타일 활성화 변경
+    document.querySelectorAll('.group-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelector(`button[onclick="changeGroup('${groupId}')"]`).classList.add('active');
+    
+    // 해당 교과군에 맞춰 드롭다운 다시 그리기
+    const selectEl = document.getElementById('detail-subjects');
+    selectEl.innerHTML = '';
+    const map = curriculumMap[groupId];
+    
+    for (const category in map) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = category;
+        map[category].forEach(sub => {
+            const opt = document.createElement('option');
+            opt.value = sub.id;
+            opt.innerText = sub.name;
+            optgroup.appendChild(opt);
+        });
+        selectEl.appendChild(optgroup);
+    }
+    
+    // 첫 번째 과목으로 자동 선택 후 데이터 갱신
+    changeSubject();
+}
+
+// 세부 과목 변경 시 호출 (기존 함수 업그레이드)
+async function changeSubject() {
+    currentSubject = document.getElementById('detail-subjects').value;
+    
+    // 부제목(단원명 등) 업데이트
     const data = subjectData[currentSubject];
-    if (data) { document.getElementById('main-subtitle').innerText = "[" + data.title + "] " + data.subtitle; }
+    const subTitleEl = document.getElementById('main-subtitle');
+    if (data) { 
+        subTitleEl.innerText = "[" + data.title + "] " + (data.subtitle || "과목 정보가 등록되어 있습니다."); 
+    } else {
+        subTitleEl.innerText = "이 과목의 성취기준 데이터가 아직 등록되지 않았습니다.";
+    }
+    
+    // ✨ 핵심: 버튼 비활성화를 위해 DB에서 이 과목의 문항 개수를 미리 세어옵니다!
+    currentSubjectQCount = {};
+    if (currentSubject && currentSubject !== 'uncategorized') {
+        try {
+            // 해당 과목의 문항만 싹 긁어옵니다
+            const snapshot = await db.collection('transformed_bank').where('subject', '==', currentSubject).get();
+            snapshot.forEach(doc => {
+                const stdCode = doc.data().standard_code;
+                if (stdCode && stdCode !== "unknown" && stdCode !== "코드없음") {
+                    currentSubjectQCount[stdCode] = (currentSubjectQCount[stdCode] || 0) + 1;
+                }
+            });
+        } catch(e) { console.warn("문항 수 계산 실패", e); }
+    }
+
     initDashboard(); 
     initChecklist();
 
     const bookmarkList = document.getElementById('bookmark-list');
-    if (bookmarkList) {
-        bookmarkList.innerHTML = "";
-    }
+    if (bookmarkList) bookmarkList.innerHTML = "";
 }
 
 function initDashboard() {
     const container = document.getElementById('card-container');
     container.innerHTML = "";
-    if (!subjectData[currentSubject]) return;
+    
+    if (!subjectData[currentSubject]) {
+        container.innerHTML = `<div style="text-align:center; padding:3rem; background:white; border-radius:12px; color:#64748b; font-weight:bold;">관리자 메뉴에서 이 과목의 성취기준을 먼저 등록해 주세요! 👨‍🔧</div>`;
+        return;
+    }
     
     subjectData[currentSubject].standards.forEach(std => {
         const card = document.createElement('div');
@@ -953,21 +1048,42 @@ function initDashboard() {
         btnArea.style.textAlign = 'right';
         btnArea.style.marginTop = '15px'; 
         
-        const quizBtn = document.createElement('button');
-        quizBtn.className = 'save-btn'; 
-        quizBtn.style.display = 'inline-block';
-        quizBtn.style.width = 'auto'; 
-        quizBtn.style.margin = '0';
-        quizBtn.style.padding = '0.5rem 1.2rem'; 
-        quizBtn.style.fontSize = '0.9rem';
-        quizBtn.style.borderRadius = '8px'; 
-        quizBtn.innerHTML = '📝 문항 매칭 연습';
+        // ✨ 마법의 문항 유무 판별 로직
+        const qCount = currentSubjectQCount[std.code] || 0;
+        const hasQuestions = (std.questions && std.questions.length > 0) || qCount > 0;
         
-        quizBtn.onclick = (e) => {
-            e.stopPropagation(); 
-            showSection('quiz'); 
-            startLevelMatching(std.code); 
-        };
+        const quizBtn = document.createElement('button');
+        
+        if (hasQuestions) {
+            quizBtn.className = 'save-btn'; 
+            quizBtn.style.display = 'inline-block';
+            quizBtn.style.width = 'auto'; 
+            quizBtn.style.margin = '0';
+            quizBtn.style.padding = '0.5rem 1.2rem'; 
+            quizBtn.style.fontSize = '0.9rem';
+            quizBtn.style.borderRadius = '8px'; 
+            // 파란 배지로 몇 문제가 있는지 알려줍니다
+            quizBtn.innerHTML = `📝 문항 매칭 연습 <span style="background:rgba(255,255,255,0.3); color:white; padding:2px 6px; border-radius:12px; font-size:0.75rem; margin-left:4px;">${qCount}개</span>`;
+            
+            quizBtn.onclick = (e) => {
+                e.stopPropagation(); 
+                showSection('quiz'); 
+                startLevelMatching(std.code); 
+            };
+        } else {
+            // 문항이 없으면 흑백 처리하고 누르지 못하게 막습니다!
+            quizBtn.className = 'save-btn disabled-btn'; 
+            quizBtn.style.display = 'inline-block';
+            quizBtn.style.width = 'auto'; 
+            quizBtn.style.margin = '0';
+            quizBtn.style.padding = '0.5rem 1.2rem'; 
+            quizBtn.style.fontSize = '0.9rem';
+            quizBtn.style.borderRadius = '8px'; 
+            quizBtn.innerHTML = '🚫 등록된 문항 없음';
+            quizBtn.disabled = true; // 강제 잠금
+            
+            quizBtn.onclick = (e) => { e.stopPropagation(); }; // 클릭 무시
+        }
         
         btnArea.appendChild(quizBtn);
         card.appendChild(textArea);

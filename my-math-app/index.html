@@ -41,26 +41,21 @@
         </div>
     </header>
 
-<div class="subject-selector">
-  <label for="math-subjects">과목 선택 (2022 개정): </label>
-  <select id="math-subjects" onchange="changeSubject()">
-    <optgroup label="공통 과목">
-      <option value="common1">공통수학1</option>
-      <option value="common2" selected>공통수학2</option>
-    </optgroup>
-    <optgroup label="일반 선택">
-      <option value="algebra">대수</option>
-      <option value="calculus1">미적분Ⅰ</option>
-      <option value="stats">확률과 통계</option>
-    </optgroup>
-    <optgroup label="진로/융합 선택">
-      <option value="calculus2">미적분Ⅱ</option>
-      <option value="geometry">기하</option>
-      <option value="ai-math">인공지능 수학</option>
-    </optgroup>
-    <option value="uncategorized">📦 미분류 보관함</option>
-  </select>
-</div>
+    <div class="curriculum-selector" style="text-align: center; margin: 2rem 0 1.5rem;">
+        <div class="subject-group-tabs" style="display: flex; justify-content: center; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap;">
+            <button class="group-btn active" onclick="changeGroup('math')" style="padding: 0.6rem 1.5rem; border-radius: 20px; border: 1px solid var(--border); font-weight: bold; cursor: pointer; transition: 0.2s;">수학</button>
+            <button class="group-btn" onclick="changeGroup('korean')" style="padding: 0.6rem 1.5rem; border-radius: 20px; border: 1px solid var(--border); font-weight: bold; cursor: pointer; transition: 0.2s;">국어</button>
+            <button class="group-btn" onclick="changeGroup('english')" style="padding: 0.6rem 1.5rem; border-radius: 20px; border: 1px solid var(--border); font-weight: bold; cursor: pointer; transition: 0.2s;">영어</button>
+            <button class="group-btn" onclick="changeGroup('social')" style="padding: 0.6rem 1.5rem; border-radius: 20px; border: 1px solid var(--border); font-weight: bold; cursor: pointer; transition: 0.2s;">사회</button>
+            <button class="group-btn" onclick="changeGroup('science')" style="padding: 0.6rem 1.5rem; border-radius: 20px; border: 1px solid var(--border); font-weight: bold; cursor: pointer; transition: 0.2s;">과학</button>
+        </div>
+        
+        <div class="subject-dropdown-area">
+            <label for="detail-subjects" style="font-weight: bold; color: var(--text-light); margin-right: 10px;">세부 과목 선택: </label>
+            <select id="detail-subjects" onchange="changeSubject()" style="padding: 0.6rem 1.2rem; border-radius: 8px; border: 2px solid var(--border); font-weight: bold; color: var(--primary); font-size: 1rem; min-width: 250px;">
+                </select>
+        </div>
+    </div>
 
 <div class="container">
     <div class="tabs">
