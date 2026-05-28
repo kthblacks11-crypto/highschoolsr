@@ -925,6 +925,17 @@ function showSection(id) {
     } else if (id === 'bookmark') {
         const bList = document.getElementById('bookmark-list');
         if(bList) bList.innerHTML = ""; 
+
+        // ✨ 탭에 다시 들어오면 모든 북마크 버튼 스타일을 초기화
+        ['A', 'B', 'C', 'D', 'E'].forEach(l => {
+            const btn = document.getElementById(`bm-btn-${l}`);
+            if (btn) {
+                btn.style.opacity = '1'; // 다시 100% 진하게
+                btn.style.transform = 'scale(1)';
+                btn.style.border = '3px solid transparent';
+                btn.style.boxShadow = 'none';
+            }
+        });
     }
 }
 
@@ -1147,6 +1158,7 @@ async function startLevelMatching(code) {
                        <span style="font-size: 0.8rem; color: #166534; font-weight: bold;">💡 AI 변형 추가 문항</span>
                    </div>`;
         
+            let imgHtml = data.image ? `<br><img src="${data.image}" style="max-width:100%; margin-top:15px; border-radius:8px; border:1px solid #cbd5e1; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">` : "";
                    combinedQuestions.push({
                     q: sourceBadge + (data.question || data.q || "문제 내용이 없습니다."),
                     level: extractedLevel,
@@ -1647,6 +1659,26 @@ function resetBookmarkView() {
 
 // 🟢 [수정됨] 미분류 탭을 완벽하게 지원하는 북마크 로직
 async function loadBookmark(level) {
+    // ✨ 1. 모든 버튼을 살짝 투명하게 만들고 크기를 원래대로 되돌림
+    ['A', 'B', 'C', 'D', 'E'].forEach(l => {
+        const btn = document.getElementById(`bm-btn-${l}`);
+        if (btn) {
+            btn.style.opacity = '0.4';
+            btn.style.transform = 'scale(1)';
+            btn.style.border = '3px solid transparent';
+            btn.style.boxShadow = 'none';
+        }
+    });
+
+    // ✨ 2. 방금 클릭한 버튼만 뚜렷하게, 크고, 진한 테두리로 강조
+    const activeBtn = document.getElementById(`bm-btn-${level}`);
+    if (activeBtn) {
+        activeBtn.style.opacity = '1';
+        activeBtn.style.transform = 'scale(1.15)'; // 15% 커짐
+        activeBtn.style.border = '3px solid #0f172a'; // 진한 남색 테두리
+        activeBtn.style.boxShadow = '0 4px 10px rgba(0,0,0,0.2)'; // 그림자 효과
+    }
+
     // 선택된 과목이 없으면 기본값으로 uncategorized 설정
     const subject = currentSubject || "uncategorized"; 
     const listContainer = document.getElementById('bookmark-list');
@@ -3648,8 +3680,9 @@ async function sendAiResultsToTable() {
 
             let newScores = [];
             extractedQuestionsArray.forEach((q, idx) => {
-                // 💡 핵심: A+ 도 인식할 수 있도록 정규식(Regex) 강화!
+                // 💡 핵심: [수준]과 [이유]를 모두 찾아냅니다.
                 let levelMatch = q.text.match(/\[수준\]\s*(A\+|[A-E])/);
+                let reasonMatch = q.text.match(/\[이유\]\s*([^|\n]+)/); // ✨ 이유 추출기 추가!
                 let diffSelect = document.getElementById(`ai-diff-${idx}`);
                 let diff = (diffSelect && diffSelect.value !== "") ? diffSelect.value : "";
                 let isShort = String(q.num).includes('서');
@@ -3659,11 +3692,15 @@ async function sendAiResultsToTable() {
                     baseScores[idx].score = parseFloat(q.score) || 0;
                     if(diff !== "") baseScores[idx].difficulty = diff;
                     baseScores[idx].isShortAnswer = isShort; 
-                    // AI의 A+ 판정 강제 업데이트
                     baseScores[idx].level = levelMatch ? levelMatch[1] : "판정필요"; 
+                    baseScores[idx].reason = reasonMatch ? reasonMatch[1].trim() : "AI 판정 이유가 분석되지 않았습니다."; // ✨ 저장
                     newScores.push(baseScores[idx]);
                 } else {
-                    newScores.push({ num: q.num, score: parseFloat(q.score) || 0, difficulty: diff, level: levelMatch ? levelMatch[1] : "판정필요", isShortAnswer: isShort });
+                    newScores.push({ 
+                        num: q.num, score: parseFloat(q.score) || 0, difficulty: diff, 
+                        level: levelMatch ? levelMatch[1] : "판정필요", isShortAnswer: isShort,
+                        reason: reasonMatch ? reasonMatch[1].trim() : "AI 판정 이유가 분석되지 않았습니다." // ✨ 저장
+                    });
                 }
             });
 
@@ -3933,7 +3970,11 @@ function renderCollaborativeTable(projectData, asm) {
                 </select>
             </td>
             <td><input type="number" step="0.1" class="score-input" data-num="${q.num}" value="${q.score}" onchange="updateBaseScore(${qIdx}, this.value)" style="width:50px;"></td>
-            <td><span style="background:${q.level === 'A+' ? '#ef4444' : '#8b5cf6'}; color:white; padding:2px 6px; border-radius:4px;">${q.level || 'C'}</span></td>
+            <td style="text-align: center; vertical-align: middle;">
+                <span style="background:${q.level === 'A+' ? '#ef4444' : '#8b5cf6'}; color:white; padding:2px 6px; border-radius:4px; font-weight:bold;">${q.level || 'C'}</span>
+                <br>
+                <button onclick="showAiReason(${qIdx})" style="margin-top: 6px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">🔍 판정이유</button>
+            </td>
             <td>
                 <select class="level-select" style="padding:4px; font-weight:bold;" onchange="saveMyInput(${qIdx}, this.value)">
                     <option value="" ${!myInput ? 'selected' : ''}>선택</option>
@@ -4330,6 +4371,9 @@ async function transformAndSaveExamToBank() {
         }
 
         alert(`🎉 완벽합니다! 총 ${savedCount}개의 시험지 문항이 완벽하게 백엔드 검증을 마친 뒤 저작권 회피 변형 문항으로 데이터베이스 서랍에 입고되었습니다.`);
+
+        await updateQuestionCount(); 
+        initDashboard();
 
     } catch (error) {
         alert("변형 저장 중 오류 발생: " + error.message);
@@ -4935,7 +4979,117 @@ async function rejectFeedback(feedbackId) {
     }
 }
 
+// ✨ AI 판정 이유를 띄워주는 알림창 함수
+function showAiReason(qIdx) {
+    if (!parsedScores || !parsedScores[qIdx]) return;
+    const q = parsedScores[qIdx];
+    const reason = q.reason || "AI가 판정 이유를 응답하지 않았습니다.";
+    
+    // 단순 alert 대신 깔끔하게 내용을 보여줍니다.
+    alert(`[문항 ${q.num} | AI 판정: ${q.level}]\n\n💡 판정 이유:\n${reason}`);
+}
 
+// ==========================================
+// 📚 [2탄] 성취기준 사전 (아코디언 및 자동 닫힘 로직)
+// ==========================================
+
+// 1. 패널 열기/닫기
+function toggleDictionaryPanel() {
+    const panel = document.getElementById('floating-dictionary-panel');
+    if (panel) {
+        panel.classList.toggle('open');
+        if (panel.classList.contains('open')) {
+            initDictionarySubjects(); // 열릴 때 과목 목록 채우기
+        }
+    }
+}
+
+// 2. 현재 DB에 있는 과목들만 모아서 드롭다운에 채워주기
+function initDictionarySubjects() {
+    const select = document.getElementById('dict-subject-select');
+    if (select.options.length > 1) return; // 이미 채워져 있으면 건너뜀
+
+    for (const key in subjectData) {
+        if (subjectData[key].standards && subjectData[key].standards.length > 0) {
+            const opt = document.createElement('option');
+            opt.value = key;
+            opt.innerText = subjectData[key].title;
+            select.appendChild(opt);
+        }
+    }
+}
+
+// 3. 과목을 선택하면 아코디언 목록 렌더링하기
+function loadDictionaryStandards() {
+    const subject = document.getElementById('dict-subject-select').value;
+    const container = document.getElementById('dict-accordion-container');
+    
+    if (!subject) {
+        container.innerHTML = '<p style="text-align:center; color:#64748b; font-size:0.95rem; margin-top:2rem;">과목을 선택하면 성취기준이 나타납니다.</p>';
+        return;
+    }
+
+    const data = subjectData[subject];
+    if (!data || !data.standards) return;
+
+    let html = '';
+    data.standards.forEach((std, index) => {
+        // DB에 저장된 수준별 텍스트를 가져오되 없으면 안전하게 빈칸 처리
+        const lvlA = std.levels?.high || "데이터 없음";
+        const lvlB = std.levels?.b || (std.levels?.high ? std.levels.high.replace("이해하여 설명할 수 있으며", "설명할 수 있고") : "데이터 없음");
+        const lvlC = std.levels?.mid || "데이터 없음";
+        const lvlD = std.levels?.d || (std.levels?.mid ? std.levels.mid.replace("이해하고", "알고") : "데이터 없음");
+        const lvlE = std.levels?.low || "데이터 없음";
+
+        html += `
+        <div class="dict-accordion-item">
+            <button class="dict-accordion-header" onclick="toggleAccordion(${index})">
+                <span style="flex:1; padding-right:10px;">${std.code}</span>
+                <span id="acc-icon-${index}">▼</span>
+            </button>
+            
+            <div id="acc-body-${index}" class="dict-accordion-body">
+                <strong style="color:#1e40af; display:block; margin-bottom:12px; font-size:0.95rem;">${std.desc}</strong>
+                <div style="background:#fef2f2; padding:8px; border-radius:4px; margin-bottom:4px; border-left:3px solid #ef4444;"><strong>[A]</strong> ${lvlA}</div>
+                <div style="background:#fffbeb; padding:8px; border-radius:4px; margin-bottom:4px; border-left:3px solid #f59e0b;"><strong>[B]</strong> ${lvlB}</div>
+                <div style="background:#f0fdf4; padding:8px; border-radius:4px; margin-bottom:4px; border-left:3px solid #22c55e;"><strong>[C]</strong> ${lvlC}</div>
+                <div style="background:#eff6ff; padding:8px; border-radius:4px; margin-bottom:4px; border-left:3px solid #3b82f6;"><strong>[D]</strong> ${lvlD}</div>
+                <div style="background:#f8fafc; padding:8px; border-radius:4px; border-left:3px solid #94a3b8;"><strong>[E]</strong> ${lvlE}</div>
+            </div>
+        </div>`;
+    });
+    
+    container.innerHTML = html;
+}
+
+// 4. ✨ 마법의 자동 닫힘 로직 (다른 걸 누르면 기존 건 닫힘!)
+function toggleAccordion(index) {
+    const allHeaders = document.querySelectorAll('.dict-accordion-header');
+    const allBodies = document.querySelectorAll('.dict-accordion-body');
+    const allIcons = document.querySelectorAll('[id^="acc-icon-"]');
+    
+    const targetBody = document.getElementById(`acc-body-${index}`);
+    const targetHeader = targetBody.previousElementSibling;
+    const targetIcon = document.getElementById(`acc-icon-${index}`);
+
+    const isCurrentlyOpen = targetBody.classList.contains('open');
+
+    // 1단계: 조건 없이 무조건 모든 탭을 전부 닫아버립니다. (자동 닫힘)
+    allBodies.forEach(body => body.classList.remove('open'));
+    allHeaders.forEach(header => header.classList.remove('active'));
+    allIcons.forEach(icon => icon.innerText = '▼');
+
+    // 2단계: 방금 누른 탭이 원래 '닫혀있던 상태'였다면 그것만 엽니다.
+    // (만약 이미 열려있던 걸 또 누른 거라면, 1단계에서 닫혔으므로 그대로 끝납니다.)
+    if (!isCurrentlyOpen) {
+        targetBody.classList.add('open');
+        targetHeader.classList.add('active');
+        targetIcon.innerText = '▲';
+        
+        // 열린 항목이 화면 가운데 오도록 스크롤 부드럽게 이동
+        targetHeader.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
 
 // ==========================================
 // 🌟 [최종 업데이트] Vite 모듈 환경에서 HTML 버튼들이 함수를 찾을 수 있도록 외부(window)로 연결해주는 마법의 다리
@@ -4964,7 +5118,8 @@ const exposeToWindow = {
     calculateTotalCutScores, openSpecificFeedbackPanel, updateStep2Total, markAsReady, goToStep, updateQuestionCount,
     
    
-    changeGroup, openMemoBoard, closeMemoBoard, submitMemo, changeSubject
+    changeGroup, openMemoBoard, closeMemoBoard, submitMemo, changeSubject, showAiReason,
+    toggleDictionaryPanel, initDictionarySubjects, loadDictionaryStandards, toggleAccordion
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
