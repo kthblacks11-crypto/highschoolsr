@@ -929,7 +929,7 @@ let currentSubjectQCount = {}; // 💡 과목별 문항 개수 미리 저장소
 const curriculumMap = {
     'math': {
         '공통 과목': [{id: 'common1', name: '공통수학1'}, {id: 'common2', name: '공통수학2'}, {id: 'basic_math1', name: '기본수학1'}, {id: 'basic_math2', name: '기본수학2'}],
-        '일반 선택': [{id: 'algebra', name: '대수'}, {id: 'calculus1', name: '미적분Ⅰ'}, {id: 'stats', name: '확률과 통계'}],
+        '일반 선택': [{id: 'algebra', name: '대수'}, {id: 'calculus1', name: '미적분Ⅰ'}, {id: 'probStat', name: '확률과 통계'}],
         '진로 선택': [{id: 'geometry', name: '기하'}, {id: 'calculus2', name: '미적분Ⅱ'}, {id: 'econ_math', name: '경제 수학'}, {id: 'ai-math', name: '인공지능 수학'}, {id: 'job_math', name: '직무 수학'}],
         '융합 선택': [{id: 'math_culture', name: '수학과 문화'}, {id: 'prac_stats', name: '실용 통계'}, {id: 'math_task', name: '수학과제 탐구'}],
         '기타': [{id: 'uncategorized', name: '📦 미분류 보관함'}]
@@ -1803,7 +1803,7 @@ function updateSubjectList() {
     const subjectsByGroup = {
         'math': [
             {id: 'common1', name: '공통수학1'}, {id: 'common2', name: '공통수학2'},
-            {id: 'algebra', name: '대수'}, {id: 'calculus1', name: '미적분Ⅰ'}, {id: 'stats', name: '확률과 통계'}
+            {id: 'algebra', name: '대수'}, {id: 'calculus1', name: '미적분Ⅰ'}, {id: 'probStat', name: '확률과 통계'}
         ],
         'korean': [{id: 'kor_common', name: '공통국어'}, {id: 'kor_reading', name: '독서'}, {id: 'kor_lit', name: '문학'}],
         'english': [{id: 'eng_common', name: '공통영어'}, {id: 'eng_reading', name: '영어 독해와 작문'}],
@@ -4402,7 +4402,7 @@ function updateUniversalFilter() {
                 <option value="common2">📘 공통수학2</option>
                 <option value="algebra">📗 대수</option>
                 <option value="calculus1">📙 미적분Ⅰ</option>
-                <option value="stats">📊 확률과 통계</option>
+                <option value="probStat">📊 확률과 통계</option>
                 <option value="uncategorized">📦 미분류 보관함</option>
             `;
             filterSelect.style.background = '#fffbeb';
