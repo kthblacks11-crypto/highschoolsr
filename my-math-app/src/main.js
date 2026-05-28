@@ -1624,6 +1624,7 @@ async function saveQuestionToDB() {
         });
         alert("✨ 문항이 통합 서랍에 성공적으로 저장되었습니다!");
         
+        await updateQuestionCount();
         // 입력창 비우기
         document.getElementById('admin-q-text').value = '';
         document.getElementById('admin-q-answer').value = '';
@@ -4948,7 +4949,7 @@ const exposeToWindow = {
     deleteProject, inviteCollaborator, kickFromProject, openProject, toggleGlobalEditMode,
     startEditAssessment, editManualAssessment, deleteAssessment, updateBaseDifficulty,
     updateBaseScore, saveMyInput, copyAiLevelsToMine, applyBatchDifficulty,
-    calculateTotalCutScores, openSpecificFeedbackPanel, updateStep2Total, markAsReady, goToStep,
+    calculateTotalCutScores, openSpecificFeedbackPanel, updateStep2Total, markAsReady, goToStep, updateQuestionCount,
     
    
     changeGroup, openMemoBoard, closeMemoBoard, submitMemo, changeSubject
@@ -5076,6 +5077,37 @@ async function markMemosAsRead(memos) {
             });
         } catch(e) {
             console.error("읽음 처리 실패:", e);
+        }
+    }
+}
+
+
+async function updateQuestionCount() {
+    currentSubjectQCount = {}; // 초기화
+    const currentSubject = document.getElementById('admin-q-subject').value;
+
+    if (currentSubject && currentSubject !== 'uncategorized') {
+        try {
+            const snapshot = await db.collection('transformed_bank')
+                                     .where('subject', '==', currentSubject)
+                                     .get();
+                                     
+            snapshot.forEach(doc => {
+                const stdCode = doc.data().standard_code;
+                if (stdCode && stdCode !== "unknown" && stdCode !== "코드없음") {
+                    currentSubjectQCount[stdCode] = (currentSubjectQCount[stdCode] || 0) + 1;
+                }
+            });
+            
+            console.log("새로 계산된 문항 수:", currentSubjectQCount);
+            
+            // 💡 중요: 성취기준 목록 화면을 다시 그려주는 함수 호출
+            if (typeof renderStandardList === 'function') {
+                renderStandardList(); 
+            }
+            
+        } catch(e) { 
+            console.warn("문항 수 계산 실패", e); 
         }
     }
 }
