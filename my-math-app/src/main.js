@@ -4910,7 +4910,7 @@ async function rejectFeedback(feedbackId) {
 const exposeToWindow = {
     handleLogin, handleLogout, handleDeleteAccount, openFeedback, openAdminFeedback,
     openAdminMode, openSettings, closeSettings, closeFeedback, closeModal,
-    closeAdminFeedback, saveApiKey, submitFeedback, changeSubject, showSection,
+    closeAdminFeedback, saveApiKey, submitFeedback, showSection,
     openAnalysisMode, startLevelMatching, checkLevelAnswer, nextLevelQuestion,
     backToStandardSelection, saveChecklist, openModal, loadBookmark, openBookmarkModal,
     closeBookmarkModal, createNewProject, backToProjectList, openManualAssessmentModal,
@@ -4929,6 +4929,7 @@ const exposeToWindow = {
     startEditAssessment, editManualAssessment, deleteAssessment, updateBaseDifficulty,
     updateBaseScore, saveMyInput, copyAiLevelsToMine, applyBatchDifficulty,
     calculateTotalCutScores, openSpecificFeedbackPanel, updateStep2Total, markAsReady, goToStep, openMemoBoard, closeMemoBoard, submitMemo
+    changeGroup, openMemoBoard, closeMemoBoard, submitMemo
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
