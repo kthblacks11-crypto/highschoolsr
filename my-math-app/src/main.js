@@ -4905,7 +4905,7 @@ async function rejectFeedback(feedbackId) {
 }
 
 // ==========================================
-// 🌟 [핵심] Vite 모듈 환경에서 HTML 버튼들이 함수를 찾을 수 있도록 외부(window)로 연결해주는 마법의 다리 🌟
+// 🌟 [최종 업데이트] Vite 모듈 환경에서 HTML 버튼들이 함수를 찾을 수 있도록 외부(window)로 연결해주는 마법의 다리
 // ==========================================
 const exposeToWindow = {
     handleLogin, handleLogout, handleDeleteAccount, openFeedback, openAdminFeedback,
@@ -4928,7 +4928,9 @@ const exposeToWindow = {
     deleteProject, inviteCollaborator, kickFromProject, openProject, toggleGlobalEditMode,
     startEditAssessment, editManualAssessment, deleteAssessment, updateBaseDifficulty,
     updateBaseScore, saveMyInput, copyAiLevelsToMine, applyBatchDifficulty,
-    calculateTotalCutScores, openSpecificFeedbackPanel, updateStep2Total, markAsReady, goToStep, openMemoBoard, closeMemoBoard, submitMemo,
+    calculateTotalCutScores, openSpecificFeedbackPanel, updateStep2Total, markAsReady, goToStep,
+    
+    // 👇 교과군 확장 및 업무 메모를 위해 새롭게 추가된 핵심 함수 4가지
     changeGroup, openMemoBoard, closeMemoBoard, submitMemo
 };
 
