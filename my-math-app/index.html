@@ -201,7 +201,11 @@
                 현재 총 배점: <span id="step2-total-score" style="font-size: 1.3rem; color: #ea580c;">0.0</span> / 100 점
             </div>
         </div>
-    
+        <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
+            <span style="font-size: 0.9rem; font-weight: bold; color: #334155;">🎯 분석할 문항 범위 지정:</span>
+            <input type="number" id="exam-start-num" value="1" style="width: 50px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;"> 번 부터
+            <input type="number" id="exam-end-num" value="10" style="width: 50px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;"> 번 까지
+        </div>
         <div id="ai-helper-zone" style="display:none; background:#f8fafc; border:2px dashed #8b5cf6; border-radius:8px; padding:1.5rem; margin-bottom:1.5rem;">
             <h4 style="margin-top:0; color:#6d28d9;">🤖 AI 시험지 정밀 분석기</h4>
             <p style="font-size:0.85rem; color:#475569;">시험지 이미지를 올리면 AI가 문항과 배점, 예상 성취수준을 추출하여 아래 표에 자동으로 채워줍니다.</p>

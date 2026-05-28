@@ -2471,6 +2471,9 @@ async function startExamAiAnalysis(base64Data) {
     const loadingEl = document.getElementById('exam-loading');
     if (loadingEl) loadingEl.style.display = 'flex';
 
+    const startNum = document.getElementById('exam-start-num')?.value || "1";
+    const endNum = document.getElementById('exam-end-num')?.value || "10";
+
     try {
         const mimeTypeMatch = base64Data.match(/data:(.*?);base64/);
         const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : "image/jpeg";
@@ -2489,6 +2492,8 @@ async function startExamAiAnalysis(base64Data) {
                 base64Clean: base64Clean,
                 referenceDBText: referenceDBText,
                 subject: currentSubject, // 🟢 수정 포인트: 과목 코드를 백엔드로 보내주도록 추가합니다.
+                startNum: startNum,  // 🟢 백엔드로 출발!
+                endNum: endNum,      // 🟢 백엔드로 출발!
                 apiKey: userApiKey
             })
         });
