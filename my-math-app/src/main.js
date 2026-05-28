@@ -675,7 +675,7 @@ async function executeAnalysis() {
         }
 
         // 🌟 구글 주소 대신 선생님의 클라우드플레어 백엔드로 우회 신호 발송!
-        const workerUrl = "https://script.google.com/macros/s/AKfycbzJt0A5bM_OkCXvZVzN2u0dfY-oLn8_7NlY_dZfrPl_cY7V-qJJDIGhEs35mWRKK5IM/exec"; 
+        const workerUrl = "https://script.google.com/macros/s/AKfycbwgx4RgF8FQxxL3jBgEQ5l369llADjhZ1NepulIdF4DdX18kBrB8oRQ4Ft0d5WdKtEF/exec"; 
         const response = await fetch(workerUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain' },
@@ -820,7 +820,7 @@ function renderSophisticatedResult(rawText, base64Image) {
 
 async function processAndSaveBackground(analysisText, apiKey) {
     try {
-        const workerUrl = "https://script.google.com/macros/s/AKfycbzJt0A5bM_OkCXvZVzN2u0dfY-oLn8_7NlY_dZfrPl_cY7V-qJJDIGhEs35mWRKK5IM/exec"; 
+        const workerUrl = "https://script.google.com/macros/s/AKfycbwgx4RgF8FQxxL3jBgEQ5l369llADjhZ1NepulIdF4DdX18kBrB8oRQ4Ft0d5WdKtEF/exec"; 
         const userApiKey = localStorage.getItem('gemini_api_key');
         const response = await fetch(workerUrl, {
             method: 'POST',
@@ -1351,7 +1351,7 @@ async function reAnalyzeWithChat() {
     resultText.innerHTML = '<div style="text-align:center; padding: 3rem; color: #3b82f6; font-weight: bold; font-size: 1.1rem;">AI 교사가 대화를 바탕으로 재분석 중입니다... ⏳</div>';
 
     try {
-        const workerUrl = "https://script.google.com/macros/s/AKfycbzJt0A5bM_OkCXvZVzN2u0dfY-oLn8_7NlY_dZfrPl_cY7V-qJJDIGhEs35mWRKK5IM/exec";
+        const workerUrl = "https://script.google.com/macros/s/AKfycbwgx4RgF8FQxxL3jBgEQ5l369llADjhZ1NepulIdF4DdX18kBrB8oRQ4Ft0d5WdKtEF/exec";
         const userApiKey = localStorage.getItem('gemini_api_key');
         const response = await fetch(workerUrl, {
             method: 'POST',
@@ -1409,7 +1409,7 @@ async function sendChatMessage() {
 
     try {
         // 🌟 챗봇 프롬프트를 전면 숨기고 클라우드플레어 챗봇 서랍(action: "chat_message") 호출!
-        const workerUrl = "https://script.google.com/macros/s/AKfycbzJt0A5bM_OkCXvZVzN2u0dfY-oLn8_7NlY_dZfrPl_cY7V-qJJDIGhEs35mWRKK5IM/exec";
+        const workerUrl = "https://script.google.com/macros/s/AKfycbwgx4RgF8FQxxL3jBgEQ5l369llADjhZ1NepulIdF4DdX18kBrB8oRQ4Ft0d5WdKtEF/exec";
         const userApiKey = localStorage.getItem('gemini_api_key');
         const response = await fetch(workerUrl, {
             method: 'POST', 
@@ -2433,7 +2433,7 @@ async function startExamAiAnalysis(base64Data) {
         const base64Clean = base64Data.split(',')[1];
         const referenceDBText = await fetchReferenceQuestions(currentSubject);
 
-        const workerUrl = "https://script.google.com/macros/s/AKfycbzJt0A5bM_OkCXvZVzN2u0dfY-oLn8_7NlY_dZfrPl_cY7V-qJJDIGhEs35mWRKK5IM/exec";
+        const workerUrl = "https://script.google.com/macros/s/AKfycbwgx4RgF8FQxxL3jBgEQ5l369llADjhZ1NepulIdF4DdX18kBrB8oRQ4Ft0d5WdKtEF/exec";
         const userApiKey = localStorage.getItem('gemini_api_key');
         
         const response = await fetch(workerUrl, {
@@ -4264,7 +4264,7 @@ async function transformAndSaveExamToBank() {
 
         let targetSubject = document.getElementById('cut-score-subject')?.value || currentSubject || "uncategorized";
         let questionsPayload = extractedQuestionsArray.map(q => q.text);
-        const workerUrl = "https://script.google.com/macros/s/AKfycbzJt0A5bM_OkCXvZVzN2u0dfY-oLn8_7NlY_dZfrPl_cY7V-qJJDIGhEs35mWRKK5IM/exec";
+        const workerUrl = "https://script.google.com/macros/s/AKfycbwgx4RgF8FQxxL3jBgEQ5l369llADjhZ1NepulIdF4DdX18kBrB8oRQ4Ft0d5WdKtEF/exec";
         const userApiKey = localStorage.getItem('gemini_api_key');
         
         const response = await fetch(workerUrl, {
@@ -4763,7 +4763,7 @@ async function submitSpecificFeedback() {
     document.getElementById('fb-loading-msg').style.display = 'block';
 
     try {
-        const workerUrl = "https://script.google.com/macros/s/AKfycbzJt0A5bM_OkCXvZVzN2u0dfY-oLn8_7NlY_dZfrPl_cY7V-qJJDIGhEs35mWRKK5IM/exec"; 
+        const workerUrl = "https://script.google.com/macros/s/AKfycbwgx4RgF8FQxxL3jBgEQ5l369llADjhZ1NepulIdF4DdX18kBrB8oRQ4Ft0d5WdKtEF/exec"; 
         const userApiKey = localStorage.getItem('gemini_api_key');
         const response = await fetch(workerUrl, {
             method: 'POST',
