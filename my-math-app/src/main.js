@@ -960,7 +960,7 @@ const curriculumMap = {
     }
 };
 
-// 교과군(탭) 변경 시 호출
+// 교과군(탭) 변경 시 호출 (준비중 과목 비활성화 및 자동 선택 적용)
 function changeGroup(groupId) {
     currentGroup = groupId;
     
@@ -973,27 +973,46 @@ function changeGroup(groupId) {
     selectEl.innerHTML = '';
     const map = curriculumMap[groupId];
     
+    let firstEnabledSubject = null; // 💡 탭을 열었을 때 데이터가 있는 첫 번째 과목을 찾기 위한 변수
+    
     for (const category in map) {
         const optgroup = document.createElement('optgroup');
         optgroup.label = category;
         map[category].forEach(sub => {
             const opt = document.createElement('option');
             opt.value = sub.id;
-            opt.innerText = sub.name;
+            
+            // ✨ 핵심: 해당 과목 데이터가 subjectData에 있는지 확인!
+            if (typeof subjectData !== 'undefined' && subjectData[sub.id]) {
+                // 데이터가 있으면 정상적으로 출력
+                opt.innerText = sub.name;
+                if (!firstEnabledSubject) firstEnabledSubject = sub.id; // 첫 활성화 과목 기억
+            } else {
+                // 데이터가 없으면 비활성화 처리
+                opt.innerText = sub.name + " (준비중)";
+                opt.disabled = true;           // 마우스로 선택 불가
+                opt.style.color = "#94a3b8";   // 글자색을 흐린 회색으로 변경
+            }
+            
             optgroup.appendChild(opt);
         });
         selectEl.appendChild(optgroup);
     }
     
-    // 첫 번째 과목으로 자동 선택 후 데이터 갱신
+    // 💡 무조건 첫 번째 항목이 아니라, "데이터가 존재하는 첫 번째 과목"으로 드롭다운을 맞춤
+    if (firstEnabledSubject) {
+        selectEl.value = firstEnabledSubject;
+    }
+    
+    // 과목을 변경했으니 화면 전체 새로고침
     changeSubject();
 }
 
-// 세부 과목 변경 시 호출 (기존 함수 업그레이드)
+// 세부 과목 변경 시 호출 (완벽 연동 버전)
 async function changeSubject() {
     currentSubject = document.getElementById('detail-subjects').value;
     
-    // 부제목(단원명 등) 업데이트
+    // 1. 부제목(단원명 등) 업데이트
     const data = subjectData[currentSubject];
     const subTitleEl = document.getElementById('main-subtitle');
     if (data) { 
@@ -1002,11 +1021,10 @@ async function changeSubject() {
         subTitleEl.innerText = "이 과목의 성취기준 데이터가 아직 등록되지 않았습니다.";
     }
     
-    // ✨ 핵심: 버튼 비활성화를 위해 DB에서 이 과목의 문항 개수를 미리 세어옵니다!
+    // 2. 버튼 비활성화를 위한 문항 개수 계산
     currentSubjectQCount = {};
     if (currentSubject && currentSubject !== 'uncategorized') {
         try {
-            // 해당 과목의 문항만 싹 긁어옵니다
             const snapshot = await db.collection('transformed_bank').where('subject', '==', currentSubject).get();
             snapshot.forEach(doc => {
                 const stdCode = doc.data().standard_code;
@@ -1017,11 +1035,10 @@ async function changeSubject() {
         } catch(e) { console.warn("문항 수 계산 실패", e); }
     }
 
-    initDashboard(); 
-    initChecklist();
-
-    const bookmarkList = document.getElementById('bookmark-list');
-    if (bookmarkList) bookmarkList.innerHTML = "";
+    // 🌟 3. [핵심] 3가지 화면 모두 즉시 새로고침하여 완벽하게 연동시킵니다!
+    initDashboard(); // 성취기준과 성취수준 갱신
+    if (typeof initChecklist === 'function') initChecklist(); // 나의 체크리스트 갱신
+    if (typeof loadBookmark === 'function') loadBookmark(); // 북마크 문항 갱신
 }
 
 function initDashboard() {
@@ -4905,6 +4922,18 @@ async function rejectFeedback(feedbackId) {
 }
 
 // ==========================================
+// 🌟 처음 접속 시 자동으로 '수학 -> 공통수학1' 화면을 띄워주는 초기화 로직
+// ==========================================
+window.addEventListener('DOMContentLoaded', () => {
+    // 파이어베이스 데이터베이스를 불러오는 시간을 고려해 0.5초(500ms) 뒤에 자동으로 수학 탭을 실행합니다.
+    setTimeout(() => {
+        if (typeof changeGroup === 'function') {
+            changeGroup('math');
+        }
+    }, 500);
+});
+
+// ==========================================
 // 🌟 [최종 업데이트] Vite 모듈 환경에서 HTML 버튼들이 함수를 찾을 수 있도록 외부(window)로 연결해주는 마법의 다리
 // ==========================================
 const exposeToWindow = {
@@ -4930,8 +4959,8 @@ const exposeToWindow = {
     updateBaseScore, saveMyInput, copyAiLevelsToMine, applyBatchDifficulty,
     calculateTotalCutScores, openSpecificFeedbackPanel, updateStep2Total, markAsReady, goToStep,
     
-    // 👇 교과군 확장 및 업무 메모를 위해 새롭게 추가된 핵심 함수 4가지
-    changeGroup, openMemoBoard, closeMemoBoard, submitMemo
+   
+    changeGroup, openMemoBoard, closeMemoBoard, submitMemo, changeSubject
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
