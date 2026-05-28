@@ -2561,11 +2561,9 @@ function deleteQuestion(idx) {
     renderQuestionCards();
 }
 
-// 🟢 [추가] AI 대기 화면에서 위 문항과 텍스트 및 그림 합치기
 function mergeWithPrevious(idx) {
     if (idx <= 0) return;
     if(!confirm("이 문항의 내용을 위 문항과 합치시겠습니까?")) return;
-    
     extractedQuestionsArray[idx - 1].text += "\n" + extractedQuestionsArray[idx].text;
     if (!extractedQuestionsArray[idx - 1].image && extractedQuestionsArray[idx].image) {
         extractedQuestionsArray[idx - 1].image = extractedQuestionsArray[idx].image;
@@ -2574,7 +2572,6 @@ function mergeWithPrevious(idx) {
     renderQuestionCards();
 }
 
-// 🟢 [추가] 잘못 붙여넣은 그림 조각만 X 버튼으로 날리기
 function removeQuestionImage(idx) {
     if(confirm("이 문항에 첨부된 그림 조각을 삭제하시겠습니까?")) {
         extractedQuestionsArray[idx].image = null;
@@ -2624,13 +2621,12 @@ function renderQuestionCards() {
                 </div>
             </div>
 
-            // 🟢 renderQuestionCards 내부의 이미지 영역 교체
             <div id="q-image-container-${idx}" style="margin-top: 10px; text-align: center;">
-            ${q.image ? `
-                <div style="position: relative; display: inline-block; max-width: 100%;">
-                <img src="${q.image}" style="max-width:100%; border:1px solid #e2e8f0; border-radius:4px;">
-                <button onclick="removeQuestionImage(${idx})" style="position: absolute; top: 5px; right: 5px; background: #ef4444; color: white; border: none; border-radius: 4px; padding: 3px 8px; font-size: 0.75rem; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">❌ 그림 지우기</button>
-                </div>
+                ${q.image ? `
+                    <div style="position: relative; display: inline-block; max-width: 100%;">
+                        <img src="${q.image}" style="max-width:100%; border:1px solid #e2e8f0; border-radius:4px;">
+                        <button onclick="removeQuestionImage(${idx})" style="position: absolute; top: 5px; right: 5px; background: #ef4444; color: white; border: none; border-radius: 4px; padding: 3px 8px; font-size: 0.75rem; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">❌ 그림 지우기</button>
+                    </div>
                 ` : ''}
             </div>
             
@@ -2645,7 +2641,6 @@ function renderQuestionCards() {
         listContainer.appendChild(qCard);
     });
 
-    // 💡 핵심: 스크롤 영역 밖(외부)에 동적 버튼 컨테이너를 만듭니다!
     let applyBtnContainer = document.getElementById('external-apply-btn-zone');
     if (!applyBtnContainer) {
         applyBtnContainer = document.createElement('div');
@@ -2654,7 +2649,6 @@ function renderQuestionCards() {
         applyBtnContainer.style.margin = '15px 0';
         
         const wrapper = document.getElementById('exam-inspector-wrapper');
-        // 처음에 시험지는 표 위에 있으므로, 시험지 영역 바로 밑에(스크롤 밖 우측 하단) 버튼을 둡니다.
         if (wrapper) wrapper.parentNode.insertBefore(applyBtnContainer, wrapper.nextSibling);
     }
     
@@ -4004,15 +3998,14 @@ function renderCollaborativeTable(projectData, asm) {
     const container = document.getElementById('score-table-container');
     const currentUserEmail = auth.currentUser.email;
     
-    // 💡 [완벽 해결] 방장(만든 사람)과 초대받은 사람을 모두 합쳐서 완벽한 명단을 만듭니다!
     let allMembers = projectData.collaborators || [];
     if (projectData.ownerEmail && !allMembers.includes(projectData.ownerEmail)) {
-        allMembers.unshift(projectData.ownerEmail); // 방장을 명단 맨 앞에 강제로 추가
+        allMembers.unshift(projectData.ownerEmail); 
     }
     if (!allMembers.includes(currentUserEmail)) {
-        allMembers.push(currentUserEmail); // 현재 접속 중인 사람도 혹시 모르니 무조건 추가
+        allMembers.push(currentUserEmail); 
     }
-    const collaborators = [...new Set(allMembers)]; // 중복된 이름은 깔끔하게 제거
+    const collaborators = [...new Set(allMembers)]; 
 
     const teacherInputs = asm.teacherInputs || {};
     const baseQuestions = asm.parsedScores || [];
@@ -4047,13 +4040,12 @@ function renderCollaborativeTable(projectData, asm) {
     collaborators.forEach(email => {
         if (email !== currentUserEmail) html += `<th>${email.split('@')[0]} 선생님</th>`;
     });
-    html += `<th>문항 관리</th>`; 
-    html += `</tr></thead><tbody>`;
-      
+    html += `<th style="min-width:90px; text-align:center;">문항 관리</th></tr></thead><tbody>`;
+
     const levelToNum = { 'A+': 6, 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'E': 1 };
 
     baseQuestions.forEach((q, qIdx) => {
-        const isShort = String(q.num).includes('서');
+        const isShort = String(q.num).includes('서') || String(q.num).startsWith('서');
         const myInput = teacherInputs[currentUserEmail]?.[qIdx]?.level || '';
         
         let minNum = myInput ? levelToNum[myInput] : null;
@@ -4073,6 +4065,7 @@ function renderCollaborativeTable(projectData, asm) {
         const diff = q.difficulty || '선택하세요';
 
         html += `<tr style="${trStyle}">
+            <td style="font-size: 0.9rem; font-weight:bold; text-align:center;">${q.num}${isWarning ? ' 🚨' : ''}</td>
             <td style="width: 120px; vertical-align: middle;">
                 <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
                     <input type="checkbox" class="diff-batch-cb" data-idx="${qIdx}" style="transform: scale(1.3); margin: 0;">
@@ -4105,8 +4098,10 @@ function renderCollaborativeTable(projectData, asm) {
                 html += `<td>${theirInput ? "<span style='color:#10b981; font-weight:bold;'>입력완료🔒</span>" : "<span style='color:#cbd5e1;'>대기중</span>"}</td>`;
             }
         });
-        html += `<td style="text-align:center;"><button onclick="deleteTableQuestion(${qIdx})" style="background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.8rem;">🗑️ 삭제</button></td>`;
-    
+        
+        // 우측 끝에 개별 문항 삭제 버튼 탑재
+        html += `<td style="text-align:center; vertical-align: middle;"><button onclick="deleteTableQuestion(${qIdx})" style="background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.8rem;">🗑️ 삭제</button></td>`;
+        
         html += `</tr>`;
     });
     html += `</tbody></table>`;
@@ -4166,7 +4161,6 @@ function renderCollaborativeTable(projectData, asm) {
     setTimeout(initDiffShiftClick, 100); 
 }
 
-// 🟢 [신규 추가] 협업 표에서 문항 영구 삭제 및 번호 정렬 자동화 엔진
 async function deleteTableQuestion(qIdx) {
     if(!confirm("이 문항을 전체 협업 표에서 영구 삭제하시겠습니까?\n삭제 후 문항 번호 자동 조정 및 합계 점수가 실시간으로 동기화됩니다.")) return;
     
@@ -4179,10 +4173,8 @@ async function deleteTableQuestion(qIdx) {
         let asm = assessments[currentEditingAssessmentIndex];
         let baseScores = asm.parsedScores || [];
         
-        // 1. 해당 인덱스 문항 제거
         baseScores.splice(qIdx, 1);
         
-        // 2. 남은 문항 번호 정렬 (선택형은 1부터 순서대로, 서답형은 서1부터 순서대로 자동 당김)
         let objIdx = 1;
         let subIdx = 1;
         baseScores.forEach(q => {
@@ -4197,7 +4189,6 @@ async function deleteTableQuestion(qIdx) {
         
         asm.parsedScores = baseScores;
         
-        // 3. 공동 작업자들의 개별 입력 데이터(teacherInputs) 배열도 한 칸씩 당겨주어 꼬임 방지
         if (asm.teacherInputs) {
             Object.keys(asm.teacherInputs).forEach(email => {
                 if (asm.teacherInputs[email] && asm.teacherInputs[email].length > qIdx) {
