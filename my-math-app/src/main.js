@@ -690,6 +690,9 @@ async function executeAnalysis() {
         }
         
         const data = await response.json();
+        if (data.error) {
+            throw new Error(data.error.message || "구글 AI가 응답을 거부했습니다. API 키를 확인해주세요.");
+        }
         const analysisText = data.candidates[0].content.parts[0].text;
         
         currentChatContext = analysisText; 
@@ -2451,6 +2454,10 @@ async function startExamAiAnalysis(base64Data) {
         const fullText = data.candidates[0].content.parts[0].text;
         
         extractedQuestionsArray = [];
+        // ✨ 구글 AI 진짜 에러 잡아내기
+        if (data.error) {
+        throw new Error(data.error.message || "구글 AI가 응답을 거부했습니다. API 키를 확인해주세요.");
+        }
         const blocks = fullText.split('---').map(b => b.trim()).filter(b => b.length > 0);
         
         blocks.forEach((block, idx) => {
@@ -4256,7 +4263,7 @@ async function transformAndSaveExamToBank() {
         }
 
         let targetSubject = document.getElementById('cut-score-subject')?.value || currentSubject || "uncategorized";
-
+        let questionsPayload = extractedQuestionsArray.map(q => q.text);
         const workerUrl = "https://script.google.com/macros/s/AKfycbzJt0A5bM_OkCXvZVzN2u0dfY-oLn8_7NlY_dZfrPl_cY7V-qJJDIGhEs35mWRKK5IM/exec";
         const userApiKey = localStorage.getItem('gemini_api_key');
         
