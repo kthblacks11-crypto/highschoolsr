@@ -5131,7 +5131,7 @@ function toggleAccordion(index) {
 // ==========================================
 // 📚 공통 지문 보관함 엔진 (국어/영어 장문 및 세트 문항 완벽 대응)
 // ==========================================
-let commonPassages = []; // 압축된 지문 이미지(Base64)들을 누적해서 담아둘 배열
+var commonPassages = []; // 압축된 지문 이미지(Base64)들을 누적해서 담아둘 배열
 
 function toggleCommonPassageTray() {
     const tray = document.getElementById('common-passage-tray');
