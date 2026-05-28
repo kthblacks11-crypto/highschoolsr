@@ -888,37 +888,36 @@ function showSection(id) {
     const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(`'${id}'`));
     if (activeBtn) activeBtn.classList.add('active');
     
-    const subjectSelector = document.querySelector('.curriculum-selector');
-    const subTitle = document.getElementById('main-subtitle');
+    // 💡 투명 망토를 씌울 대상 (교과군, 세부과목 드롭다운 전체를 묶은 컨테이너)
+    const curriculumSelector = document.querySelector('.curriculum-selector');
+    const subTitle = document.getElementById('main-subtitle'); 
 
+    // 문제 분석이나 분할점수 산출 탭일 경우 투명 망토 씌우기 (공간은 그대로 유지!)
     if (id === 'problem-analysis' || id === 'cut-score') {
-        if (subjectSelector) subjectSelector.style.visibility = 'hidden';
+        if (curriculumSelector) curriculumSelector.style.visibility = 'hidden';
         if (subTitle) subTitle.style.visibility = 'hidden';
     } else {
-        if (subjectSelector) subjectSelector.style.visibility = 'visible';
+        // 다른 탭으로 오면 다시 보이게 하기
+        if (curriculumSelector) curriculumSelector.style.visibility = 'visible';
         if (subTitle) subTitle.style.visibility = 'visible';
     }
     
     history.pushState({ section: id }, "", "#" + id);
 
-    // ✨ 마법의 코드: 탭을 누르면 무조건 해당 메뉴의 '초기 화면(Home)'으로 리셋!
+    // 💡 각 탭을 누를 때마다 화면 리셋 (초기화) 로직
     if (id === 'cut-score') {
-        // 분할점수 탭 초기화 (폴더 목록 화면으로)
         currentProjectId = null;
         document.querySelectorAll('.cut-score-card').forEach(card => card.style.display = 'none');
         document.getElementById('cut-score-dashboard').style.display = 'block';
-        loadProjects();
+        if (typeof loadProjects === 'function') loadProjects();
     } else if (id === 'problem-analysis') {
-        // 문제분석 탭 초기화 (기본 빈 화면으로)
-        resetAnalysis();
+        if (typeof resetAnalysis === 'function') resetAnalysis();
     } else if (id === 'quiz') {
-        // 퀴즈 탭 초기화 (성취기준 다시 선택 화면으로)
         const qSelect = document.getElementById('quiz-standard-selection');
         const qMatch = document.getElementById('quiz-level-matching');
         if(qSelect) qSelect.style.display = 'block';
         if(qMatch) qMatch.style.display = 'none';
     } else if (id === 'bookmark') {
-        // 북마크 탭 누르면 기존에 떠있던 목록 초기화
         const bList = document.getElementById('bookmark-list');
         if(bList) bList.innerHTML = ""; 
     }
