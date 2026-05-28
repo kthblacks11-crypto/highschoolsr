@@ -2549,7 +2549,33 @@ async function startExamAiAnalysis(base64Data) {
 // 전역 변수로 관리하여 삭제/수정이 용이하게 합니다
 let extractedQuestionsArray = [];
 
+// 🟢 [추가] AI 대기 화면에서 특정 문항 삭제 및 번호 정렬
+function deleteQuestion(idx) {
+    if(!confirm("이 문항을 목록에서 삭제하시겠습니까?")) return;
+    extractedQuestionsArray.splice(idx, 1);
+    renderQuestionCards();
+}
 
+// 🟢 [추가] AI 대기 화면에서 위 문항과 텍스트 및 그림 합치기
+function mergeWithPrevious(idx) {
+    if (idx <= 0) return;
+    if(!confirm("이 문항의 내용을 위 문항과 합치시겠습니까?")) return;
+    
+    extractedQuestionsArray[idx - 1].text += "\n" + extractedQuestionsArray[idx].text;
+    if (!extractedQuestionsArray[idx - 1].image && extractedQuestionsArray[idx].image) {
+        extractedQuestionsArray[idx - 1].image = extractedQuestionsArray[idx].image;
+    }
+    extractedQuestionsArray.splice(idx, 1);
+    renderQuestionCards();
+}
+
+// 🟢 [추가] 잘못 붙여넣은 그림 조각만 X 버튼으로 날리기
+function removeQuestionImage(idx) {
+    if(confirm("이 문항에 첨부된 그림 조각을 삭제하시겠습니까?")) {
+        extractedQuestionsArray[idx].image = null;
+        renderQuestionCards();
+    }
+}
 
 function renderQuestionCards() {
     const listContainer = document.getElementById('extracted-questions-list');
@@ -2593,8 +2619,14 @@ function renderQuestionCards() {
                 </div>
             </div>
 
+            // 🟢 renderQuestionCards 내부의 이미지 영역 교체
             <div id="q-image-container-${idx}" style="margin-top: 10px; text-align: center;">
-                ${q.image ? `<img src="${q.image}" style="max-width:100%; border:1px solid #e2e8f0; border-radius:4px;">` : ''}
+            ${q.image ? `
+                <div style="position: relative; display: inline-block; max-width: 100%;">
+                <img src="${q.image}" style="max-width:100%; border:1px solid #e2e8f0; border-radius:4px;">
+                <button onclick="removeQuestionImage(${idx})" style="position: absolute; top: 5px; right: 5px; background: #ef4444; color: white; border: none; border-radius: 4px; padding: 3px 8px; font-size: 0.75rem; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">❌ 그림 지우기</button>
+                </div>
+                ` : ''}
             </div>
             
             <div style="background: #fffbeb; border: 1px solid #fde68a; padding: 10px; border-radius: 6px; margin-top: 10px; text-align: left;">
@@ -3347,6 +3379,54 @@ async function deleteAssessment(index) {
     } catch(e) { alert("삭제 실패: " + e.message); }
 }
 
+// 🟢 [신규 추가] 문항 삭제 기능 (번호 자동 재정렬 포함)
+function deleteQuestion(idx) {
+    if(!confirm("이 문항을 삭제하시겠습니까? 삭제 후 문항 번호가 자동으로 재조정됩니다.")) return;
+    extractedQuestionsArray.splice(idx, 1);
+    rearrangeQuestionNumbers();
+    renderQuestionCards();
+}
+
+// 🟢 [신규 추가] 위 문항과 합치기 기능
+function mergeWithPrevious(idx) {
+    if (idx <= 0) return;
+    if(!confirm("이 문항의 텍스트를 위 문항과 합치시겠습니까?")) return;
+    
+    // 텍스트 병합
+    extractedQuestionsArray[idx - 1].text += "\n" + extractedQuestionsArray[idx].text;
+    // 이전 문항에 그림이 없고 현재 문항에 있으면 그림도 이전 문항으로 이관
+    if (!extractedQuestionsArray[idx - 1].image && extractedQuestionsArray[idx].image) {
+        extractedQuestionsArray[idx - 1].image = extractedQuestionsArray[idx].image;
+    }
+    
+    extractedQuestionsArray.splice(idx, 1);
+    rearrangeQuestionNumbers();
+    renderQuestionCards();
+}
+
+// 🟢 [신규 추가] 첨부된 그림 조각 지우기 기능
+function removeQuestionImage(idx) {
+    if(confirm("이 문항에 첨부된 그림을 삭제하시겠습니까?")) {
+        extractedQuestionsArray[idx].image = null;
+        renderQuestionCards();
+    }
+}
+
+// 🟢 [신규 추가] 학교 시험지 특성에 맞춘 스마트 문항 번호 자동 당김 엔진
+function rearrangeQuestionNumbers() {
+    let objIdx = 1;
+    let subIdx = 1;
+    extractedQuestionsArray.forEach((q) => {
+        if (String(q.num).includes('서') || q.num.startsWith('서')) {
+            q.num = '서' + subIdx;
+            subIdx++;
+        } else if (!isNaN(parseInt(q.num))) {
+            q.num = String(objIdx);
+            objIdx++;
+        }
+    });
+}
+
 // 🟢 [신규] 수행평가 수동 입력 로직
 function openManualAssessmentModal() { document.getElementById('manual-assessment-modal').style.display = 'flex'; }
 
@@ -3675,6 +3755,7 @@ window.addEventListener('popstate', function(event) {
     }
 });
 
+// 🛠️ 오타 교정 및 멀티라인 이유 추출 정규식 적용 완본
 async function sendAiResultsToTable() {
     if (extractedQuestionsArray.length === 0) { alert("분석된 문항이 없습니다."); return; }
 
@@ -3690,33 +3771,49 @@ async function sendAiResultsToTable() {
             let asm = assessments[currentEditingAssessmentIndex];
             let baseScores = asm.parsedScores || []; 
 
-            let newScores = [];
-            extractedQuestionsArray.forEach((q, idx) => {
-                // 💡 핵심: [수준]과 [이유]를 모두 찾아냅니다.
+            extractedQuestionsArray.forEach((q) => {
+                // 🟢 [개선] 정규식을 보완하여 여러 줄의 판정이유를 깨짐 없이 수집합니다.
                 let levelMatch = q.text.match(/\[수준\]\s*(A\+|[A-E])/);
-                let reasonMatch = q.text.match(/\[이유\]\s*([^|\n]+)/); // ✨ 이유 추출기 추가!
-                let diffSelect = document.getElementById(`ai-diff-${idx}`);
+                let reasonMatch = q.text.match(/\[이유\]\s*([\s\S]*?)(?=\[|$)/); 
+                
+                let diffSelect = document.getElementById(`ai-diff-${extractedQuestionsArray.indexOf(q)}`);
                 let diff = (diffSelect && diffSelect.value !== "") ? diffSelect.value : "";
-                let isShort = String(q.num).includes('서');
+                let isShort = String(q.num).includes('서') || String(q.num).startsWith('서');
 
-                if (baseScores[idx]) {
-                    baseScores[idx].num = q.num; 
-                    baseScores[idx].score = parseFloat(q.score) || 0;
-                    if(diff !== "") baseScores[idx].difficulty = diff;
-                    baseScores[idx].isShortAnswer = isShort; 
-                    baseScores[idx].level = levelMatch ? levelMatch[1] : "판정필요"; 
-                    baseScores[idx].reason = reasonMatch ? reasonMatch[1].trim() : "AI 판정 이유가 분석되지 않았습니다."; // ✨ 저장
-                    newScores.push(baseScores[idx]);
+                let finalLevel = levelMatch ? levelMatch[1] : "판정필요";
+                let finalReason = reasonMatch ? reasonMatch[1].trim() : "AI 판정 이유가 분석되지 않았습니다.";
+
+                // 🌟 [핵심] 순서(Index)가 아니라 문항 번호(q.num)를 기준으로 기존 표에서 찾아냅니다!
+                let existingIdx = baseScores.findIndex(s => String(s.num).trim() === String(q.num).trim());
+
+                if (existingIdx !== -1) {
+                    // 1~10번 분석 후 11~20번을 올렸을 때 기존 문항을 덮어쓰지 않고 보호합니다.
+                    baseScores[existingIdx].score = parseFloat(q.score) || 0;
+                    if(diff !== "") baseScores[existingIdx].difficulty = diff;
+                    baseScores[existingIdx].isShortAnswer = isShort; 
+                    baseScores[existingIdx].level = finalLevel; 
+                    baseScores[existingIdx].reason = finalReason; 
                 } else {
-                    newScores.push({ 
-                        num: q.num, score: parseFloat(q.score) || 0, difficulty: diff, 
-                        level: levelMatch ? levelMatch[1] : "판정필요", isShortAnswer: isShort,
-                        reason: reasonMatch ? reasonMatch[1].trim() : "AI 판정 이유가 분석되지 않았습니다." // ✨ 저장
+                    // 표에 없는 새로운 문항 번호라면 맨 뒤에 안전하게 추가(Append)합니다.
+                    baseScores.push({ 
+                        num: String(q.num).trim(), 
+                        score: parseFloat(q.score) || 0, 
+                        difficulty: diff || "중", 
+                        level: finalLevel, 
+                        isShortAnswer: isShort,
+                        reason: finalReason
                     });
                 }
             });
 
-            assessments[currentEditingAssessmentIndex].parsedScores = newScores;
+            // 🌟 문항 번호 순서대로 표가 예쁘게 정렬되도록 오름차순 정렬 엔진 가동
+            baseScores.sort((a, b) => {
+                let aNum = parseInt(a.num.replace(/[^0-9]/g, '')) || 0;
+                let bNum = parseInt(b.num.replace(/[^0-9]/g, '')) || 0;
+                return aNum - bNum;
+            });
+
+            assessments[currentEditingAssessmentIndex].parsedScores = baseScores;
             
             if (currentUploadedImageUrl) {
                 assessments[currentEditingAssessmentIndex].imageUrl = currentUploadedImageUrl; 
@@ -3725,11 +3822,10 @@ async function sendAiResultsToTable() {
             transaction.update(docRef, { assessments: assessments });
         });
         
-        // 자물쇠가 무사히 풀리고 저장이 끝나면 화면을 제어합니다.
         const wrapper = document.getElementById('exam-inspector-wrapper');
         if (wrapper && wrapper.style.display !== 'none') toggleExamViewer();
         
-        alert("✅ 내용이 협업 표에 성공적으로 반영되었습니다!");
+        alert("✅ 분할 분석된 문항들이 기존 표의 번호 위치에 맞게 안전하게 병합되었습니다!");
         
     } catch(e) { 
         alert("반영 실패: " + e.message); 
@@ -3946,8 +4042,9 @@ function renderCollaborativeTable(projectData, asm) {
     collaborators.forEach(email => {
         if (email !== currentUserEmail) html += `<th>${email.split('@')[0]} 선생님</th>`;
     });
+    html += `<th>문항 관리</th>`; 
     html += `</tr></thead><tbody>`;
-
+      
     const levelToNum = { 'A+': 6, 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'E': 1 };
 
     baseQuestions.forEach((q, qIdx) => {
@@ -3971,15 +4068,16 @@ function renderCollaborativeTable(projectData, asm) {
         const diff = q.difficulty || '선택하세요';
 
         html += `<tr style="${trStyle}">
-            <td style="font-size: 0.9rem; font-weight:bold; text-align:center;">${q.num}${isWarning ? ' 🚨' : ''}</td>
-            <td style="display:flex; align-items:center; justify-content:center; gap:5px; border:none;">
-                <input type="checkbox" class="diff-batch-cb" data-idx="${qIdx}" style="transform: scale(1.3);">
-                <select class="diff-select" onchange="updateBaseDifficulty(${qIdx}, this.value)" style="padding:4px; border-radius:4px;">
-                    <option value=""   ${diff==='선택하세요' || diff===''?'selected':''}>선택하세요</option>
-                    <option value="상" ${diff==='상'?'selected':''}>상</option>
-                    <option value="중" ${diff==='중'?'selected':''}>중</option>
-                    <option value="하" ${diff==='하'?'selected':''}>하</option>
-                </select>
+            <td style="width: 120px; vertical-align: middle;">
+                <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+                    <input type="checkbox" class="diff-batch-cb" data-idx="${qIdx}" style="transform: scale(1.3); margin: 0;">
+                    <select class="diff-select" onchange="updateBaseDifficulty(${qIdx}, this.value)" style="padding:4px; border-radius:4px; width: 75px; font-weight: 500;">
+                        <option value=""   ${diff==='선택하세요' || diff===''?'selected':''}>선택</option>
+                        <option value="상" ${diff==='상'?'selected':''}>상</option>
+                        <option value="중" ${diff==='중'?'selected':''}>중</option>
+                        <option value="하" ${diff==='하'?'selected':''}>하</option>
+                    </select>
+                </div>
             </td>
             <td><input type="number" step="0.1" class="score-input" data-num="${q.num}" value="${q.score}" onchange="updateBaseScore(${qIdx}, this.value)" style="width:50px;"></td>
             <td style="text-align: center; vertical-align: middle;">
@@ -4002,6 +4100,8 @@ function renderCollaborativeTable(projectData, asm) {
                 html += `<td>${theirInput ? "<span style='color:#10b981; font-weight:bold;'>입력완료🔒</span>" : "<span style='color:#cbd5e1;'>대기중</span>"}</td>`;
             }
         });
+        html += `<td style="text-align:center;"><button onclick="deleteTableQuestion(${qIdx})" style="background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.8rem;">🗑️ 삭제</button></td>`;
+    
         html += `</tr>`;
     });
     html += `</tbody></table>`;
@@ -4059,6 +4159,54 @@ function renderCollaborativeTable(projectData, asm) {
     }
     parsedScores = baseQuestions;
     setTimeout(initDiffShiftClick, 100); 
+}
+
+// 🟢 [신규 추가] 협업 표에서 문항 영구 삭제 및 번호 정렬 자동화 엔진
+async function deleteTableQuestion(qIdx) {
+    if(!confirm("이 문항을 전체 협업 표에서 영구 삭제하시겠습니까?\n삭제 후 문항 번호 자동 조정 및 합계 점수가 실시간으로 동기화됩니다.")) return;
+    
+    try {
+        const docRef = db.collection('user_projects').doc(currentProjectId);
+        const doc = await docRef.get();
+        if(!doc.exists) return;
+
+        let assessments = doc.data().assessments;
+        let asm = assessments[currentEditingAssessmentIndex];
+        let baseScores = asm.parsedScores || [];
+        
+        // 1. 해당 인덱스 문항 제거
+        baseScores.splice(qIdx, 1);
+        
+        // 2. 남은 문항 번호 정렬 (선택형은 1부터 순서대로, 서답형은 서1부터 순서대로 자동 당김)
+        let objIdx = 1;
+        let subIdx = 1;
+        baseScores.forEach(q => {
+            if (String(q.num).includes('서') || String(q.num).startsWith('서')) {
+                q.num = '서' + subIdx;
+                subIdx++;
+            } else if (!isNaN(parseInt(q.num))) {
+                q.num = String(objIdx);
+                objIdx++;
+            }
+        });
+        
+        asm.parsedScores = baseScores;
+        
+        // 3. 공동 작업자들의 개별 입력 데이터(teacherInputs) 배열도 한 칸씩 당겨주어 꼬임 방지
+        if (asm.teacherInputs) {
+            Object.keys(asm.teacherInputs).forEach(email => {
+                if (asm.teacherInputs[email] && asm.teacherInputs[email].length > qIdx) {
+                    asm.teacherInputs[email].splice(qIdx, 1);
+                }
+            });
+        }
+
+        await docRef.update({ assessments: assessments });
+        alert("🗑️ 문항이 삭제되었으며 동료 교사들의 화면에 실시간 반영되었습니다.");
+        
+    } catch(e) {
+        alert("문항 삭제 실패: " + e.message);
+    }
 }
 
 async function saveMyInput(qIdx, levelValue) {
@@ -5241,6 +5389,7 @@ const exposeToWindow = {
     updateBaseScore, saveMyInput, copyAiLevelsToMine, applyBatchDifficulty,
     calculateTotalCutScores, openSpecificFeedbackPanel, updateStep2Total, markAsReady, goToStep, updateQuestionCount,
     
+    deleteQuestion, mergeWithPrevious, removeQuestionImage, deleteTableQuestion,
    
     changeGroup, openMemoBoard, closeMemoBoard, submitMemo, changeSubject, showAiReason,
     toggleDictionaryPanel, changeDictGroup, loadDictionaryStandards, toggleAccordion,
