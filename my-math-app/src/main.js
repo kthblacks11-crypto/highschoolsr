@@ -888,8 +888,8 @@ function showSection(id) {
     const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(`'${id}'`));
     if (activeBtn) activeBtn.classList.add('active');
     
-    const subjectSelector = document.querySelector('.subject-selector');
-    const subTitle = document.getElementById('main-subtitle'); 
+    const subjectSelector = document.querySelector('.curriculum-selector');
+    const subTitle = document.getElementById('main-subtitle');
 
     if (id === 'problem-analysis' || id === 'cut-score') {
         if (subjectSelector) subjectSelector.style.visibility = 'hidden';
