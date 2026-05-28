@@ -4928,7 +4928,7 @@ const exposeToWindow = {
     deleteProject, inviteCollaborator, kickFromProject, openProject, toggleGlobalEditMode,
     startEditAssessment, editManualAssessment, deleteAssessment, updateBaseDifficulty,
     updateBaseScore, saveMyInput, copyAiLevelsToMine, applyBatchDifficulty,
-    calculateTotalCutScores, openSpecificFeedbackPanel, updateStep2Total, markAsReady, goToStep, openMemoBoard, closeMemoBoard, submitMemo
+    calculateTotalCutScores, openSpecificFeedbackPanel, updateStep2Total, markAsReady, goToStep, openMemoBoard, closeMemoBoard, submitMemo,
     changeGroup, openMemoBoard, closeMemoBoard, submitMemo
 };
 
