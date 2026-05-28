@@ -8,6 +8,10 @@ const firebaseConfig = {
     messagingSenderId: "1045151452788",
     appId: "1:1045151452788:web:bf69cb26e0be84dd8b0b21"
 };
+
+
+// ==========================================
+
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 db.enablePersistence()
@@ -983,12 +987,12 @@ function changeGroup(groupId) {
             opt.value = sub.id;
             
             // ✨ 핵심: 해당 과목 데이터가 subjectData에 있는지 확인!
-            if (typeof subjectData !== 'undefined' && subjectData[sub.id]) {
-                // 데이터가 있으면 정상적으로 출력
+            if (typeof subjectData !== 'undefined' && subjectData[sub.id] && subjectData[sub.id].standards && subjectData[sub.id].standards.length > 0) {
+                // 성취기준 데이터가 1개라도 있으면 정상적으로 출력
                 opt.innerText = sub.name;
                 if (!firstEnabledSubject) firstEnabledSubject = sub.id; // 첫 활성화 과목 기억
             } else {
-                // 데이터가 없으면 비활성화 처리
+                // 성취기준 데이터가 0개면 (준비중)으로 비활성화 처리
                 opt.innerText = sub.name + " (준비중)";
                 opt.disabled = true;           // 마우스로 선택 불가
                 opt.style.color = "#94a3b8";   // 글자색을 흐린 회색으로 변경
