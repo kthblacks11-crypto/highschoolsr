@@ -5235,7 +5235,7 @@ const exposeToWindow = {
    
     changeGroup, openMemoBoard, closeMemoBoard, submitMemo, changeSubject, showAiReason,
     toggleDictionaryPanel, changeDictGroup, loadDictionaryStandards, toggleAccordion,
-    oggleCommonPassageTray, handlePassageFiles, pastePassageFromClipboard, removePassage
+    toggleCommonPassageTray, handlePassageFiles, pastePassageFromClipboard, removePassage
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
