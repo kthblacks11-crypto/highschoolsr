@@ -517,7 +517,7 @@
                     </button>
                     <div id="common-passage-tray" style="display: none; border-top: 1px solid #c7d2fe; padding: 15px; background: white; text-align: center;">
                         <p style="color: #475569; font-size: 0.85rem; margin-top: 0; margin-bottom: 15px;">
-                            💡 긴 지문을 여러 장 찍어 이곳에 담아두세요. 아래에서 31번, 32번 문제만 교체하며 연속 분석이 가능합니다!
+                            💡 긴 지문을 여러 장 찍어 이곳에 담아두세요. 지문에 관련되어 있는 문항을 연속해서 분석할 수 있습니다.
                         </p>
                         <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 15px;">
                             <input type="file" id="passage-file-input" multiple accept="image/*" style="display: none;" onchange="handlePassageFiles(event)">
@@ -583,7 +583,7 @@
                         </p>
                         <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
                             <button class="save-btn" id="save-variant-btn" onclick="triggerSaveBackgroundAndReset()" style="background: #10b981; margin: 0; width: auto; padding: 0.8rem 1.5rem; font-size: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">💾 변형하여 저장 후 다음 분석</button>
-                            <button class="save-btn" onclick="resetAnalysis()" style="background: #64748b; margin: 0; width: auto; padding: 0.8rem 1.5rem; font-size: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">🗑️ 저장하지 않고 다음 분석</button>
+                            <button class="save-btn" onclick="resetAnalysis(true)" style="background: #64748b; margin: 0; width: auto; padding: 0.8rem 1.5rem; font-size: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">🗑️ 저장하지 않고 다음 분석</button>
                         </div>
                     </div>
 

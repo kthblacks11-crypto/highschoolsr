@@ -551,7 +551,7 @@ function getCroppedBase64(boxObj) {
     return tempCanvas.toDataURL('image/jpeg', 0.9).split(',')[1];
 }
 
-function resetAnalysis() {
+function resetAnalysis(keepPassages = false) {
     const probImg = document.getElementById('problem-image');
     if(probImg) probImg.value = "";
     
@@ -571,7 +571,7 @@ function resetAnalysis() {
     
     const cropCanvas = document.getElementById('crop-canvas');
     if(cropCanvas) cropCanvas.style.display = 'none';
-    
+
     cropBoxes = [];
     const cropCount = document.getElementById('crop-count');
     if(cropCount) cropCount.innerText = "0개 영역 지정됨";
@@ -579,7 +579,7 @@ function resetAnalysis() {
     const chatContainer = document.getElementById('ai-chat-container');
     if(chatContainer) {
         chatContainer.style.display = 'none';
-        chatContainer.style.position = 'relative'; // 💡 원상 복구
+        chatContainer.style.position = 'relative'; 
         chatContainer.style.width = '280px';
         
         const chatHistory = document.getElementById('chat-history');
@@ -587,20 +587,29 @@ function resetAnalysis() {
         currentChatContext = ""; 
     }
 
-    // 💡 고정되었던 문제 패널 해제
-    
+    // 고정되었던 문제 패널 해제
     const wrapper = document.getElementById('analysis-layout-wrapper');
     if (wrapper) {
         wrapper.style.position = 'relative'; 
-        wrapper.style.display = 'block'; // flex를 해제하여 화면이 밀리지 않게 함
+        wrapper.style.display = 'block'; 
     }
 
     const mainContainer = document.querySelector('.container');
     if (mainContainer) {
-        mainContainer.style.maxWidth = ''; // 💡 인위적으로 늘렸던 너비를 완전히 제거하여 원래 크기(1240px)로 되돌림!
+        mainContainer.style.maxWidth = ''; 
     }
-    commonPassages = [];
-    if(document.getElementById('passage-thumbnails')) document.getElementById('passage-thumbnails').innerHTML = '';
+
+    // 🟢 [핵심] 완전히 새로 시작할 때만(keepPassages가 false일 때만) 
+    // 보관함 창을 닫고 데이터를 깨끗하게 비웁니다.
+    if (keepPassages !== true) {
+        const tray = document.getElementById('common-passage-tray');
+        const icon = document.getElementById('tray-icon');
+        if (tray) tray.style.display = 'none';
+        if (icon) icon.innerText = '📚';
+
+        commonPassages = [];
+        if(document.getElementById('passage-thumbnails')) document.getElementById('passage-thumbnails').innerHTML = '';
+    }
 }
 
 async function checkApiError(response) {
@@ -4419,7 +4428,7 @@ async function triggerSaveBackgroundAndReset() {
         alert("✅ 문항 분석 결과가 문제은행에 기여되었습니다!\n(AI가 저작권 보호를 위해 문항을 변형하여 안전하게 보관합니다.)");
         
         // 분석 결과 화면 리셋 (main.js에 이미 정의된 함수 호출)
-        resetAnalysis();
+        resetAnalysis(true);
 
     } catch (e) {
         alert("저장 처리 중 오류가 발생했습니다: " + e.message);
