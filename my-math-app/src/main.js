@@ -30,525 +30,616 @@ auth.onAuthStateChanged(async (user) => {
     const userInfo = document.getElementById('user-info');
     const adminFeedbackBtn = document.getElementById('admin-feedback-btn'); 
     const adminModeBtn = document.getElementById('admin-mode-btn'); 
-
+    
     if (user) {
-        // 로그인 성공 시 UI 변경
-        loginBtn.style.display = 'none';
-        logoutBtn.style.display = 'inline-block';
-        if(deleteAccountBtn) deleteAccountBtn.style.display = 'inline-block'; // 🟢 탈퇴 버튼 보이기
-        userInfo.innerText = user.displayName + " 선생님 환영합니다.";
-        
-        // 💡 페이지 로드 시 window.onload에서 데이터를 이미 불러오므로, 
-        // 여기서는 유저 개인 정보(체크리스트, 저장된 평가 등)만 갱신합니다.
-        initChecklist(); 
-        
-        if (typeof renderSavedAssessments === "function") {
-            renderSavedAssessments(); 
+        if(loginBtn) loginBtn.style.display = 'none';
+        if(logoutBtn) logoutBtn.style.display = 'inline-block';
+        if(deleteAccountBtn) deleteAccountBtn.style.display = 'inline-block'; // 🟢 로그인시 활성화
+        if(userInfo) {
+            userInfo.style.display = 'inline-block';
+            userInfo.innerText = `${user.email.split('@')[0]}님 환영합니다`;
         }
         
-        // 관리자 권한 확인
-        if (user.email === "kthblacks11@gmail.com") {
+        // 🚨 [관리자 권한 체크] 특정 이메일만 관리자 피드백 버튼 노출
+        const adminEmails = ["math-asa@gmail.com", "admin@lee-sunsin.hs.kr", "principal@lee-sunsin.hs.kr", "pkb9270@gmail.com", "pkb9270@naver.com"];
+        if (adminEmails.includes(user.email)) {
             if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'inline-block';
             if(adminModeBtn) adminModeBtn.style.display = 'inline-block';
+        } else {
+            if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'none';
+            if(adminModeBtn) adminModeBtn.style.display = 'none';
         }
+
+        initDashboard();
+        loadProjects(); // 📂 구글 로그인 연동 성공 시, 사용자의 프로젝트 폴더를 서버에서 실시간 호출합니다.
     } else {
-        // 로그아웃 상태
-        loginBtn.style.display = 'inline-block';
-        logoutBtn.style.display = 'none';
-        if(deleteAccountBtn) deleteAccountBtn.style.display = 'none'; // 🟢 탈퇴 버튼 숨기기
-        userInfo.innerText = "로그인이 필요합니다.";
+        if(loginBtn) loginBtn.style.display = 'inline-block';
+        if(logoutBtn) logoutBtn.style.display = 'none';
+        if(deleteAccountBtn) deleteAccountBtn.style.display = 'none'; // 🔴 로그아웃시 숨김
+        if(userInfo) userInfo.style.display = 'none';
         if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'none';
         if(adminModeBtn) adminModeBtn.style.display = 'none';
+        
+        // 비로그인 상태 UI 대응
+        const listEl = document.getElementById('project-folder-list');
+        if(listEl) listEl.innerHTML = '<p style="color:#64748b; grid-column: 1 / -1; text-align: center;">🔒 구글 로그인을 하시면 교사 공동체 협업 폴더 시스템을 이용할 수 있습니다.</p>';
     }
 });
 
-function showApiModal() {
-    const modal = document.getElementById('api-modal'); 
-    if(modal) modal.style.display = 'flex';
-}
-
-async function handleLogin() {
-    try { await auth.signInWithPopup(provider); }
-    catch (error) { alert("로그인에 실패했습니다."); }
+function handleLogin() {
+    auth.signInWithPopup(provider).catch((error) => {
+        alert("로그인 실패: " + error.message);
+    });
 }
 
 function handleLogout() {
-    if(confirm("로그아웃 하시겠습니까?")) { auth.signOut(); }
+    if(unsubscribeProject) { unsubscribeProject(); unsubscribeProject = null; } // 실시간 리스너 해제 추가
+    auth.signOut().then(() => {
+        alert("로그아웃 되었습니다.");
+        location.reload(); 
+    });
 }
 
-// ✨ 회원 탈퇴 기능을 수행하는 함수 추가
-async function handleDeleteAccount() {
-    const user = firebase.auth().currentUser;
-    
-    if (!user) {
-        alert("로그인된 상태가 아닙니다.");
-        return;
-    }
-    
-    // 다시 한번 경고창을 띄워 실수를 방지합니다.
-    if (confirm("정말로 탈퇴하시겠습니까?\\n탈퇴하시면 시스템에 저장된 모든 선생님의 개인 데이터가 즉시 삭제되며 복구할 수 없습니다.")) {
-        try {
-            await user.delete();
-            alert("회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.");
-            window.location.reload(); // 성공 시 화면을 새로고침하여 초기화
-        } catch (error) {
-            // 보안을 위해 오랫동안 로그인 상태였던 사용자는 재로그인을 요구할 수 있습니다.
-            if (error.code === 'auth/requires-recent-login') {
-                alert("안전한 탈퇴 처리를 위해 재로그인이 필요합니다.\\n로그아웃 후 다시 로그인하여 탈퇴를 진행해 주세요.");
-            } else {
-                alert("탈퇴 처리 중 오류가 발생했습니다: " + error.message);
-            }
+// 🟢 [신규 기능] 회원 탈퇴 함수 추가
+function handleDeleteAccount() {
+    const user = auth.currentUser;
+    if (!user) { alert("로그인 상태가 아닙니다."); return; }
+
+    const confirmFirst = confirm("🚨 정말로 회원 탈퇴를 진행하시겠습니까?\n이 작업은 되돌릴 수 없으며 모든 개인 데이터 연결이 끊어집니다.");
+    if (!confirmFirst) return;
+
+    const confirmSecond = prompt("보안을 위해 계정 삭제를 확정하려면 본인의 구글 이메일 주소를 입력해 주세요:\n" + user.email);
+    if (confirmSecond !== user.email) { alert("이메일 주소가 일치하지 않습니다. 탈퇴 처리가 취소되었습니다."); return; }
+
+    // 재인증 처리가 필요한 경우가 많으므로 신중하게 진행
+    user.delete().then(() => {
+        alert("🔒 회원 탈퇴가 성공적으로 완료되었습니다. 그동안 이용해 주셔서 감사합니다.");
+        location.reload();
+    }).catch((error) => {
+        if (error.code === 'auth/requires-recent-login') {
+            alert("⏰ 보안을 위해 최근 로그인 기록이 필요합니다. 로그아웃 후 다시 로그인하여 즉시 탈퇴를 시도해 주세요.");
+            auth.signOut().then(() => { location.reload(); });
+        } else {
+            alert("탈퇴 처리 중 오류 발생: " + error.message);
         }
-    }
+    });
 }
 
-let currentSubject = "common2";
-let currentStandardCode = null;
-let currentLevelQ = 0;
-let currentQuestions = [];
-let selectedFile = null;
-let currentChatContext = ""; 
-let lastAnalyzedSingleImage = null; 
-
-let analysisMainMode = 'single'; 
-let singleCropMode = 'single'; 
-let cropBoxes = []; 
-let isInteracting = false; 
-let interactionType = null; 
-let activeBoxIndex = -1;
-let dragStartX = 0, dragStartY = 0;
-let initialBoxState = null;
-let lastBatchDiff = '상'; // 일괄넣기 난이도 기억용 변수
-
-function shuffleArray(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-    }
-    return array;
-}
-
-// ✨ AI 기능을 쓸 때만 API 키가 있는지 검사하는 스마트 검문소
-function requireApiKey() {
-    const apiKey = localStorage.getItem('gemini_api_key');
-    if (!apiKey) {
-        if (confirm("🤖 AI 기능을 사용하려면 구글 Gemini API 키 등록이 필요합니다.\n지금 'API 가져오기' 설정창을 열어 키를 등록하시겠습니까?")) {
-            openSettings(); 
-        }
-        return false; // 키가 없으니 기능 실행을 잠시 멈춤(false)
-    }
-    return true; // 키가 있으니 기능 실행 통과!(true)
-}
-
-async function openSettings() { 
-    const isLoggedIn = await checkLogin();
-    if (!isLoggedIn) return;
-    document.getElementById('api-key-input').value = localStorage.getItem('gemini_api_key') || "";
-    document.getElementById('settings-modal').style.display = 'flex'; 
-}
-function closeSettings() { document.getElementById('settings-modal').style.display = 'none'; }
 function openFeedback() { document.getElementById('feedback-modal').style.display = 'flex'; }
 function closeFeedback() { document.getElementById('feedback-modal').style.display = 'none'; }
-function closeModal() { document.getElementById('level-modal').style.display = 'none'; }
+function closeModal() { document.getElementById('admin-modal').style.display = 'none'; }
 function closeAdminFeedback() { document.getElementById('admin-feedback-modal').style.display = 'none'; }
+
+function openSettings() { document.getElementById('settings-modal').style.display = 'flex'; }
+function closeSettings() { document.getElementById('settings-modal').style.display = 'none'; }
 
 function saveApiKey() {
     const key = document.getElementById('api-key-input').value.trim();
     if (key) {
         localStorage.setItem('gemini_api_key', key);
-        alert("API 키가 기기에 안전하게 저장되었습니다.");
+        alert("Gemini API Key가 성공적으로 브라우저에 저장되었습니다!");
         closeSettings();
+    } else {
+        alert("올바른 Key를 입력하세요.");
     }
 }
 
 async function submitFeedback() {
-    const text = document.getElementById('feedback-message').value.trim();
-    if(!text) { alert("의견을 입력해주세요!"); return; }
-    const submitBtn = document.querySelector('#feedback-modal .save-btn');
-    submitBtn.disabled = true;
-    submitBtn.innerText = "전송 중...";
+    const text = document.getElementById('feedback-text').value.trim();
+    if (!text) { alert("내용을 입력해 주세요."); return; }
+    
     try {
         await db.collection('developer_feedback').add({
-            text: text, timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            uid: auth.currentUser ? auth.currentUser.uid : "anonymous",
+            email: auth.currentUser ? auth.currentUser.email : "anonymous",
+            text: text,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
-        alert("의견이 성공적으로 전송되었습니다. 감사합니다!");
-        document.getElementById('feedback-message').value = "";
-    } catch(e) {
-        let pending = JSON.parse(localStorage.getItem('pending_feedback')) || [];
-        pending.push({ text: text, time: new Date().toISOString() });
-        localStorage.setItem('pending_feedback', JSON.stringify(pending));
-        alert("현재 서버 통신이 원활하지 않아 의견이 임시 저장되었습니다.");
-        document.getElementById('feedback-message').value = "";
-    } finally {
-        submitBtn.disabled = false; submitBtn.innerText = "의견 전송하기"; closeFeedback(); 
+        alert("선생님의 소중한 의견이 개발자에게 전송되었습니다. 감사합니다!");
+        document.getElementById('feedback-text').value = "";
+        closeFeedback();
+    } catch (e) {
+        alert("전송 실패: " + e.message);
     }
 }
 
-// ✨ 2. 관리자 의견 확인창을 렌더링하는 함수 (AI 초안 텍스트박스 분리 및 수정창 탑재)
 async function openAdminFeedback() {
-    const user = auth.currentUser;
-    const adminEmail = "kthblacks11@gmail.com"; 
-    if (!user) { alert("먼저 구글 로그인을 해주세요."); return; }
-    if (user.email !== adminEmail) { alert("관리자 계정만 접근할 수 있습니다."); return; }
-
     document.getElementById('admin-feedback-modal').style.display = 'flex';
-    const listEl = document.getElementById('admin-feedback-list');
-    listEl.innerHTML = "<p style='text-align:center; padding: 2rem;'>의견 목록을 불러오는 중...</p>";
-    
+    const list = document.getElementById('admin-feedback-list');
+    list.innerHTML = "불러오는 중... ⏳";
+
     try {
         const snapshot = await db.collection('developer_feedback').orderBy('timestamp', 'desc').get();
-        if(snapshot.empty) { listEl.innerHTML = "<p style='text-align:center; color:#64748b;'>아직 접수된 의견이 없습니다.</p>"; return; }
+        if (snapshot.empty) { list.innerHTML = "접수된 피드백이나 이의 제기가 없습니다."; return; }
+
         let html = "";
-        
         snapshot.forEach(doc => {
             const data = doc.data();
             const date = data.timestamp ? data.timestamp.toDate().toLocaleString() : "방금 전";
             
             if (data.type === "문항 매칭 이의 제기") {
-                let aiReviewText = data.ai_review || "";
-                
-                // ✨ AI의 응답에서 태그별로 데이터 추출
-                let reviewResult = aiReviewText.match(/\[검토결과\]:\s*([\s\S]*?)(?=\[최종|$)/)?.[1]?.trim() || "검토 결과를 파싱하지 못했습니다.";
-                let finalStd = aiReviewText.match(/\[최종성취기준\]:\s*([^\n]+)/)?.[1]?.trim() || data.proposed_standard;
-                let finalLvl = aiReviewText.match(/\[최종성취수준\]:\s*([A-E])/)?.[1]?.trim() || data.proposed_level;
-                let finalAns = aiReviewText.match(/\[최종정답\]:\s*([^\n]+)/)?.[1]?.trim() || "";
-                let finalReason = aiReviewText.match(/\[최종판정이유\]:\s*([\s\S]*)/)?.[1]?.trim() || data.teacher_reason;
+                // 💡 이의제기 전용 정밀 처리 카드 설계
+                html += `
+                <div style="border: 2px solid #8b5cf6; padding: 15px; margin-bottom: 15px; border-radius: 8px; background: #fbf7ff; text-align: left;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e9d5ff; padding-bottom:8px; margin-bottom:10px;">
+                        <span style="background:#8b5cf6; color:white; font-size:0.75rem; padding:3px 8px; border-radius:4px; font-weight:bold;">⚖️ 문항 매칭 이의 제기</span>
+                        <span style="font-size:0.8rem; color:#64748b;">${date} (${data.email.split('@')[0]})</span>
+                    </div>
+                    <div style="margin-bottom:8px; font-size:0.95rem;"><strong>[원본 문항 텍스트]</strong><br><pre style="background:white; padding:8px; border:1px solid #e2e8f0; border-radius:4px; white-space:pre-wrap;">${data.question}</pre></div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px; background:#f1f5f9; padding:8px; border-radius:4px; font-size:0.85rem;">
+                        <div>❌ <strong>기존 판정:</strong> 코드(${data.original_standard}) | 수준(${data.original_level})</div>
+                        <div>🟢 <strong>교사 제안:</strong> 코드(${data.proposed_standard}) | 수준(${data.proposed_level})</div>
+                    </div>
+                    <div style="margin-bottom:10px; font-size:0.9rem; color:#b45309;"><strong>💡 교사 제안 사유:</strong> "${data.teacher_reason}"</div>
+                    
+                    <div style="background:white; border:1px solid #cbd5e1; padding:10px; border-radius:6px; margin-top:10px;">
+                        <strong style="color:#7c3aed; font-size:0.85rem; display:block; margin-bottom:5px;">🤖 AI 수석위원 교차 검토서 (구분자 분해 분석 전용)</strong>
+                        <div style="font-size:0.85rem; line-height:1.5; color:#334155; white-space:pre-wrap;">${data.ai_review}</div>
+                    </div>
 
-                html += `<div style="background: white; padding: 1.2rem; border-radius: 8px; margin-bottom: 1.2rem; border-left: 4px solid #ea580c; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                                <span style="background: #ffedd5; color: #c2410c; padding: 3px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">🙋 판정 이의 제기</span>
-                                <span style="font-size:0.8rem; color:var(--text-light); font-weight:bold;">🕒 ${date}</span>
-                            </div>
-                            <div style="background: #f8fafc; padding: 10px; border-radius: 6px; font-size: 0.9rem; margin-bottom: 10px; border: 1px solid #e2e8f0; line-height: 1.5;">
-                                <strong style="color:#1e40af;">[원본 문항]</strong><br>${data.question}
-                            </div>
-                            
-                            <div style="margin-bottom: 10px; font-size: 0.9rem;">
-                                <strong style="color: #475569;">👨‍🏫 선생님 이의 제기 사유:</strong>
-                                <p style="margin: 5px 0 0 0; background: #f1f5f9; padding: 10px; border-radius: 6px; line-height: 1.5;">[제안: ${data.proposed_standard} / ${data.proposed_level}수준] ${data.teacher_reason}</p>
-                            </div>
-
-                            <div style="font-size: 0.9rem; margin-bottom: 10px;">
-                                <strong style="color: #6d28d9;">🤖 AI 수석 위원 검토 결과:</strong>
-                                <p style="margin: 5px 0 0 0; background: #f5f3ff; padding: 10px; border-radius: 6px; border: 1px solid #ddd6fe; color: #4c1d95; line-height: 1.6; font-weight: 500;">${reviewResult}</p>
-                            </div>
-
-                            <div style="background: #dcfce7; padding: 12px; border-radius: 6px; border: 1px solid #bbf7d0; font-size: 0.85rem;">
-                                <strong style="color: #15803d; font-size: 0.95rem;">✅ 최종 반영할 판정 (AI 도출 결과 / 수정 가능)</strong>
-                                <div style="margin-top: 10px; display: flex; align-items: center; gap: 5px;">
-                                    <span style="font-weight:bold; width:40px;">기준:</span> <input type="text" id="admin-prop-std-${doc.id}" value="${finalStd}" style="flex: 1; padding: 5px; border: 1px solid #86efac; border-radius: 4px;">
-                                </div>
-                                <div style="margin-top: 5px; display: flex; align-items: center; gap: 5px;">
-                                    <span style="font-weight:bold; width:40px;">수준:</span> <select id="admin-prop-lvl-${doc.id}" style="flex: 1; padding: 5px; border: 1px solid #86efac; border-radius: 4px;">
-                                        <option value="A" ${finalLvl==='A'?'selected':''}>A</option>
-                                        <option value="B" ${finalLvl==='B'?'selected':''}>B</option>
-                                        <option value="C" ${finalLvl==='C'?'selected':''}>C</option>
-                                        <option value="D" ${finalLvl==='D'?'selected':''}>D</option>
-                                        <option value="E" ${finalLvl==='E'?'selected':''}>E</option>
-                                    </select>
-                                </div>
-                                <div style="margin-top: 5px; display: flex; align-items: center; gap: 5px;">
-                                    <span style="font-weight:bold; width:40px;">정답:</span> <input type="text" id="admin-prop-ans-${doc.id}" value="${finalAns}" placeholder="정답 입력 (수식 $ 사용)" style="flex: 1; padding: 5px; border: 1px solid #86efac; border-radius: 4px;">
-                                </div>
-                                <div style="margin-top: 5px; display: flex; align-items: flex-start; gap: 5px;">
-                                    <span style="font-weight:bold; width:40px; margin-top:5px;">이유:</span> <textarea id="admin-prop-reason-${doc.id}" rows="3" style="flex: 1; padding: 5px; border: 1px solid #86efac; border-radius: 4px; font-family:inherit;">${finalReason}</textarea>
-                                </div>
-                            </div>
-                            
-                            <div style="display: flex; gap: 10px; margin-top: 15px; border-top: 1px dashed #cbd5e1; padding-top: 15px;">
-                                <button onclick="acceptFeedback('${doc.id}')" style="background: #10b981; color: white; border: none; flex: 1; padding: 0.8rem; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.95rem;">✅ 위 내용으로 DB 즉시 수정</button>
-                                <button onclick="rejectFeedback('${doc.id}')" style="background: #ef4444; color: white; border: none; flex: 1; padding: 0.8rem; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.95rem;">❌ 기각 (의견 삭제)</button>
-                            </div>
-                         </div>`;
+                    <div style="margin-top:15px; background:#f8fafc; padding:10px; border-radius:6px; border:1px solid #cbd5e1; display:flex; flex-direction:column; gap:8px;">
+                        <strong style="font-size:0.8rem; color:#475569;">⚙️ 어드민 마스터 퀵 데이터베이스 조작 제어판</strong>
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+                            <input type="text" id="admin-prop-std-${doc.id}" placeholder="확정 성취기준 코드" value="${data.proposed_standard}" style="padding:4px; font-size:0.8rem;">
+                            <input type="text" id="admin-prop-lvl-${doc.id}" placeholder="확정 성취수준" value="${data.proposed_level}" style="padding:4px; font-size:0.8rem;">
+                        </div>
+                        <input type="text" id="admin-prop-ans-${doc.id}" placeholder="확정 정답 (리뷰서 참고)" value="" style="padding:4px; font-size:0.8rem;">
+                        <textarea id="admin-prop-reason-${doc.id}" placeholder="최종 확정 판정 사유 한 문단" style="padding:4px; font-size:0.8rem; height:40px; font-family:inherit;"></textarea>
+                        <div style="text-align:right; display:flex; gap:5px; justify-content:flex-end;">
+                            <button onclick="acceptFeedback('${doc.id}')" style="background:#10b981; color:white; border:none; padding:4px 10px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:bold;">✅ DB 즉시 승인/수정</button>
+                            <button onclick="rejectFeedback('${doc.id}')" style="background:#ef4444; color:white; border:none; padding:4px 10px; border-radius:4px; cursor:pointer; font-size:0.75rem;">반려</button>
+                        </div>
+                    </div>
+                </div>`;
             } else {
-                // 일반 피드백 창 로직
-                html += `<div style="background: white; padding: 1.2rem; border-radius: 8px; margin-bottom: 1.2rem; border-left: 4px solid var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                                <span style="background: #e0e7ff; color: #1e40af; padding: 3px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">💡 일반 의견</span>
-                                <span style="font-size:0.8rem; color:var(--text-light); font-weight:bold;">🕒 ${date}</span>
-                            </div>
-                            <p style="margin:0; font-size:0.95rem; white-space:pre-wrap; line-height:1.5;">${data.text || "내용 없음"}</p>
-                            <div style="text-align: right; margin-top: 10px;">
-                                <button onclick="rejectFeedback('${doc.id}')" style="background: #ef4444; color: white; border: none; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">삭제</button>
-                            </div>
-                         </div>`;
+                html += `
+                <div style="border-bottom: 1px solid #cbd5e1; padding: 10px 0; text-align: left;">
+                    <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 5px;">📅 ${date} | 👤 작성자: ${data.email}</div>
+                    <div style="font-size: 0.95rem; color: #1e293b; white-space: pre-wrap;">${data.text}</div>
+                </div>`;
             }
         });
-        listEl.innerHTML = html;
-        if (window.MathJax) MathJax.typesetPromise([listEl]).catch(err => console.error(err));
-    } catch(e) { listEl.innerHTML = "<p style='color:red;'>데이터 로드 실패.</p>"; }
+        list.innerHTML = html;
+    } catch(e) { list.innerHTML = "로드 실패: " + e.message; }
+}
+
+function openAdminMode() { document.getElementById('admin-modal').style.display = 'flex'; }
+
+function showSection(sectionId) {
+    document.querySelectorAll('.app-section').forEach(sec => {
+        sec.style.display = 'none';
+    });
+    document.getElementById(sectionId).style.display = 'block';
+    
+    // 메뉴 하이라이트 제어
+    document.querySelectorAll('.nav-menu-btn').forEach(btn => btn.classList.remove('active'));
+    const targetMenuBtn = document.querySelector(`button[onclick="showSection('${sectionId}')"]`);
+    if(targetMenuBtn) targetMenuBtn.classList.add('active');
+
+    if (sectionId === 'cut-score-dashboard') {
+        loadProjects(); // 📂 분할점수 대시보드 진입할 때마다 최신 폴더를 무조건 새로고침 동기화시킵니다.
+    }
+}
+
+// ==========================================
+
+const curriculumMap = {
+    math: {
+        "공통 과목": [{ id: "common1", name: "공통수학1" }, { id: "common2", name: "공통수학2" }],
+        "선택 과목": [{ id: "algebra", name: "대수" }, { id: "calculus1", name: "미적분Ⅰ" }, { id: "probStat", name: "확률과 통계" }]
+    },
+    korean: { "공통/선택": [{ id: "korean-common", name: "공통국어 (준비중)" }] },
+    english: { "공통/선택": [{ id: "english-common", name: "공통영어 (준비중)" }] },
+    social: { "공통/선택": [{ id: "social-common", name: "공통사회 (준비중)" }] },
+    science: { "공통/선택": [{ id: "science-common", name: "공통과학 (준비중)" }] }
+};
+
+let currentSubject = 'common1'; 
+let currentStandardCode = ''; 
+let currentQuestions = []; 
+let currentLevelQ = 0; 
+
+function changeGroup(groupId) {
+    document.querySelectorAll('.group-btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+    
+    const subjectSelect = document.getElementById('subject-select');
+    subjectSelect.innerHTML = '';
+    
+    const map = curriculumMap[groupId];
+    for (const category in map) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = category;
+        map[category].forEach(sub => {
+            const opt = document.createElement('option');
+            opt.value = sub.id;
+            opt.innerText = sub.name;
+            optgroup.appendChild(opt);
+        });
+        subjectSelect.appendChild(optgroup);
+    }
+    changeSubject();
+}
+
+function changeSubject() {
+    currentSubject = document.getElementById('subject-select').value;
+    initStandardSelector();
+}
+
+function initStandardSelector() {
+    const standardSelect = document.getElementById('standard-select');
+    standardSelect.innerHTML = '<option value="">-- 성취기준을 선택해 주세요 --</option>';
+    
+    const data = subjectData[currentSubject];
+    if (data && data.standards) {
+        data.standards.forEach(std => {
+            const opt = document.createElement('option');
+            opt.value = std.code;
+            opt.innerText = `${std.code} - ${std.desc.substring(0, 35)}...`;
+            standardSelect.appendChild(opt);
+        });
+    }
+}
+
+function openAnalysisMode() {
+    currentStandardCode = document.getElementById('standard-select').value;
+    if (!currentStandardCode) { alert("성취기준을 선택하세요."); return; }
+    
+    document.getElementById('setup-zone').style.display = 'none';
+    document.getElementById('analysis-zone').style.display = 'block';
+    
+    const std = subjectData[currentSubject].standards.find(s => s.code === currentStandardCode);
+    document.getElementById('target-standard-display').innerHTML = `🎯 <strong>선택된 성취기준:</strong> [${std.code}] ${std.desc}`;
+}
+
+function backToStandardSelection() {
+    document.getElementById('analysis-zone').style.display = 'none';
+    document.getElementById('setup-zone').style.display = 'block';
+    document.getElementById('result-panel').style.display = 'none';
+}
+
+function requireApiKey() {
+    const key = localStorage.getItem('gemini_api_key');
+    if (!key) {
+        alert("⚠️ 상단의 우측 [톱니바퀴 환경설정] 메뉴를 클릭하여 'Gemini API Key'를 먼저 입력해 주세요!");
+        openSettings();
+        return false;
+    }
+    return true;
+}
+
+let currentAnalysisMode = 'single'; // 'single' 또는 'multi'
+
+function setAnalysisMode(mode) {
+    currentAnalysisMode = mode;
+    document.querySelectorAll('.mode-tab').forEach(tab => tab.classList.remove('active'));
+    event.target.classList.add('active');
+
+    // UI 레이아웃 리셋
+    document.getElementById('single-mode-ui').style.display = mode === 'single' ? 'block' : 'none';
+    document.getElementById('multi-mode-ui').style.display = mode === 'multi' ? 'block' : 'none';
+    document.getElementById('analyze-single-btn').style.display = mode === 'single' ? 'inline-block' : 'none';
+    document.getElementById('analyze-multi-btn').style.display = mode === 'multi' ? 'inline-block' : 'none';
+}
+
+async function executeAnalysis() {
+    if (!requireApiKey()) return;
+    
+    const btn = currentAnalysisMode === 'single' ? document.getElementById('analyze-single-btn') : document.getElementById('analyze-multi-btn');
+    const originalText = btn.innerText;
+    btn.innerText = "⏳ 인공지능이 교육과정 루브릭을 분석 중입니다...";
+    btn.disabled = true;
+
+    try {
+        const userApiKey = localStorage.getItem('gemini_api_key');
+        const workerUrl = "https://script.google.com/macros/s/AKfycbwgx4RgF8FQxxL3jBgEQ5l369llADjhZ1NepulIdF4DdX18kBrB8oRQ4Ft0d5WdKtEF/exec";
+        
+        let standardsInfo = "";
+        const data = subjectData[currentSubject];
+        if (data && data.standards) {
+            standardsInfo = data.standards.map(s => `${s.code} ${s.desc}`).join('\n');
+        }
+
+        let payload = {
+            action: currentAnalysisMode === 'single' ? "analyze_single" : "analyze_multi",
+            subject: currentSubject,
+            standardsInfo: standardsInfo,
+            apiKey: userApiKey
+        };
+
+        if (currentAnalysisMode === 'single') {
+            const textInput = document.getElementById('problem-textarea').value.trim();
+            const fileInput = document.getElementById('problem-image');
+            
+            if (!textInput && fileInput.files.length === 0) {
+                alert("문제 텍스트를 입력하거나 시험지 이미지를 업로드하세요.");
+                btn.innerText = originalText; btn.disabled = false; return;
+            }
+
+            payload.questionText = textInput;
+            
+            if (fileInput.files.length > 0) {
+                const base64 = await fileToBase64(fileInput.files[0]);
+                payload.imageBase64 = base64;
+            }
+        } else {
+            const multiFiles = document.getElementById('multi-problem-images').files;
+            if (multiFiles.length === 0) {
+                alert("분석할 문항 이미지 파일들을 선택하세요.");
+                btn.innerText = originalText; btn.disabled = false; return;
+            }
+            
+            let base64Array = [];
+            for (let i = 0; i < multiFiles.length; i++) {
+                const b64 = await fileToBase64(multiFiles[i]);
+                base64Array.push(b64);
+            }
+            payload.images = base64Array;
+        }
+
+        // 💡 [핵심 기능] 공통지문 보관함 연동 모듈 가동
+        if (commonPassages && commonPassages.length > 0) {
+            payload.commonImages = commonPassages; 
+        }
+
+        const response = await fetch(workerUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify(payload)
+        });
+
+        await checkApiError(response);
+        const resData = await response.json();
+        const aiResult = resData.candidates[0].content.parts[0].text;
+        
+        displayAnalysisResult(aiResult);
+    } catch (e) {
+        alert("분석 중 오류 발생: " + e.message);
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+}
+
+async function checkApiError(response) {
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`서버 응답 에러 (${response.status}): ${errText}`);
+    }
+}
+
+function displayAnalysisResult(text) {
+    currentChatContext = text; // 대화 컨텍스트 누적
+    
+    const wrapper = document.getElementById('analysis-layout-wrapper');
+    const mainContainer = document.querySelector('.container');
+    
+    // 💡 화면 레이아웃 와이드 스크린 대전환
+    if (wrapper) {
+        wrapper.style.display = 'flex';
+        wrapper.style.gap = '20px';
+        wrapper.style.position = 'relative';
+    }
+    if (mainContainer) {
+        mainContainer.style.maxWidth = '98%'; 
+    }
+
+    const output = document.getElementById('analysis-output');
+    output.innerHTML = formatAiResult(text);
+    document.getElementById('analysis-result').style.display = 'block';
+
+    // 💬 대화형 우측 피드백 패널 즉시 사출 및 대화 내역 초기화
+    const chatContainer = document.getElementById('ai-chat-container');
+    if(chatContainer) {
+        chatContainer.style.display = 'flex';
+        chatContainer.style.flexDirection = 'column';
+    }
+    const chatHistory = document.getElementById('chat-history');
+    if(chatHistory) chatHistory.innerHTML = ""; 
+
+    // MathJax 수식 포맷 변환 루틴 가동
+    if (window.MathJax) MathJax.typesetPromise([output]);
+}
+
+function formatAiResult(text) {
+    let formatted = text
+        .replace(/\[원본 문제 추출\]:/g, '<h3 class="res-title">📋 문항 원본 텍스트 추출</h3>')
+        .replace(/\[교과 및 단원\]:/g, '<h3 class="res-title">📚 교육과정 연계 단원</h3>')
+        .replace(/\[성취기준 및 수준\]:/g, '<h3 class="res-title">🎯 2022 개정 교육과정 성취수준 판정</h3>')
+        .replace(/\[핵심 개념\]:/g, '<h3 class="res-title">💡 문항 해결 핵심 개념 원리</h3>')
+        .replace(/\[상세 풀이\]:/g, '<h3 class="res-title">✏️ 단계별 교육과정 정밀 상세 풀이</h3>')
+        .replace(/\n/g, '<br>');
+    return `<div class="ai-parsed-card">${formatted}</div>`;
+}
+
+// 💬 대화형 비판적 검증 챗봇 엔진 모듈
+let currentChatContext = ""; 
+
+async function sendChatMessage() {
+    const inputEl = document.getElementById('chat-input');
+    const msg = inputEl.value.trim();
+    if (!msg || !requireApiKey()) return;
+
+    inputEl.value = ""; // 전송 즉시 비우기
+    appendChatMessage("teacher", msg);
+
+    const loader = document.getElementById('chat-loader');
+    if(loader) loader.style.display = 'block';
+
+    try {
+        const userApiKey = localStorage.getItem('gemini_api_key');
+        const workerUrl = "https://script.google.com/macros/s/AKfycbwgx4RgF8FQxxL3jBgEQ5l369llADjhZ1NepulIdF4DdX18kBrB8oRQ4Ft0d5WdKtEF/exec";
+        
+        const backendSystemRubric = getSystemRubric();
+        const response = await fetch(workerUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({
+                action: "chat_message",
+                message: msg,
+                currentChatContext: currentChatContext,
+                backendEnhancedSystemRubric: backendSystemRubric,
+                apiKey: userApiKey
+            })
+        });
+
+        await checkApiError(response);
+        const resData = await response.json();
+        const aiResponse = resData.candidates[0].content.parts[0].text;
+
+        appendChatMessage("ai", aiResponse);
+        
+        // 💬 성취수준 변경 합의 도달 시, 실시간 좌측 결과창 동기화 엔진 가동
+        if (msg.includes("변경") || msg.includes("수정") || msg.includes("다시") || msg.includes("반영")) {
+             reanalyzeAndSyncLayout(aiResponse);
+        }
+
+    } catch(e) {
+        appendChatMessage("ai", "❌ 응답 오류가 발생했습니다: " + e.message);
+    } finally {
+        if(loader) loader.style.display = 'none';
+    }
+}
+
+function appendChatMessage(sender, text) {
+    const history = document.getElementById('chat-history');
+    const msgEl = document.createElement('div');
+    msgEl.style.marginBottom = '12px';
+    msgEl.style.padding = '8px 12px';
+    msgEl.style.borderRadius = '8px';
+    msgEl.style.fontSize = '0.9rem';
+    msgEl.style.lineHeight = '1.5';
+    msgEl.style.wordBreak = 'break-all';
+
+    if (sender === 'teacher') {
+        msgEl.style.background = '#e0f2fe';
+        msgEl.style.color = '#0369a1';
+        msgEl.style.marginLeft = '20px';
+        msgEl.style.textAlign = 'right';
+        msgEl.innerHTML = `<strong>선생님:</strong><br>${text.replace(/\n/g, '<br>')}`;
+    } else {
+        msgEl.style.background = '#f1f5f9';
+        msgEl.style.color = '#334155';
+        msgEl.style.marginRight = '20px';
+        msgEl.innerHTML = `<strong>🤖 AI 위원:</strong><br>${text.replace(/\n/g, '<br>')}`;
+    }
+
+    history.appendChild(msgEl);
+    history.scrollTop = history.scrollHeight;
+    
+    if (window.MathJax) MathJax.typesetPromise([msgEl]);
+}
+
+// 💬 대화 이력을 기반으로 좌측 정밀 패널을 동적 재작성 및 수식 싱크하는 커스텀 인젝터
+async function reanalyzeAndSyncLayout(lastAiMsg) {
+    const historyBox = document.getElementById('chat-history');
+    if (!historyBox || !requireApiKey()) return;
+
+    try {
+        const userApiKey = localStorage.getItem('gemini_api_key');
+        const workerUrl = "https://script.google.com/macros/s/AKfycbwgx4RgF8FQxxL3jBgEQ5l369llADjhZ1NepulIdF4DdX18kBrB8oRQ4Ft0d5WdKtEF/exec";
+        
+        const response = await fetch(workerUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({
+                action: "reanalyze_chat",
+                analysisMainMode: currentAnalysisMode,
+                currentChatContext: currentChatContext,
+                chatHistory: historyBox.innerText,
+                apiKey: userApiKey
+            })
+        });
+
+        await checkApiError(response);
+        const resData = await response.json();
+        const finalOptimizedOutput = resData.candidates[0].content.parts[0].text;
+
+        const output = document.getElementById('analysis-output');
+        if(output) {
+            output.innerHTML = formatAiResult(finalOptimizedOutput);
+            currentChatContext = finalOptimizedOutput; // 업데이트된 결과를 기준으로 컨텍스트 교체
+            if (window.MathJax) MathJax.typesetPromise([output]);
+        }
+    } catch (err) {
+        console.warn("대화 기반 동적 레이아웃 싱크 실패:", err);
+    }
 }
 
 function handleImageUpload(event) {
-    selectedFile = event.target.files[0];
-    displayPreview(selectedFile);
-}
-
-function handlePaste(event) {
-    const activeTag = document.activeElement.tagName.toLowerCase();
-    if (activeTag === 'input' || activeTag === 'textarea') {
-        return; 
-    }    
-    const items = (event.clipboardData || event.originalEvent.clipboardData).items;
-    for (let index in items) {
-        const item = items[index];
-        if (item.kind === 'file' && item.type.startsWith('image/')) {
-            selectedFile = item.getAsFile();
-            displayPreview(selectedFile);
-            showSection('problem-analysis');
-            break;
-        }
-    }
-}
-
-function openAnalysisMode(mode) {
-    showSection('problem-analysis');
-    analysisMainMode = mode;
-    resetAnalysis(); 
-
-    const currentBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(`openAnalysisMode('${mode}')`));
-    if (currentBtn) {
-        currentBtn.classList.add('active');
-    }
-
-    const title = document.getElementById('analysis-title');
-    const summary = document.getElementById('service-summary');
-
-    if (mode === 'single') {
-        title.innerHTML = "🔍 한 문제 상세 분석";
-        summary.innerHTML = "<strong style='color: #2563eb;'>[상세 분석 제공 내용]</strong><br>과목, 단원명, 성취기준, 성취수준, 판정이유, 핵심개념, 단계별 문제풀이";
-    } else {
-        title.innerHTML = "📑 여러 문제 요약 분석";
-        summary.innerHTML = "<strong style='color: #8b5cf6;'>[요약 분석 제공 내용]</strong><br>문항별 과목, 단원명, 성취기준, 성취수준, 판정이유";
-    }
-}
-
-function displayPreview(file) {
+    const file = event.target.files[0];
     if (!file) return;
+    
+    const preview = document.getElementById('image-preview');
+    const container = document.getElementById('preview-container');
+    const placeholder = document.getElementById('upload-placeholder');
+    
     const reader = new FileReader();
-    reader.onload = function(e) {
-        const imgEl = document.getElementById('image-preview');
-        imgEl.src = e.target.result;
-        imgEl.onload = function() {
-            document.getElementById('preview-container').style.display = 'block';
-            document.getElementById('upload-placeholder').style.display = 'none';
-            
-            if (analysisMainMode === 'single') {
-                document.getElementById('single-mode-ui').style.display = 'block';
-                document.getElementById('crop-canvas').style.display = 'none'; 
-            } else {
-                document.getElementById('multi-mode-ui').style.display = 'block';
-                document.getElementById('crop-canvas').style.display = 'block'; 
-                document.getElementById('crop-msg').style.display = 'block'; 
-                initCropCanvas();
-            }
-        }
-    }
+    reader.onload = (e) => {
+        preview.src = e.target.result;
+        container.style.display = 'block';
+        placeholder.style.display = 'none';
+    };
     reader.readAsDataURL(file);
 }
 
-function setAnalysisMode(mode) {
-    singleCropMode = mode;
-    const canvas = document.getElementById('crop-canvas');
-    const analyzeBtn = document.getElementById('analyze-single-btn');
-
-    if (mode === 'single') {
-        canvas.style.display = 'none';
-        analyzeBtn.style.display = 'block';
-        analyzeBtn.innerText = "✨ 사진 전체 분석 시작";
-        cropBoxes = [];
-    } else {
-        canvas.style.display = 'block';
-        analyzeBtn.style.display = 'none';
-        initCropCanvas();
-        if(document.getElementById('crop-msg')) document.getElementById('crop-msg').style.display = 'block';
-    }
-}
-
-function normalizeBox(b) {
-    return {
-        x: b.w < 0 ? b.x + b.w : b.x,
-        y: b.h < 0 ? b.y + b.h : b.y,
-        w: Math.abs(b.w),
-        h: Math.abs(b.h)
-    };
-}
-
-function checkHit(x, y) {
-    const TOLERANCE = 10; 
-    for (let i = cropBoxes.length - 1; i >= 0; i--) {
-        const b = normalizeBox(cropBoxes[i]);
-        const nearL = Math.abs(x - b.x) < TOLERANCE;
-        const nearR = Math.abs(x - (b.x + b.w)) < TOLERANCE;
-        const nearT = Math.abs(y - b.y) < TOLERANCE;
-        const nearB = Math.abs(y - (b.y + b.h)) < TOLERANCE;
-        const insideX = x >= b.x && x <= b.x + b.w;
-        const insideY = y >= b.y && y <= b.y + b.h;
-
-        if (nearT && nearL) return { type: 'resize_nw', index: i };
-        if (nearT && nearR) return { type: 'resize_ne', index: i };
-        if (nearB && nearL) return { type: 'resize_sw', index: i };
-        if (nearB && nearR) return { type: 'resize_se', index: i };
-        if (nearT && insideX) return { type: 'resize_n', index: i };
-        if (nearB && insideX) return { type: 'resize_s', index: i };
-        if (nearL && insideY) return { type: 'resize_w', index: i };
-        if (nearR && insideY) return { type: 'resize_e', index: i };
-        if (insideX && insideY) return { type: 'move', index: i };
-    }
-    return null;
-}
-
-function initCropCanvas() {
-    const imgEl = document.getElementById('image-preview');
-    const canvas = document.getElementById('crop-canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = imgEl.clientWidth;
-    canvas.height = imgEl.clientHeight;
-
-    drawOverlay();
-
-    function getPos(e) {
-        const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        return { x: clientX - rect.left, y: clientY - rect.top };
-    }
-
-    canvas.onmousedown = canvas.ontouchstart = (e) => {
-        e.preventDefault();
-        const pos = getPos(e);
-        const hit = checkHit(pos.x, pos.y);
-        if(document.getElementById('crop-msg')) document.getElementById('crop-msg').style.display = 'none';
-
-        if (hit) { 
-            isInteracting = true;
-            interactionType = hit.type;
-            activeBoxIndex = hit.index;
-            dragStartX = pos.x; dragStartY = pos.y;
-            initialBoxState = { ...cropBoxes[activeBoxIndex] };
-        } else { 
-            if (analysisMainMode === 'single') cropBoxes = []; 
-            const newBox = { x: pos.x, y: pos.y, w: 0, h: 0 };
-            cropBoxes.push(newBox);
-            activeBoxIndex = cropBoxes.length - 1;
-            isInteracting = true;
-            interactionType = 'create';
-            dragStartX = pos.x; dragStartY = pos.y;
-        }
-        drawOverlay();
-    };
-
-    canvas.onmousemove = canvas.ontouchmove = (e) => {
-        e.preventDefault();
-        const pos = getPos(e);
-
-        if (!isInteracting) {
-            const hit = checkHit(pos.x, pos.y);
-            if (hit) {
-                if (hit.type === 'move') canvas.style.cursor = 'move';
-                else if (['resize_n', 'resize_s'].includes(hit.type)) canvas.style.cursor = 'ns-resize';
-                else if (['resize_e', 'resize_w'].includes(hit.type)) canvas.style.cursor = 'ew-resize';
-                else if (['resize_nw', 'resize_se'].includes(hit.type)) canvas.style.cursor = 'nwse-resize';
-                else if (['resize_ne', 'resize_sw'].includes(hit.type)) canvas.style.cursor = 'nesw-resize';
-            } else canvas.style.cursor = 'crosshair';
-            return;
-        }
-
-        const dx = pos.x - dragStartX;
-        const dy = pos.y - dragStartY;
-        const box = cropBoxes[activeBoxIndex];
-
-        if (interactionType === 'create') {
-            box.w = pos.x - box.x; box.h = pos.y - box.y;
-        } else if (interactionType === 'move') {
-            box.x = initialBoxState.x + dx; box.y = initialBoxState.y + dy;
-        } else {
-            if (interactionType.includes('n')) { box.y = initialBoxState.y + dy; box.h = initialBoxState.h - dy; }
-            if (interactionType.includes('s')) { box.h = initialBoxState.h + dy; }
-            if (interactionType.includes('w')) { box.x = initialBoxState.x + dx; box.w = initialBoxState.w - dx; }
-            if (interactionType.includes('e')) { box.w = initialBoxState.w + dx; }
-        }
-        drawOverlay();
-    };
-
-    canvas.onmouseup = canvas.onmouseout = canvas.ontouchend = (e) => {
-        if (!isInteracting) return;
-        isInteracting = false;
-        
-        cropBoxes = cropBoxes.map(normalizeBox).filter(b => b.w > 20 && b.h > 20);
-        
-        if (cropBoxes.length > 0) {
-            if (analysisMainMode === 'single') {
-                document.getElementById('analyze-single-btn').style.display = 'block';
-                document.getElementById('analyze-single-btn').innerText = "🔍 선택 영역 분석 시작";
-            } else {
-                document.getElementById('analyze-multi-btn').style.display = 'block';
-                if(document.getElementById('crop-count')) document.getElementById('crop-count').innerText = `${cropBoxes.length}개 영역 지정됨`;
-            }
-        } else {
-            if(document.getElementById('crop-msg')) document.getElementById('crop-msg').style.display = 'block';
-            if(analysisMainMode === 'single') document.getElementById('analyze-single-btn').style.display = 'none';
-            else document.getElementById('analyze-multi-btn').style.display = 'none';
-            if(document.getElementById('crop-count')) document.getElementById('crop-count').innerText = `0개 영역 지정됨`;
-        }
-        drawOverlay();
-    };
-}
-
-function drawOverlay() {
-    const canvas = document.getElementById('crop-canvas');
-    if(!canvas) return;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; 
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    cropBoxes.forEach((box, index) => {
-        const nb = normalizeBox(box);
-        
-        ctx.clearRect(nb.x, nb.y, nb.w, nb.h);
-        
-        ctx.strokeStyle = '#3b82f6'; 
-        ctx.lineWidth = 3;
-        ctx.strokeRect(nb.x, nb.y, nb.w, nb.h);
-
-        if (analysisMainMode === 'multi') {
-            const badgeRadius = 10;
-            const badgeX = nb.x + nb.w; 
-            const badgeY = nb.y;        
-            
-            ctx.fillStyle = '#ef4444'; 
-            ctx.beginPath();
-            ctx.arc(badgeX, badgeY, badgeRadius, 0, 2 * Math.PI);
-            ctx.fill();
-            
-            ctx.fillStyle = 'white';
-            ctx.font = 'bold 12px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText((index + 1).toString(), badgeX, badgeY);
-        }
+function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.target.result);
+        reader.onerror = error => reject(error);
     });
 }
 
-function getCroppedBase64(boxObj) {
-    const imgEl = document.getElementById('image-preview');
-    if (!boxObj) return imgEl.src.split(',')[1]; 
-    
-    const nb = normalizeBox(boxObj);
-    const scaleX = imgEl.naturalWidth / imgEl.clientWidth;
-    const scaleY = imgEl.naturalHeight / imgEl.clientHeight;
-    
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = nb.w * scaleX; 
-    tempCanvas.height = nb.h * scaleY;
-    tempCanvas.getContext('2d').drawImage(
-        imgEl, 
-        nb.x * scaleX, nb.y * scaleY, nb.w * scaleX, nb.h * scaleY, 
-        0, 0, tempCanvas.width, tempCanvas.height
-    );
-    return tempCanvas.toDataURL('image/jpeg', 0.9).split(',')[1];
+// 💾 백그라운드 무중단 변형 알고리즘 트랜잭션 코어
+function processAndSaveBackground(analysisText, apiKey) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const workerUrl = "https://script.google.com/macros/s/AKfycbwgx4RgF8FQxxL3jBgEQ5l369llADjhZ1NepulIdF4DdX18kBrB8oRQ4Ft0d5WdKtEF/exec";
+            const response = await fetch(workerUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify({
+                    action: "save_variant",
+                    analysisText: analysisText,
+                    apiKey: apiKey
+                })
+            });
+
+            if(!response.ok) throw new Error("서버 다운스트림 거부");
+            const data = await response.json();
+            const aiText = data.candidates[0].content.parts[0].text;
+
+            // 정규식 매칭 분해법
+            const qMatch = aiText.match(/문제:\s*([\s\S]*?)(?=정답:|$)/);
+            const aMatch = aiText.match(/정답:\s*([\s\S]*)/);
+
+            const finalQuestion = qMatch ? qMatch[1].trim() : "변형 문항 생성 실패";
+            const finalAnswer = aMatch ? aMatch[1].trim() : "정답 산출 실패";
+
+            let subject = currentSubject; 
+            let standardCode = currentStandardCode;
+            
+            // 만약 한문제 분석이 아니고 시험지 일괄분석 모드 내부라면 서브 셀렉터 값을 추적
+            const examSubjectEl = document.getElementById('admin-q-subject');
+            if(examSubjectEl && examSubjectEl.value && examSubjectEl.value !== 'uncategorized') {
+                subject = examSubjectEl.value;
+            }
+
+            await db.collection('transformed_bank').add({
+                subject: subject,
+                standard_code: standardCode || "unknown",
+                question: finalQuestion,
+                answer: finalAnswer,
+                source: "🤖 AI 수석위원 교과협의 변형본",
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            resolve();
+        } catch (err) {
+            reject(err);
+        }
+    });
 }
 
 function resetAnalysis(keepPassages = false) {
@@ -599,8 +690,7 @@ function resetAnalysis(keepPassages = false) {
         mainContainer.style.maxWidth = ''; 
     }
 
-    // 🟢 [핵심] 완전히 새로 시작할 때만(keepPassages가 false일 때만) 
-    // 보관함 창을 닫고 데이터를 깨끗하게 비웁니다.
+    // 🟢 완전히 새로 시작할 때만(keepPassages가 false일 때만) 보관함을 닫고 데이터를 비웁니다.
     if (keepPassages !== true) {
         const tray = document.getElementById('common-passage-tray');
         const icon = document.getElementById('tray-icon');
@@ -612,1865 +702,49 @@ function resetAnalysis(keepPassages = false) {
     }
 }
 
-async function checkApiError(response) {
-    if (!response.ok) {
-        let errMsg = "";
-        try {
-            const errData = await response.json();
-            errMsg = errData.error?.message || "";
-        } catch(e) {
-            errMsg = response.statusText;
-        }
-        
-        let koreanError = "서버와 통신 중 알 수 없는 문제가 발생했습니다.";
-        
-        if (response.status === 400) {
-            if (errMsg.includes("API key not valid")) koreanError = "입력하신 API 키가 유효하지 않습니다. 키를 다시 확인해주세요.";
-            else koreanError = "이미지나 요청 형식이 잘못되었습니다. 다시 업로드해주세요.";
-        }
-        else if (response.status === 401 || response.status === 403) koreanError = "입력하신 API 키가 잘못되었거나 권한이 없습니다. API 키를 다시 확인해주세요!";
-        else if (response.status === 404) koreanError = "AI 모델 버전을 찾을 수 없습니다. (시스템 관리자에게 문의하세요)";
-        else if (response.status === 429 || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED")) koreanError = "무료 사용량(할당량) 한도를 초과했습니다! ⚙️설정에서 새로운 API 키를 발급받아 입력해주세요.";
-        else if (response.status === 500) koreanError = "구글 AI 서버 내부에서 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
-        else if (response.status === 503 || errMsg.includes("high demand") || errMsg.includes("overloaded")) koreanError = "현재 구글 서버에 접속자가 너무 많아 일시적으로 바쁩니다! 10초만 기다렸다가 다시 눌러주세요.";
+// ==========================================
 
-        throw new Error(koreanError);
-    }
-}
-
-async function executeAnalysis() {
-    const isLoggedIn = await checkLogin();
-    if (!isLoggedIn) return;
-
-    if (!requireApiKey()) return;
-
-    if(document.getElementById('single-mode-ui')) document.getElementById('single-mode-ui').style.display = 'none';
-    if(document.getElementById('multi-mode-ui')) document.getElementById('multi-mode-ui').style.display = 'none';
-    document.getElementById('crop-canvas').style.display = 'none';
-    
-    const resultDiv = document.getElementById('analysis-result');
-    const resultText = document.getElementById('result-text');
-    resultDiv.style.display = 'block';
-    
-    resultText.innerHTML = '<div style="text-align:center; padding: 3rem; color: #3b82f6; font-weight: bold; font-size: 1.1rem;">AI 교사가 국가 수준 평가 루브릭을 바탕으로 정밀 분석 중입니다... ⏳</div>';
-    resultDiv.scrollIntoView({ behavior: 'smooth' });
-
-    try {
-        let standardsInfo = "";
-        for (const key in subjectData) {
-            if (subjectData[key].standards && subjectData[key].standards.length > 0) {
-                standardsInfo += `\n--- ${subjectData[key].title} ---\n`;
-                standardsInfo += subjectData[key].standards.map(s => `${s.code} ${s.desc}`).join('\n');
-            }
-        }
-        const referenceDBText = await fetchReferenceQuestions(currentSubject);
-
-        let isSingleMode = (analysisMainMode === 'single');
-        const userApiKey = localStorage.getItem('gemini_api_key'); 
-
-        let bodyData = {
-            standardsInfo: standardsInfo,
-            subject: currentSubject, // 🌟 핵심! 백엔드가 스스로 판정할 수 있도록 과목 코드만 넘겨줍니다.
-            referenceDBText: referenceDBText,
-            commonImages: commonPassages,
-            apiKey: userApiKey 
-        };
-
-        if (isSingleMode) {
-            bodyData.action = "analyze_single"; // 깃발: 단일 분석 서랍 열기
-            const box = (singleCropMode === 'multi' && cropBoxes.length > 0) ? cropBoxes[0] : null;
-            lastAnalyzedSingleImage = getCroppedBase64(box); 
-            bodyData.imageBase64 = lastAnalyzedSingleImage;
-        } else {
-            bodyData.action = "analyze_multi"; // 깃발: 대량 분석 서랍 열기
-            bodyData.images = cropBoxes.map(box => getCroppedBase64(box));
-        }
-
-        // 🌟 구글 주소 대신 선생님의 클라우드플레어 백엔드로 우회 신호 발송!
-        const workerUrl = "https://script.google.com/macros/s/AKfycbwgx4RgF8FQxxL3jBgEQ5l369llADjhZ1NepulIdF4DdX18kBrB8oRQ4Ft0d5WdKtEF/exec"; 
-        const response = await fetch(workerUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify(bodyData)
-        });
-
-        // 🌟 가림막을 치우고 백엔드가 보내는 진짜 에러 메시지를 화면에 던지도록 수정!
-        if (!response.ok) {
-            const errData = await response.json();
-            const realError = errData.error?.message || errData.error || "알 수 없는 서버 오류";
-            throw new Error(`[서버 상세 에러] ${realError}`);
-        }
-        
-        const data = await response.json();
-        if (data.error) {
-            throw new Error(data.error.message || "구글 AI가 응답을 거부했습니다. API 키를 확인해주세요.");
-        }
-        const analysisText = data.candidates[0].content.parts[0].text;
-        
-        currentChatContext = analysisText; 
-
-        const wrapper = document.getElementById('analysis-layout-wrapper');
-        if (wrapper) { wrapper.style.position = 'relative'; wrapper.style.display = 'block'; }
-
-        const chatContainer = document.getElementById('ai-chat-container');
-        if(chatContainer) {
-            chatContainer.style.display = 'flex';
-            chatContainer.style.position = 'absolute'; 
-            chatContainer.style.right = '-200px';       
-            chatContainer.style.top = '0';             
-            chatContainer.style.width = '350px'; 
-            chatContainer.style.height = 'fit-content'; 
-            chatContainer.style.paddingBottom = '1rem'; 
-            chatContainer.style.zIndex = '100';        
-            chatContainer.style.backgroundColor = 'white';
-            chatContainer.style.border = '1px solid #cbd5e1'; 
-            chatContainer.style.borderRadius = '12px'; 
-            chatContainer.style.boxShadow = '-5px 0 15px rgba(0,0,0,0.1)'; 
-        }
-        
-        if (isSingleMode) {
-            renderSophisticatedResult(analysisText, lastAnalyzedSingleImage);
-        } else {
-            let rawText = analysisText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
-            resultText.innerHTML = `<div style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); line-height: 1.8;">${rawText}</div>`;
-        }
-
-        const saveZone = document.getElementById('save-analysis-zone');
-        if (saveZone) saveZone.style.display = 'block';
-
-        if (window.MathJax) {
-            MathJax.typesetClear();
-            MathJax.typesetPromise([resultDiv]);
-        }
-
-    } catch (error) {
-        console.error('API Error:', error);
-        resultText.innerHTML = `<div style="padding: 15px; background-color: #fee2e2; border-left: 4px solid #ef4444; border-radius: 4px;">
-            <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0;">🚨 분석 실패</p>
-            <p style="margin: 0; color: #7f1d1d;">${error.message}</p>
-        </div>`;
-    }
-}
-
-function renderSophisticatedResult(rawText, base64Image) {
-    const container = document.getElementById('result-text');
-    container.innerHTML = "";
-
-    if (base64Image) {
-        const imgDiv = document.createElement('div');
-        imgDiv.style.textAlign = 'center';
-        imgDiv.style.marginBottom = '1.5rem';
-        imgDiv.innerHTML = `<img src="data:image/jpeg;base64,${base64Image}" style="max-height: 200px; max-width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">`;
-        container.appendChild(imgDiv);
-    }
-
-    let text = rawText.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    text = text.replace(/(\*\*|#)/g, ''); 
-    text = text.replace(/(?:\[)?\s*원본\s*문제\s*추출\s*(?:\])?\s*:?/g, '[원본 문제 추출]:'); 
-    text = text.replace(/(?:\[)?\s*교과\s*및\s*단원\s*(?:\])?\s*:?/g, '[교과 및 단원]:');
-    text = text.replace(/(?:\[)?\s*성취기준\s*및\s*수준\s*(?:\])?\s*:?/g, '[성취기준 및 수준]:');
-    text = text.replace(/(?:\[)?\s*핵심\s*개념\s*(?:\])?\s*:?/g, '[핵심 개념]:');
-    text = text.replace(/(?:\[)?\s*상세\s*풀이\s*(?:\])?\s*:?/g, '[상세 풀이]:');
-    text = text.replace(/(?:\[)?\s*문제\s*풀이\s*(?:\])?\s*:?/g, '[상세 풀이]:'); 
-    
-    const configs = [
-        { key: "[원본 문제 추출]:", title: "0. 추출된 원본 문제 텍스트", icon: "📝", bg: "#f8fafc", border: "#94a3b8" },
-        { key: "[교과 및 단원]:", title: "1. 교과명 및 단원명", icon: "📚", bg: "#f3f4f6", border: "#64748b" },
-        { key: "[성취기준 및 수준]:", title: "2. 성취기준과 성취수준", icon: "📍", bg: "#eff6ff", border: "#3b82f6" },
-        { key: "[핵심 개념]:", title: "3. 엄밀한 핵심 개념", icon: "💡", bg: "#fffbeb", border: "#f59e0b" },
-        { key: "[상세 풀이]:", title: "4. 단계별 정밀 풀이", icon: "✍️", bg: "#f0fdf4", border: "#10b981" }
-    ];
-
-    configs.forEach((conf, index) => {
-        let content = "";
-        const startIndex = text.indexOf(conf.key);
-        
-        if (startIndex !== -1) {
-            const contentStart = startIndex + conf.key.length;
-            let nextKeyIndex = text.length; 
-            
-            configs.forEach((otherConf, otherIndex) => {
-                if (index !== otherIndex) {
-                    const idx = text.indexOf(otherConf.key, contentStart);
-                    if (idx !== -1 && idx < nextKeyIndex) { nextKeyIndex = idx; }
-                }
-            });
-            content = text.substring(contentStart, nextKeyIndex).trim();
-        }
-
-        if (!content) return;
-
-        if (conf.key === "[원본 문제 추출]:") {
-            content = content.replace(/\n/g, '<br>');
-        }
-        if (conf.key === "[성취기준 및 수준]:") {
-            content = content.replace(/\n/g, ' ')
-                             .replace(/(성취기준:)/g, '<strong style="color:#2563eb; font-size: 1.05rem;">$1</strong>')
-                             .replace(/(성취수준:)/g, '<br><strong style="color:#2563eb; font-size: 1.05rem; margin-top: 8px; display: inline-block;">$1</strong>')
-                             .replace(/(판정 이유:)/g, '<br><strong style="color:#2563eb; font-size: 1.05rem; margin-top: 8px; display: inline-block;">$1</strong>');
-        }
-        if (conf.key === "[상세 풀이]:") {
-            content = content.replace(/(\d+단계[:.])/g, '<br><br><span style="background-color:#dbeafe; color:#1e40af; padding:4px 10px; border-radius:20px; font-weight:bold; font-size:0.95rem; display:inline-block; margin-bottom:8px;">$1</span><br>');
-            if(content.startsWith('<br><br>')) content = content.substring(8);
-            if(content.startsWith('<br>')) content = content.substring(4);
-        }
-        if (conf.key === "[핵심 개념]:") { content = content.replace(/\n/g, '<br>'); }
-
-        const card = document.createElement('div');
-        card.style.cssText = `background: ${conf.bg}; border: 1px solid ${conf.border}44; border-left: 6px solid ${conf.border}; padding: 1.2rem; border-radius: 12px; margin-bottom: 1.2rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);`;
-        
-        card.innerHTML = `
-            <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.8rem;">
-                <span style="font-size:1.2rem;">${conf.icon}</span>
-                <strong style="font-size:1.1rem; color:#1e293b;">${conf.title}</strong>
-            </div>
-            <div class="analysis-content" style="color:#334155; line-height:1.8; font-size:0.95rem;">${content}</div>
-        `;
-        container.appendChild(card);
-    });
-}
-
-async function processAndSaveBackground(analysisText, apiKey) {
-    try {
-        const workerUrl = "https://script.google.com/macros/s/AKfycbwgx4RgF8FQxxL3jBgEQ5l369llADjhZ1NepulIdF4DdX18kBrB8oRQ4Ft0d5WdKtEF/exec"; 
-        const userApiKey = localStorage.getItem('gemini_api_key');
-        const response = await fetch(workerUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({
-                action: "save_variant",
-                analysisText: analysisText,
-                apiKey: userApiKey
-            })
-        });
-
-        const result = await response.json();
-        if (!result.candidates || result.candidates.length === 0) {
-            console.warn("AI 변형 문항 생성 실패 (응답 없음). 조용히 넘어갑니다.");
-            return; 
-        }
-
-        const aiResponse = result.candidates[0].content.parts[0].text;
-        let finalQuestion = aiResponse;
-        let finalAnswer = "정답 정보 없음";
-        
-        const qMatch = aiResponse.match(/문제:\s*([\s\S]*?)(?=정답:|$)/);
-        const aMatch = aiResponse.match(/정답:\s*([\s\S]*)/);
-        
-        if (qMatch) finalQuestion = qMatch[1].trim();
-        if (aMatch) finalAnswer = aMatch[1].trim();
-
-        const stdCode = analysisText.match(/\[10공수\d-\d\d-\d\d\]/g)?.[0] || "unknown";
-
-        let matchedSubject = currentSubject;
-        for (const key in subjectData) {
-            if (subjectData[key].standards && subjectData[key].standards.some(s => s.code === stdCode)) {
-                matchedSubject = key; break;
-            }
-        }
-
-        const levelMatch = analysisText.match(/성취수준:\s*(A\+|[A-E])/);
-        let extractedLevel = levelMatch ? levelMatch[1] : "C";
-
-        if (extractedLevel === "A+") {
-            extractedLevel = "A"; 
-        }
-
-        const reasonMatch = analysisText.match(/판정 이유:\s*([\s\S]*?)(?=\[|$)/);
-        let extractedReason = reasonMatch ? reasonMatch[1].trim() : "AI가 교육과정 루브릭을 바탕으로 분석한 문항입니다.";
-
-        await db.collection('transformed_bank').add({
-            answer: finalAnswer,
-            level: extractedLevel,
-            question: finalQuestion,
-            reason: extractedReason,
-            standard_code: stdCode,
-            subject: matchedSubject,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        console.log("✅ 문항 분석 결과가 성공적으로 저장되었습니다.");
-
-    } catch (e) { 
-        console.error("데이터 저장 실패:", e);
-        alert("분석 결과 자동 저장 중 문제가 발생했습니다: " + e.message);
-    }
-}
-
-function showSection(id) {
-    document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-    
-    const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(`'${id}'`));
-    if (activeBtn) activeBtn.classList.add('active');
-    
-    // 💡 투명 망토를 씌울 대상 (교과군, 세부과목 드롭다운 전체를 묶은 컨테이너)
-    const curriculumSelector = document.querySelector('.curriculum-selector');
-    const subTitle = document.getElementById('main-subtitle'); 
-
-    // 문제 분석이나 분할점수 산출 탭일 경우 투명 망토 씌우기 (공간은 그대로 유지!)
-    if (id === 'problem-analysis' || id === 'cut-score') {
-        if (curriculumSelector) curriculumSelector.style.visibility = 'hidden';
-        if (subTitle) subTitle.style.visibility = 'hidden';
-    } else {
-        // 다른 탭으로 오면 다시 보이게 하기
-        if (curriculumSelector) curriculumSelector.style.visibility = 'visible';
-        if (subTitle) subTitle.style.visibility = 'visible';
-    }
-    
-    history.pushState({ section: id }, "", "#" + id);
-
-    // 💡 각 탭을 누를 때마다 화면 리셋 (초기화) 로직
-    if (id === 'cut-score') {
-        currentProjectId = null;
-        document.querySelectorAll('.cut-score-card').forEach(card => card.style.display = 'none');
-        document.getElementById('cut-score-dashboard').style.display = 'block';
-        if (typeof loadProjects === 'function') loadProjects();
-    } else if (id === 'problem-analysis') {
-        if (typeof resetAnalysis === 'function') resetAnalysis();
-    } else if (id === 'quiz') {
-        const qSelect = document.getElementById('quiz-standard-selection');
-        const qMatch = document.getElementById('quiz-level-matching');
-        if(qSelect) qSelect.style.display = 'block';
-        if(qMatch) qMatch.style.display = 'none';
-    } else if (id === 'bookmark') {
-        const bList = document.getElementById('bookmark-list');
-        if(bList) bList.innerHTML = ""; 
-
-        // ✨ 탭에 다시 들어오면 모든 북마크 버튼 스타일을 초기화
-        ['A', 'B', 'C', 'D', 'E'].forEach(l => {
-            const btn = document.getElementById(`bm-btn-${l}`);
-            if (btn) {
-                btn.style.opacity = '1'; // 다시 100% 진하게
-                btn.style.transform = 'scale(1)';
-                btn.style.border = '3px solid transparent';
-                btn.style.boxShadow = 'none';
-            }
-        });
+function updateMathPreview(idx, val) {
+    const preview = document.getElementById(`math-preview-${idx}`);
+    if (preview) {
+        preview.innerHTML = val.replace(/\n/g, '<br>');
+        if (window.MathJax) MathJax.typesetPromise([preview]);
     }
 }
 
 // ==========================================
-// 📚 2022 개정 교육과정 전체 교과/과목 매핑 데이터
-// ==========================================
-let currentGroup = 'math'; 
-let currentSubjectQCount = {}; // 💡 과목별 문항 개수 미리 저장소
 
-const curriculumMap = {
-    'math': {
-        '공통 과목': [{id: 'common1', name: '공통수학1'}, {id: 'common2', name: '공통수학2'}, {id: 'basic_math1', name: '기본수학1'}, {id: 'basic_math2', name: '기본수학2'}],
-        '일반 선택': [{id: 'algebra', name: '대수'}, {id: 'calculus1', name: '미적분Ⅰ'}, {id: 'probStat', name: '확률과 통계'}],
-        '진로 선택': [{id: 'geometry', name: '기하'}, {id: 'calculus2', name: '미적분Ⅱ'}, {id: 'econ_math', name: '경제 수학'}, {id: 'ai-math', name: '인공지능 수학'}, {id: 'job_math', name: '직무 수학'}],
-        '융합 선택': [{id: 'math_culture', name: '수학과 문화'}, {id: 'prac_stats', name: '실용 통계'}, {id: 'math_task', name: '수학과제 탐구'}],
-        '기타': [{id: 'uncategorized', name: '📦 미분류 보관함'}]
-    },
-    'korean': {
-        '공통 과목': [{id: 'kor_common1', name: '공통국어1'}, {id: 'kor_common2', name: '공통국어2'}],
-        '일반 선택': [{id: 'kor_speech', name: '화법과 언어'}, {id: 'kor_read_write', name: '독서와 작문'}, {id: 'kor_lit', name: '문학'}],
-        '진로 선택': [{id: 'kor_theme', name: '주제 탐구 독서'}, {id: 'kor_lit_media', name: '문학과 영상'}, {id: 'kor_job', name: '직무 의사소통'}],
-        '융합 선택': [{id: 'kor_debate', name: '독서 토론과 글쓰기'}, {id: 'kor_media', name: '매체 의사소통'}, {id: 'kor_life', name: '언어생활 탐구'}]
-    },
-    'english': {
-        '공통 과목': [{id: 'eng_common1', name: '공통영어1'}, {id: 'eng_common2', name: '공통영어2'}, {id: 'eng_basic1', name: '기본영어1'}, {id: 'eng_basic2', name: '기본영어2'}],
-        '일반 선택': [{id: 'eng_1', name: '영어Ⅰ'}, {id: 'eng_2', name: '영어Ⅱ'}, {id: 'eng_read_write', name: '영어 독해와 작문'}],
-        '진로 선택': [{id: 'eng_lit', name: '영미 문학 읽기'}, {id: 'eng_pres', name: '영어 발표와 토론'}, {id: 'eng_adv', name: '심화 영어'}, {id: 'eng_adv_rw', name: '심화 영어 독해와 작문'}, {id: 'eng_job', name: '직무 영어'}],
-        '융합 선택': [{id: 'eng_life', name: '실생활 영어 회화'}, {id: 'eng_media', name: '미디어 영어'}, {id: 'eng_world', name: '세계 문화와 영어'}]
-    },
-    'social': {
-        '공통 과목': [{id: 'history1', name: '한국사1'}, {id: 'history2', name: '한국사2'}, {id: 'soc_common1', name: '통합사회1'}, {id: 'soc_common2', name: '통합사회2'}],
-        '일반 선택': [{id: 'soc_citizen', name: '세계시민과 지리'}, {id: 'soc_world', name: '세계사'}, {id: 'soc_culture', name: '사회와 문화'}, {id: 'soc_ethics', name: '현대사회와 윤리'}],
-        '진로 선택': [{id: 'soc_geo_kor', name: '한국지리 탐구'}, {id: 'soc_city', name: '도시의 미래 탐구'}, {id: 'soc_asia', name: '동아시아 역사 기행'}, {id: 'soc_pol', name: '정치'}, {id: 'soc_law', name: '법과 사회'}, {id: 'soc_econ', name: '경제'}, {id: 'soc_think', name: '윤리와 사상'}, {id: 'soc_human', name: '인문학과 윤리'}, {id: 'soc_inter', name: '국제 관계의 이해'}],
-        '융합 선택': [{id: 'soc_travel', name: '여행지리'}, {id: 'soc_modern', name: '역사로 탐구하는 현대 세계'}, {id: 'soc_prob', name: '사회문제 탐구'}, {id: 'soc_finance', name: '금융과 경제생활'}, {id: 'soc_eth_prob', name: '윤리문제 탐구'}, {id: 'soc_climate', name: '기후변화와 지속가능한 세계'}]
-    },
-    'science': {
-        '공통 과목': [{id: 'sci_common1', name: '통합과학1'}, {id: 'sci_common2', name: '통합과학2'}, {id: 'sci_exp1', name: '과학탐구실험1'}, {id: 'sci_exp2', name: '과학탐구실험2'}],
-        '일반 선택': [{id: 'sci_phy', name: '물리학'}, {id: 'sci_chem', name: '화학'}, {id: 'sci_bio', name: '생명과학'}, {id: 'sci_earth', name: '지구과학'}],
-        '진로 선택': [{id: 'sci_mech', name: '역학과 에너지'}, {id: 'sci_electro', name: '전자기와 양자'}, {id: 'sci_matter', name: '물질과 에너지'}, {id: 'sci_chem_re', name: '화학 반응의 세계'}, {id: 'sci_cell', name: '세포와 물질대사'}, {id: 'sci_gene', name: '생물의 유전'}, {id: 'sci_earth_sys', name: '지구시스템과학'}, {id: 'sci_space', name: '행성우주과학'}],
-        '융합 선택': [{id: 'sci_history', name: '과학의 역사와 문화'}, {id: 'sci_climate', name: '기후변화와 환경생태'}, {id: 'sci_converge', name: '융합과학 탐구'}]
-    }
-};
+let extractedQuestionsArray = []; 
+let currentUploadedFileBase64 = null; 
 
-// 교과군(탭) 변경 시 호출 (준비중 과목 비활성화 및 자동 선택 적용)
-function changeGroup(groupId) {
-    currentGroup = groupId;
-    
-    // 버튼 스타일 활성화 변경
-    document.querySelectorAll('.group-btn').forEach(btn => btn.classList.remove('active'));
-    document.querySelector(`button[onclick="changeGroup('${groupId}')"]`).classList.add('active');
-    
-    // 해당 교과군에 맞춰 드롭다운 다시 그리기
-    const selectEl = document.getElementById('detail-subjects');
-    selectEl.innerHTML = '';
-    const map = curriculumMap[groupId];
-    
-    let firstEnabledSubject = null; // 💡 탭을 열었을 때 데이터가 있는 첫 번째 과목을 찾기 위한 변수
-    
-    for (const category in map) {
-        const optgroup = document.createElement('optgroup');
-        optgroup.label = category;
-        map[category].forEach(sub => {
-            const opt = document.createElement('option');
-            opt.value = sub.id;
-            
-            // ✨ 핵심: 해당 과목 데이터가 subjectData에 있는지 확인!
-            if (typeof subjectData !== 'undefined' && subjectData[sub.id] && subjectData[sub.id].standards && subjectData[sub.id].standards.length > 0) {
-                // 성취기준 데이터가 1개라도 있으면 정상적으로 출력
-                opt.innerText = sub.name;
-                if (!firstEnabledSubject) firstEnabledSubject = sub.id; // 첫 활성화 과목 기억
-            } else {
-                // 성취기준 데이터가 0개면 (준비중)으로 비활성화 처리
-                opt.innerText = sub.name + " (준비중)";
-                opt.disabled = true;           // 마우스로 선택 불가
-                opt.style.color = "#94a3b8";   // 글자색을 흐린 회색으로 변경
-            }
-            
-            optgroup.appendChild(opt);
-        });
-        selectEl.appendChild(optgroup);
-    }
-    
-    // 💡 무조건 첫 번째 항목이 아니라, "데이터가 존재하는 첫 번째 과목"으로 드롭다운을 맞춤
-    if (firstEnabledSubject) {
-        selectEl.value = firstEnabledSubject;
-    }
-    
-    // 과목을 변경했으니 화면 전체 새로고침
-    changeSubject();
-}
-
-// 세부 과목 변경 시 호출 (완벽 연동 버전)
-async function changeSubject() {
-    currentSubject = document.getElementById('detail-subjects').value;
-    
-    // 1. 부제목(단원명 등) 업데이트
-    const data = subjectData[currentSubject];
-    const subTitleEl = document.getElementById('main-subtitle');
-    if (data) { 
-        subTitleEl.innerText = "[" + data.title + "] " + (data.subtitle || "과목 정보가 등록되어 있습니다."); 
-    } else {
-        subTitleEl.innerText = "이 과목의 성취기준 데이터가 아직 등록되지 않았습니다.";
-    }
-    
-    // 2. 버튼 비활성화를 위한 문항 개수 계산
-    currentSubjectQCount = {};
-    if (currentSubject && currentSubject !== 'uncategorized') {
-        try {
-            const snapshot = await db.collection('transformed_bank').where('subject', '==', currentSubject).get();
-            snapshot.forEach(doc => {
-                const stdCode = doc.data().standard_code;
-                if (stdCode && stdCode !== "unknown" && stdCode !== "코드없음") {
-                    currentSubjectQCount[stdCode] = (currentSubjectQCount[stdCode] || 0) + 1;
-                }
-            });
-        } catch(e) { console.warn("문항 수 계산 실패", e); }
-    }
-
-    // 🌟 3. [핵심] 3가지 화면 모두 즉시 새로고침하여 완벽하게 연동시킵니다!
-    initDashboard(); // 성취기준과 성취수준 갱신
-    if (typeof initChecklist === 'function') initChecklist(); // 나의 체크리스트 갱신
-    if (typeof loadBookmark === 'function') loadBookmark(); // 북마크 문항 갱신
-}
-
-function initDashboard() {
-    const container = document.getElementById('card-container');
-    container.innerHTML = "";
-    
-    if (!subjectData[currentSubject]) {
-        container.innerHTML = `<div style="text-align:center; padding:3rem; background:white; border-radius:12px; color:#64748b; font-weight:bold;">관리자 메뉴에서 이 과목의 성취기준을 먼저 등록해 주세요! 👨‍🔧</div>`;
-        return;
-    }
-    
-    subjectData[currentSubject].standards.forEach(std => {
-        const card = document.createElement('div');
-        card.className = 'card';
-        card.style.display = 'block';
-        card.style.position = 'relative';
-
-        const textArea = document.createElement('div');
-        textArea.style.cursor = 'pointer';
-        textArea.innerHTML = `<h3 style="margin: 0 0 0.5rem 0; color: var(--primary);">${std.code}</h3><p style="margin: 0; color: var(--text-main); line-height: 1.6;">${std.desc}</p>`;
-        textArea.onclick = () => openModal(std);
-        
-        const btnArea = document.createElement('div');
-        btnArea.style.textAlign = 'right';
-        btnArea.style.marginTop = '15px'; 
-        
-        // ✨ 마법의 문항 유무 판별 로직
-        const qCount = currentSubjectQCount[std.code] || 0;
-        const hasQuestions = (std.questions && std.questions.length > 0) || qCount > 0;
-        
-        const quizBtn = document.createElement('button');
-        
-        if (hasQuestions) {
-            quizBtn.className = 'save-btn'; 
-            quizBtn.style.display = 'inline-block';
-            quizBtn.style.width = 'auto'; 
-            quizBtn.style.margin = '0';
-            quizBtn.style.padding = '0.5rem 1.2rem'; 
-            quizBtn.style.fontSize = '0.9rem';
-            quizBtn.style.borderRadius = '8px'; 
-            // 파란 배지로 몇 문제가 있는지 알려줍니다
-            quizBtn.innerHTML = `📝 문항 매칭 연습 <span style="background:rgba(255,255,255,0.3); color:white; padding:2px 6px; border-radius:12px; font-size:0.75rem; margin-left:4px;">${qCount}개</span>`;
-            
-            quizBtn.onclick = (e) => {
-                e.stopPropagation(); 
-                showSection('quiz'); 
-                startLevelMatching(std.code); 
-            };
-        } else {
-            // 문항이 없으면 흑백 처리하고 누르지 못하게 막습니다!
-            quizBtn.className = 'save-btn disabled-btn'; 
-            quizBtn.style.display = 'inline-block';
-            quizBtn.style.width = 'auto'; 
-            quizBtn.style.margin = '0';
-            quizBtn.style.padding = '0.5rem 1.2rem'; 
-            quizBtn.style.fontSize = '0.9rem';
-            quizBtn.style.borderRadius = '8px'; 
-            quizBtn.innerHTML = '🚫 등록된 문항 없음';
-            quizBtn.disabled = true; // 강제 잠금
-            
-            quizBtn.onclick = (e) => { e.stopPropagation(); }; // 클릭 무시
-        }
-        
-        btnArea.appendChild(quizBtn);
-        card.appendChild(textArea);
-        card.appendChild(btnArea);
-        container.appendChild(card);
-    });
-    
-    setTimeout(() => {
-        if (window.MathJax && window.MathJax.typesetPromise) { 
-            MathJax.typesetClear(); 
-            MathJax.typesetPromise([container]).catch(err => console.error("수식 렌더링 에러:", err)); 
-        }
-    }, 300);
-}
-
-async function startLevelMatching(code) {
-    currentStandardCode = code; currentLevelQ = 0;
-    const standard = subjectData[currentSubject].standards.find(s => s.code === code);
-    
-    let combinedQuestions = standard.questions ? [...standard.questions] : []; 
-
-    try {
-        const snapshot = await db.collection('transformed_bank').where('standard_code', '==', code).get();
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            let extractedLevel = data.level || data.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1] || "C"; 
-            
-            // 💡 추가된 핵심 로직: DB의 reason 필드를 최우선으로 읽고, 없으면 original_analysis 텍스트에서 강제로 추출합니다!
-            let extractedReason = data.reason || data.original_analysis?.match(/판정 이유:\s*([\s\S]*?)(?=\[|$)/)?.[1]?.trim() || "사용자가 업로드한 문항을 AI가 분석하고 변형한 실전 문항입니다.";
-        
-            let sourceBadge = data.source === "선생님 직접 등록"
-                ? `<div style="background-color: #e0e7ff; padding: 10px; border-left: 4px solid #3b82f6; margin-bottom: 10px; border-radius: 4px;">
-                       <span style="font-size: 0.8rem; color: #1e40af; font-weight: bold;">🧑‍🏫 선생님 등록 문항</span>
-                   </div>`
-                : `<div style="background-color: #f0fdf4; padding: 10px; border-left: 4px solid #22c55e; margin-bottom: 10px; border-radius: 4px;">
-                       <span style="font-size: 0.8rem; color: #166534; font-weight: bold;">💡 AI 변형 추가 문항</span>
-                   </div>`;
-        
-            let imgHtml = data.image ? `<br><img src="${data.image}" style="max-width:100%; margin-top:15px; border-radius:8px; border:1px solid #cbd5e1; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">` : "";
-                   combinedQuestions.push({
-                    q: sourceBadge + (data.question || data.q || "문제 내용이 없습니다."),
-                    level: extractedLevel,
-                    reason: extractedReason, // 💡 수정됨!
-                    answer: data.answer || "정답 정보 없음" 
-                });
-            });
-    } catch (error) { console.warn("DB 로드 실패"); }
-
-    currentQuestions = shuffleArray(combinedQuestions);
-    document.getElementById('quiz-standard-selection').style.display = 'none';
-    document.getElementById('quiz-level-matching').style.display = 'block';
-    document.getElementById('selected-standard-info').innerText = `${standard.code} ${standard.desc}`;
-    
-    const levelsContainer = document.getElementById('achievement-levels-side');
-    levelsContainer.innerHTML = `
-        <h4>성취수준 가이드</h4>
-        <div class="guide-item"><strong>A (상)</strong> ${standard.levels.high}</div>
-        <div class="guide-item"><strong>B (우수)</strong> ${standard.levels.b || standard.levels.high.replace("이해하여 설명할 수 있으며", "설명할 수 있고").replace("체계적으로 수행", "정확하게 수행")}</div>
-        <div class="guide-item"><strong>C (중)</strong> ${standard.levels.mid}</div>
-        <div class="guide-item"><strong>D (미흡)</strong> ${standard.levels.d || standard.levels.mid.replace("이해하고", "알고").replace("계산을 할 수 있다", "간단한 계산을 할 수 있다")}</div>
-        <div class="guide-item"><strong>E (하)</strong> ${standard.levels.low}</div>
-    `;
-    
-    if (currentQuestions.length === 0) {
-        document.getElementById('level-question-text').innerHTML = "<p style='text-align:center; margin-top:2rem;'>아직 이 성취기준에 등록된 문항이 없습니다.<br>문제 분석하기 기능을 통해 문항을 추가해 보세요!</p>";
-        document.getElementById('level-options').innerHTML = '';
-        document.getElementById('level-feedback').style.display = 'none';
-        document.getElementById('next-q-btn').style.display = 'none';
-    } else {
-        loadLevelQuestion();
-    }
-}
-
-function loadLevelQuestion() {
-    const qBox = document.getElementById('level-question-text');
-    const optionsBox = document.getElementById('level-options');
-    const feedbackBox = document.getElementById('level-feedback');
-    const nextBtn = document.getElementById('next-q-btn');
-    if (currentQuestions.length === 0) return;
-    const question = currentQuestions[currentLevelQ];
-    qBox.innerHTML = `<strong>[문항 ${currentLevelQ + 1}/${currentQuestions.length}]</strong><br><br>${question.q}`;
-    optionsBox.innerHTML = ''; feedbackBox.style.display = 'none'; nextBtn.style.display = 'none';
-    
-    ['A', 'B', 'C', 'D', 'E'].forEach(level => {
-        const btn = document.createElement('button');
-        btn.className = 'option-btn'; btn.innerText = level;
-        btn.onclick = () => checkLevelAnswer(level, btn);
-        optionsBox.appendChild(btn);
-    });
-    if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([qBox]); }
-}
-
-function checkLevelAnswer(selectedLevel, btn) {
-    const question = currentQuestions[currentLevelQ];
-    const fb = document.getElementById('level-feedback');
-    document.querySelectorAll('#level-options .option-btn').forEach(b => { b.disabled = true; b.style.opacity = '0.6'; });
-    fb.style.display = 'block';
-    
-    const answerHTML = question.answer ? `<br><br><div style="background: white; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;"><strong style="color: #475569;">[정답]</strong> ${question.answer}</div>` : '';
-
-    if (selectedLevel === question.level) {
-        fb.innerHTML = `🎉 <strong>정답입니다!</strong><br><br><strong>[이유]</strong> ${question.reason} ${answerHTML}`;
-        fb.style.color = "#166534"; fb.style.backgroundColor = '#dcfce7';
-        btn.style.border = '3px solid #166534'; btn.style.opacity = '1';
-    } else {
-        const wrongLevelExample = currentQuestions.find(q => q.level === selectedLevel);
-        let comparativeText = "";
-        
-        if (wrongLevelExample) {
-            comparativeText = `<hr style="margin: 1rem 0; border: 0; border-top: 1px solid #fca5a5;">
-                               <div style="text-align: left; font-size: 0.9rem;">
-                               <strong>💡 비교해 보세요:</strong><br>
-                               선택하신 <strong>'${selectedLevel}'</strong> 수준은 보통 아래와 같은 문항입니다.<br><br>
-                               <div style="background: white; padding: 0.8rem; border-radius: 6px; border-left: 4px solid #f87171; margin-bottom: 0.5rem; font-size: 0.85rem; color: #1e293b;">
-                                   ${wrongLevelExample.q}
-                               </div>
-                               <em>* 현재 제시된 문항은 '${question.level}' 수준의 특징을 더 강하게 가지고 있습니다.</em>
-                               </div>`;
-        }
-
-        fb.innerHTML = `❌ <strong>오답입니다.</strong> 이 문항은 <strong>'${question.level}'</strong> 수준입니다.<br><br><strong>[이유]</strong> ${question.reason} ${answerHTML} ${comparativeText}`;
-        fb.style.color = "#991b1b"; fb.style.backgroundColor = '#fee2e2';
-        btn.style.border = '3px solid #ef4444'; btn.style.opacity = '1';
-        document.querySelectorAll('#level-options .option-btn').forEach(b => {
-            if (b.innerText === question.level) { b.style.backgroundColor = '#dcfce7'; b.style.border = '3px solid #166534'; b.style.opacity = '1'; }
-        });
-    }
-    document.getElementById('next-q-btn').style.display = 'block';
-    let feedbackBtn = document.getElementById('invoke-feedback-btn');
-    if (!feedbackBtn) {
-        feedbackBtn = document.createElement('button');
-        feedbackBtn.id = 'invoke-feedback-btn';
-        feedbackBtn.className = 'save-btn';
-        feedbackBtn.style.marginTop = '10px';
-        feedbackBtn.style.background = '#f1f5f9';
-        feedbackBtn.style.color = '#475569';
-        feedbackBtn.style.border = '1px dashed #94a3b8';
-        feedbackBtn.innerHTML = '🙋 이 판정에 이의 있습니다! (의견 보내기)';
-        
-        // 피드백 박스(정답해설) 바로 밑에 버튼을 쏙 넣습니다.
-        document.getElementById('level-feedback').parentNode.appendChild(feedbackBtn);
-    }
-    feedbackBtn.style.display = 'block';
-    feedbackBtn.onclick = () => openSpecificFeedbackPanel();
-    if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetClear(); MathJax.typesetPromise([fb]); }
-}
-
-function nextLevelQuestion() {
-    if (currentQuestions.length === 0) return;
-    currentLevelQ = (currentLevelQ + 1) % currentQuestions.length;
-    loadLevelQuestion();
-}
-
-function backToStandardSelection() {
-    currentStandardCode = null; 
-    currentQuestions = [];
-    showSection('dashboard'); 
-}
-
-async function initChecklist() {
-    const container = document.getElementById('checklist-container');
-    container.innerHTML = "";
-    if (!subjectData[currentSubject]) return;
-
-    let saved = {};
-    if (auth.currentUser) {
-        try {
-            const doc = await db.collection('user_checklists').doc(auth.currentUser.uid).get();
-            if (doc.exists) { saved = doc.data()[currentSubject] || {}; }
-        } catch (e) { console.warn("DB 로드 실패"); }
-    } else {
-        saved = JSON.parse(localStorage.getItem('check_' + currentSubject)) || {};
-    }
-
-    subjectData[currentSubject].standards.forEach(std => {
-        const div = document.createElement('div');
-        div.className = 'check-item';
-        div.innerHTML = `<input type="checkbox" id="c-${std.code}" ${saved[std.code]?'checked':''}>
-                         <label for="c-${std.code}"><strong>${std.code}</strong> ${std.desc}</label>`;
-        container.appendChild(div);
-    });
-}
-
-async function saveChecklist() {
-    const isLoggedIn = await checkLogin();
-    if (!isLoggedIn) return;
-
-    const checks = {};
-    document.querySelectorAll('#checklist-container input').forEach(input => {
-        checks[input.id.replace('c-', '')] = input.checked;
-    });
-
-    try {
-        await db.collection('user_checklists').doc(auth.currentUser.uid).set({
-            [currentSubject]: checks
-        }, { merge: true });
-        alert("✅ 진행 상황이 클라우드에 안전하게 저장되었습니다.\n(다음에 접속해도 유지됩니다.)");
-    } catch (e) {
-        console.error("저장 실패:", e);
-        alert("⚠️ 저장 중 오류가 발생했습니다.");
-    }
-}
-
-function openModal(std) {
-    document.getElementById('modal-title').innerText = std.code;
-    document.getElementById('modal-desc').innerText = std.desc;
-    
-    if (std.levels) {
-        document.getElementById('level-high').innerText = std.levels.high || "";
-        document.getElementById('level-b').innerText = std.levels.b || (std.levels.high ? std.levels.high.replace("이해하여 설명할 수 있으며", "설명할 수 있고") : "");
-        document.getElementById('level-mid').innerText = std.levels.mid || "";
-        document.getElementById('level-d').innerText = std.levels.d || (std.levels.mid ? std.levels.mid.replace("이해하고", "알고") : "");
-        document.getElementById('level-low').innerText = std.levels.low || "";
-    } else {
-        document.getElementById('level-high').innerText = "데이터 없음";
-        document.getElementById('level-b').innerText = "데이터 없음";
-        document.getElementById('level-mid').innerText = "데이터 없음";
-        document.getElementById('level-d').innerText = "데이터 없음";
-        document.getElementById('level-low').innerText = "데이터 없음";
-    }
-    
-    document.getElementById('level-modal').style.display = 'flex';
-
-    if (window.MathJax) {
-        MathJax.typesetPromise([document.getElementById('level-modal')]).catch(err => console.error(err));
-    }
-}
-
-async function reAnalyzeWithChat() {
-    const isLoggedIn = await checkLogin();
-    if (!isLoggedIn) return;
-    if (!requireApiKey()) return;
-
-    const chatHistory = document.getElementById('chat-history').innerText;
-    if (!chatHistory) { alert("먼저 대화를 진행해주세요."); return; }
-
-    const resultDiv = document.getElementById('analysis-result');
-    const resultText = document.getElementById('result-text');
-    
-    const originalContent = resultText.innerHTML;
-    resultText.innerHTML = '<div style="text-align:center; padding: 3rem; color: #3b82f6; font-weight: bold; font-size: 1.1rem;">AI 교사가 대화를 바탕으로 재분석 중입니다... ⏳</div>';
-
-    try {
-        const workerUrl = "https://script.google.com/macros/s/AKfycbwgx4RgF8FQxxL3jBgEQ5l369llADjhZ1NepulIdF4DdX18kBrB8oRQ4Ft0d5WdKtEF/exec";
-        const userApiKey = localStorage.getItem('gemini_api_key');
-        const response = await fetch(workerUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({
-                action: "reanalyze_chat",
-                analysisMainMode: analysisMainMode,
-                currentChatContext: currentChatContext,
-                chatHistory: chatHistory,
-                apiKey: userApiKey
-            })
-        });
-        
-        await checkApiError(response); 
-        const result = await response.json();
-        const analysisText = result.candidates[0].content.parts[0].text;
-        currentChatContext = analysisText;
-
-        if (analysisMainMode === 'single') {
-            renderSophisticatedResult(analysisText, lastAnalyzedSingleImage);
-        } else {
-            let rawText = analysisText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
-            let imagesHtml = '<div style="display: flex; gap: 15px; overflow-x: auto; margin-bottom: 1.5rem; padding-bottom: 10px; border-bottom: 2px dashed #cbd5e1;">';
-            cropBoxes.forEach((box, i) => {
-                imagesHtml += `
-                    <div style="flex: 0 0 auto; text-align: center;">
-                        <span style="display: block; font-size: 0.85rem; font-weight: bold; color: #ef4444; margin-bottom: 5px;">[문항 ${i+1}]</span>
-                        <img src="data:image/jpeg;base64,${getCroppedBase64(box)}" style="height: 120px; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                    </div>`;
-            });
-            imagesHtml += '</div>';
-            resultText.innerHTML = `<div style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); line-height: 1.8;">${imagesHtml}${rawText}</div>`;
-        }
-
-        if (window.MathJax) MathJax.typesetPromise();
-    } catch (error) { 
-        alert("⚠️ 재분석 오류:\n" + error.message); 
-        resultText.innerHTML = originalContent; 
-    }
-}
-
-async function sendChatMessage() {
-    const inputEl = document.getElementById('chat-input');
-    const message = inputEl.value.trim();
-    if(!message) return;
-    
-    const historyEl = document.getElementById('chat-history');
-    historyEl.innerHTML += `<div style="text-align: right; margin-bottom: 12px;"><span style="background: #e0e7ff; color: #1e40af; padding: 10px 14px; border-radius: 16px 16px 0 16px; display: inline-block; text-align: left; max-width: 80%">${message}</span></div>`;
-    inputEl.value = '';
-    historyEl.scrollTop = historyEl.scrollHeight;
-
-    const loadingId = 'loading-' + Date.now();
-    historyEl.innerHTML += `<div id="${loadingId}" style="text-align: left; margin-bottom: 12px;"><span style="background: #f3f4f6; color: #4b5563; padding: 10px 14px; border-radius: 16px 16px 16px 0; display: inline-block; font-size: 0.9rem;">판정 기준을 엄격하게 재검토 중입니다... ⏳</span></div>`;
-    historyEl.scrollTop = historyEl.scrollHeight;
-
-    try {
-        // 🌟 챗봇 프롬프트를 전면 숨기고 클라우드플레어 챗봇 서랍(action: "chat_message") 호출!
-        const workerUrl = "https://script.google.com/macros/s/AKfycbwgx4RgF8FQxxL3jBgEQ5l369llADjhZ1NepulIdF4DdX18kBrB8oRQ4Ft0d5WdKtEF/exec";
-        const userApiKey = localStorage.getItem('gemini_api_key');
-        const response = await fetch(workerUrl, {
-            method: 'POST', 
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({ 
-                action: "chat_message", // 깃발: 챗봇 대화 서랍 열기
-                currentChatContext: currentChatContext,
-                subject: currentSubject,
-                message: message,
-                apiKey: userApiKey
-            })
-        });
-        
-        if (!response.ok) throw new Error("백엔드 챗봇 엔진 통신 실패");
-        const result = await response.json();
-        const aiReply = result.candidates[0].content.parts[0].text;
-        
-        if (aiReply.includes("성취수준:") && aiReply.includes("판정 이유:")) {
-            currentChatContext = aiReply;
-        }
-
-        const loadingEl = document.getElementById(loadingId);
-        if(loadingEl) loadingEl.remove();
-
-        const formattedReply = aiReply.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
-        historyEl.innerHTML += `<div style="text-align: left; margin-bottom: 12px;"><span style="background: white; border: 1px solid var(--border); padding: 12px 16px; border-radius: 16px 16px 16px 0; display: inline-block; max-width: 85%;">${formattedReply}</span></div>`;
-        
-        if (window.MathJax && window.MathJax.typesetPromise) { 
-            MathJax.typesetClear(); 
-            MathJax.typesetPromise([historyEl]); 
-        }
-        historyEl.scrollTop = historyEl.scrollHeight;
-
-    } catch(e) { 
-        const loadingEl = document.getElementById(loadingId);
-        if(loadingEl) loadingEl.remove();
-        historyEl.innerHTML += `<div style="text-align: left; margin-bottom: 12px;"><span style="color: #dc2626; background: #fee2e2; padding: 10px; border-radius: 8px; display: inline-block; font-size: 0.9rem;">⚠️ ${e.message}</span></div>`; 
-        historyEl.scrollTop = historyEl.scrollHeight;
-    }
-}
-
-async function syncPendingFeedback() {
-    let pending = JSON.parse(localStorage.getItem('pending_feedback')) || [];
-    if (pending.length === 0) return; 
-
-    let remaining = [];
-    for (let item of pending) {
-        try {
-            await db.collection('developer_feedback').add({
-                text: "[지연 전송됨] " + item.text,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            });
-        } catch (e) {
-            remaining.push(item);
-        }
-    }
-    localStorage.setItem('pending_feedback', JSON.stringify(remaining));
-}
-
-let subjectData = {}; 
-
-
-async function loadStandardsFromDB() {
-    try {
-        console.log("⏳ DB에서 시스템 데이터를 불러옵니다...");
-
-        const subjectSnapshot = await db.collection('subjects').get();
-        subjectSnapshot.forEach(doc => {
-            const data = doc.data();
-            subjectData[doc.id] = {
-                title: data.title,
-                subtitle: data.subtitle,
-                standards: [] 
-            };
-        });
-        console.log("✅ 1/3: 과목 뼈대 로드 완료");
-
-        const standardsSnapshot = await db.collection('standards_2022').get();
-        standardsSnapshot.forEach(doc => {
-            const data = doc.data();
-            if(subjectData[data.subject]) {
-                subjectData[data.subject].standards.push({
-                    id: doc.id,
-                    code: data.code,
-                    desc: data.desc,
-                    levels: data.levels,
-                    questions: data.questions || []
-                });
-            }
-        });
-
-        for (let subj in subjectData) {
-            if (subjectData[subj].standards.length > 0) {
-                subjectData[subj].standards.sort((a, b) => a.code.localeCompare(b.code));
-            }
-        }
-        console.log("✅ 2/3: 성취기준 및 문항 로드 완료");
-
-               
-    } catch(error) {
-        console.error("DB 로딩 에러:", error);
-    }
-}
-
-
-
-async function checkLogin() {
-    if (!auth.currentUser) {
-        alert("이 기능을 사용하려면 '구글 아이디로 시작' 로그인이 필요합니다.\n확인을 누르면 로그인 화면으로 이동합니다.");
-        try {
-            await auth.signInWithPopup(provider);
-            return true; 
-        } catch (error) {
-            console.error("로그인 취소 또는 실패", error);
-            return false; 
-        }
-    }
-    return true; 
-}
-
-function openAdminMode() {
-    const user = auth.currentUser;
-    if (user && user.email === "kthblacks11@gmail.com") {
-        showSection('admin-dashboard');
-    } else {
-        alert("관리자만 접근 가능한 페이지입니다.");
-    }
-}
-
-async function saveStandardToDB() {
-    const subject = document.getElementById('admin-subject').value;
-    const code = document.getElementById('admin-code').value.trim();
-    const desc = document.getElementById('admin-desc').value.trim();
-    
-    const levels = {
-        high: document.getElementById('admin-level-high').value.trim(),
-        b: document.getElementById('admin-level-b').value.trim(),
-        mid: document.getElementById('admin-level-mid').value.trim(),
-        d: document.getElementById('admin-level-d').value.trim(),
-        low: document.getElementById('admin-level-low').value.trim()
-    };
-
-    if (!code || !desc || !levels.high) {
-        alert("성취기준 코드와 내용은 필수 입력 사항입니다.");
-        return;
-    }
-
-    try {
-        await db.collection('standards_2022').add({
-            subject: subject,
-            code: code,
-            desc: desc,
-            levels: levels,
-            questions: [] 
-        });
-        alert("🎉 새로운 성취기준이 DB에 성공적으로 저장되었습니다!");
-        location.reload(); 
-    } catch (error) {
-        console.error("저장 실패:", error);
-        alert("저장 중 오류가 발생했습니다: " + error.message);
-    }
-}
-
-async function loadStandardsForQuestion() {
-    const subject = document.getElementById('admin-q-subject').value;
-    const stdSelect = document.getElementById('admin-q-standard');
-    stdSelect.innerHTML = '<option value="">데이터를 불러오는 중입니다...</option>';
-
-    if (!subject) {
-        stdSelect.innerHTML = '<option value="">위에서 과목을 먼저 선택하세요</option>';
-        return;
-    }
-
-    try {
-        const snapshot = await db.collection('standards_2022').where('subject', '==', subject).get();
-        let stds = [];
-        snapshot.forEach(doc => stds.push({ id: doc.id, code: doc.data().code, desc: doc.data().desc }));
-        
-        stds.sort((a,b) => a.code.localeCompare(b.code));
-
-        stdSelect.innerHTML = '<option value="">-- 문항을 추가할 성취기준 선택 --</option>';
-        stds.forEach(std => {
-            stdSelect.innerHTML += `<option value="${std.id}">${std.code} ${std.desc.substring(0, 25)}...</option>`;
-        });
-    } catch (error) {
-        console.error("목록 불러오기 실패:", error);
-        stdSelect.innerHTML = '<option value="">불러오기 오류 발생</option>';
-    }
-}
-
-async function saveQuestionToDB() {
-    const stdSelect = document.getElementById('admin-q-standard');
-    const docId = stdSelect.value;
-    const stdCode = stdSelect.options[stdSelect.selectedIndex].text.split(' ')[0]; // 코드만 추출
-    const subject = document.getElementById('admin-q-subject').value;
-    const qText = document.getElementById('admin-q-text').value.trim();
-    const qAnswer = document.getElementById('admin-q-answer').value.trim();
-    const qLevel = document.getElementById('admin-q-level').value; // A, B, C...
-    const qReason = document.getElementById('admin-q-reason').value.trim();
-
-    if (!docId || !qText || !qReason) {
-        alert("모든 빈칸을 채워주세요!");
-        return;
-    }
-
-    try {
-        // 🌟 통합 서랍(transformed_bank)에 직접 저장
-        await db.collection('transformed_bank').add({
-            subject: subject,
-            standard_code: stdCode,
-            question: qText,
-            answer: qAnswer || "정답 정보 없음",
-            level: qLevel,
-            reason: qReason,
-            source: "선생님 직접 등록",
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        alert("✨ 문항이 통합 서랍에 성공적으로 저장되었습니다!");
-        
-        await updateQuestionCount();
-        // 입력창 비우기
-        document.getElementById('admin-q-text').value = '';
-        document.getElementById('admin-q-answer').value = '';
-        document.getElementById('admin-q-reason').value = '';
-    } catch (error) {
-        alert("저장 실패: " + error.message);
-    }
-}
-
-let currentBookmarkQuestions = [];
-
-function resetBookmarkView() {
-    document.getElementById('bookmark-list').innerHTML = "";
-}
-
-// 🟢 [수정됨] 미분류 탭을 완벽하게 지원하는 북마크 로직
-async function loadBookmark(level) {
-    // ✨ 1. 모든 버튼을 살짝 투명하게 만들고 크기를 원래대로 되돌림
-    ['A', 'B', 'C', 'D', 'E'].forEach(l => {
-        const btn = document.getElementById(`bm-btn-${l}`);
-        if (btn) {
-            btn.style.opacity = '0.4';
-            btn.style.transform = 'scale(1)';
-            btn.style.border = '3px solid transparent';
-            btn.style.boxShadow = 'none';
-        }
-    });
-
-    // ✨ 2. 방금 클릭한 버튼만 뚜렷하게, 크고, 진한 테두리로 강조
-    const activeBtn = document.getElementById(`bm-btn-${level}`);
-    if (activeBtn) {
-        activeBtn.style.opacity = '1';
-        activeBtn.style.transform = 'scale(1.15)'; // 15% 커짐
-        activeBtn.style.border = '3px solid #0f172a'; // 진한 남색 테두리
-        activeBtn.style.boxShadow = '0 4px 10px rgba(0,0,0,0.2)'; // 그림자 효과
-    }
-
-    // 선택된 과목이 없으면 기본값으로 uncategorized 설정
-    const subject = currentSubject || "uncategorized"; 
-    const listContainer = document.getElementById('bookmark-list');
-    listContainer.innerHTML = "<p style='text-align:center; color:var(--primary); font-weight:bold;'>데이터베이스에서 문항을 불러오는 중입니다... ⏳</p>";
-
-    currentBookmarkQuestions = [];
-
-    // 🌟 [신규] '미분류 보관함'을 선택했을 때의 작동 방식
-    if (subject === "uncategorized") {
-        try {
-            const snapshot = await db.collection('transformed_bank').get();
-            snapshot.forEach(doc => {
-                const d = doc.data();
-                let extractedLevel = d.level || d.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1];
-                
-                // 코드가 없거나 unknown인 문항만 쏙쏙 골라냅니다.
-                if (extractedLevel === level && (d.standard_code === "unknown" || d.standard_code === "코드없음")) {
-                    
-                    // AI가 프롬프트에 따라 적어준 'AI 판단 과목' 추출 (없으면 분석 당시 탭 이름)
-                    const aiSubjectMatch = d.original_analysis?.match(/AI 판단 과목:\s*([^\n]+)/);
-                    const displaySubject = aiSubjectMatch ? aiSubjectMatch[1].trim() : d.subject;
-
-                    currentBookmarkQuestions.push({
-                        code: `📦 미분류 (${displaySubject})`,
-                        q: d.question,
-                        // 판정이유 부분만 잘라서 보여주기
-                        reason: d.original_analysis?.match(/판정 이유:[\s\S]*?(?=\[|$)/)?.[0] || "AI가 미분류 문항으로 판정하였습니다.",
-                        answer: d.answer,
-                        source: "✨ AI 분석 문항"
-                    });
-                }
-            });
-            currentBookmarkQuestions.sort((a, b) => a.code.localeCompare(b.code));
-            renderBookmarkList(level);
-            return; // 미분류 처리가 끝났으므로 함수 종료
-        } catch (err) {
-            console.error("미분류 DB 로드 에러:", err);
-            renderBookmarkList(level);
-            return;
-        }
-    }
-
-    // 🌟 [기존 로직] 일반 과목(공통수학1 등)을 선택했을 때
-    const data = subjectData[subject];
-    if (data && data.standards) {
-        data.standards.forEach(std => {
-            if (std.questions && std.questions.length > 0) {
-                std.questions.forEach(q => {
-                    if (q.level === level) {
-                        currentBookmarkQuestions.push({
-                            code: std.code, q: q.q, reason: q.reason,
-                            answer: q.answer || "등록된 정답/풀이가 없습니다.",
-                            source: "선생님 등록 문항"
-                        });
-                    }
-                });
-            }
-        });
-    }
-
-    try {
-        const snapshot = await db.collection('transformed_bank').where('subject', '==', subject).get();
-        snapshot.forEach(doc => {
-            const d = doc.data();
-            // 💡 level 필드를 직접 읽어와 수동/AI 문항 모두 대응
-            let extractedLevel = d.level || d.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1];
-            
-            if (extractedLevel === level && d.standard_code !== "unknown" && d.standard_code !== "코드없음") {
-                currentBookmarkQuestions.push({
-                    code: d.standard_code, 
-                    q: d.question || d.q || "문제 내용이 없습니다.",
-                    reason: d.reason || "AI가 원본을 분석하고 변형하며 판정한 문항입니다.",
-                    answer: d.answer || "등록된 정답/풀이가 없습니다.", 
-                    source: d.source || "✨ AI 추가 문항"
-                });
-            }
-        });
-        
-        currentBookmarkQuestions.sort((a, b) => a.code.localeCompare(b.code));
-        renderBookmarkList(level);
-    } catch (err) {
-        console.error("DB 로드 에러:", err);
-        renderBookmarkList(level); 
-    }
-}
-
-function renderBookmarkList(level) {
-    const listContainer = document.getElementById('bookmark-list');
-    if (currentBookmarkQuestions.length === 0) {
-        listContainer.innerHTML = `<p style='text-align:center; color: #64748b; padding: 2rem; background:white; border-radius:8px;'>선택하신 '${level}' 수준에 등록된 문항이 없습니다.</p>`;
-        return;
-    }
-
-    let html = `<p style="font-weight:bold; color:var(--primary); margin-bottom:10px;">🎉 총 ${currentBookmarkQuestions.length}개의 문항이 검색되었습니다.</p>`;
-    
-    currentBookmarkQuestions.forEach((item, index) => {
-        html += `
-            <div style="background: white; border: 1px solid var(--border); border-left: 4px solid var(--primary); padding: 1.2rem; border-radius: 8px; cursor: pointer; transition: 0.2s;" 
-                 onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='white'"
-                 onclick="openBookmarkModal(${index})">
-                <div style="display:flex; justify-content: space-between; margin-bottom: 8px;">
-                    <span style="font-size: 0.85rem; font-weight: bold; color: #64748b;">${item.code}</span>
-                    <span style="font-size: 0.8rem; background: #e2e8f0; padding: 2px 8px; border-radius: 12px; color: #475569;">${item.source}</span>
-                </div>
-                <div style="font-size: 0.95rem; line-height: 1.5; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
-                    ${item.q}
-                </div>
-            </div>
-        `;
-    });
-    listContainer.innerHTML = html;
-
-    if (window.MathJax) MathJax.typesetPromise([listContainer]);
-}
-
-function openBookmarkModal(index) {
-    const item = currentBookmarkQuestions[index];
-    document.getElementById('bm-modal-title').innerText = `[${item.code}] 문항 상세`;
-    document.getElementById('bm-modal-q').innerHTML = item.q;
-    document.getElementById('bm-modal-reason').innerHTML = item.reason;
-    
-    const ansDiv = document.getElementById('bm-modal-answer');
-    if (item.answer && item.answer !== "등록된 정답/풀이가 없습니다.") {
-        document.getElementById('bm-modal-answer-text').innerHTML = item.answer;
-        ansDiv.style.display = 'block';
-    } else {
-        ansDiv.style.display = 'none';
-    }
-
-    document.getElementById('bookmark-modal').style.display = 'flex';
-    if (window.MathJax) MathJax.typesetPromise([document.getElementById('bookmark-modal')]);
-}
-
-function closeBookmarkModal() {
-    document.getElementById('bookmark-modal').style.display = 'none';
-}
-
-// ==========================================
-// 📊 분할점수 산출 (AI 마법사) 전용 스크립트 (최신 통합본)
-// ==========================================
-
-let cutScoreMode = '';
-let parsedScores = [];
-let finalExamQuestions = [];
-let examImages = [];
-
-const levelMeanings = {
-    'A': '성취기준을 포괄적으로 이해하고, 복잡한 문제 상황에서 수학적 개념을 융합하여 해결할 수 있는 수준',
-    'B': '성취기준에 대한 이해를 바탕으로, 일반적인 문제 상황에서 수학적 개념을 적용하여 해결할 수 있는 수준',
-    'C': '성취기준의 기본적인 개념, 원리, 법칙을 이해하고, 단순한 문제 상황에 적용할 수 있는 수준',
-    'D': '성취기준의 기초적인 개념과 원리를 부분적으로 이해하고 있는 수준',
-    'E': '성취기준에 대한 이해가 부족하여, 기초적인 수학적 지식에 대한 보충 학습이 필요한 수준'
-};
-
-// ------------------------------------------
-// [1단계] 평가 세팅
-// ------------------------------------------
-function updateSubjectList() {
-    const group = document.getElementById('cut-score-group').value;
-    const subjectSelect = document.getElementById('cut-score-subject');
-    subjectSelect.innerHTML = '<option value="">-- 과목 선택 --</option>';
-    
-    const subjectsByGroup = {
-        'math': [
-            {id: 'common1', name: '공통수학1'}, {id: 'common2', name: '공통수학2'},
-            {id: 'algebra', name: '대수'}, {id: 'calculus1', name: '미적분Ⅰ'}, {id: 'probStat', name: '확률과 통계'}
-        ],
-        'korean': [{id: 'kor_common', name: '공통국어'}, {id: 'kor_reading', name: '독서'}, {id: 'kor_lit', name: '문학'}],
-        'english': [{id: 'eng_common', name: '공통영어'}, {id: 'eng_reading', name: '영어 독해와 작문'}],
-        'social': [{id: 'soc_common', name: '통합사회'}, {id: 'soc_history', name: '한국사'}],
-        'science': [{id: 'sci_common', name: '통합과학'}, {id: 'sci_phy', name: '물리학'}]
-    };
-
-    if (group && subjectsByGroup[group]) {
-        subjectsByGroup[group].forEach(sub => {
-            const opt = document.createElement('option');
-            opt.value = sub.id;
-            opt.innerText = sub.name;
-            subjectSelect.appendChild(opt);
-        });
-    }
-}
-
-async function loadStandardsForCutScore() {
-    const subject = document.getElementById('cut-score-subject').value;
-    const listContainer = document.getElementById('cut-score-standards-list');
-    if (!subject) return;
-
-    listContainer.innerHTML = '<p style="text-align:center;">성취기준을 불러오는 중... ⏳</p>';
-
-    try {
-        const snapshot = await db.collection('standards_2022').where('subject', '==', subject).get();
-        let standards = [];
-        snapshot.forEach(doc => standards.push({id: doc.id, ...doc.data()}));
-        standards.sort((a,b) => a.code.localeCompare(b.code));
-
-        if (standards.length === 0) {
-            listContainer.innerHTML = '<p style="text-align:center; color:red;">등록된 데이터가 없습니다.</p>';
-            return;
-        }
-
-        let html = '';
-        standards.forEach((std, index) => {
-            html += `<div style="display:flex; align-items:center; padding: 8px; border-bottom: 1px solid #f1f5f9;">
-                        <input type="checkbox" class="cut-score-std-cb" value="${std.code}" data-index="${index}" style="margin-right:10px; transform:scale(1.2);">
-                        <label style="font-size:0.9rem; cursor:pointer;"><strong>${std.code}</strong> ${std.desc}</label>
-                    </div>`;
-        });
-        listContainer.innerHTML = html;
-        initShiftClick();
-    } catch (error) {
-        listContainer.innerHTML = '<p style="color:red;">데이터 로딩 실패</p>';
-    }
-}
-
-function initShiftClick() {
-    const checkboxes = document.querySelectorAll('.cut-score-std-cb');
-    let lastChecked = null;
-    checkboxes.forEach(cb => {
-        cb.addEventListener('click', function(e) {
-            if (!lastChecked) { lastChecked = this; return; }
-            if (e.shiftKey) {
-                const start = Array.from(checkboxes).indexOf(this);
-                const end = Array.from(checkboxes).indexOf(lastChecked);
-                checkboxes.forEach((checkbox, i) => {
-                    if (i >= Math.min(start, end) && i <= Math.max(start, end)) {
-                        checkbox.checked = lastChecked.checked;
-                    }
-                });
-            }
-            lastChecked = this;
-        });
-    });
-}
-
-
-// ==========================================
-// 📝 길 1 전용: 엑셀 처리 및 실시간 총점 계산
-// ==========================================
-function updateStep2Total() {
-    let total = 0;
-    document.querySelectorAll('.score-input').forEach(inp => {
-        total += parseFloat(inp.value) || 0;
-    });
-    // ✨ [핵심 수정] HTML 태그가 준비되지 않았을 때 코드가 죽지 않도록 방어
-    const totalScoreEl = document.getElementById('step2-total-score');
-    if (totalScoreEl) {
-        totalScoreEl.innerText = total.toFixed(1);
-    }
-}
-
-// ✨ 빈 표를 만들고 모두에게 전송하기
-async function generateEmptyScoreTable() {
-    const choiceCount = parseInt(document.getElementById('choice-count').value) || 0;
-    const shortCount = parseInt(document.getElementById('short-count').value) || 0;
-    
-    let newScores = [];
-    for(let i=1; i<=choiceCount; i++) newScores.push({ num: String(i), difficulty: '선택하세요', score: 0, level: '판정필요', isShortAnswer: false });
-    for(let i=1; i<=shortCount; i++) newScores.push({ num: '서'+i, difficulty: '선택하세요', score: 0, level: '판정필요', isShortAnswer: true });
-
-    // HTML에 그리지 않고 DB에 바로 저장! (저장하면 onSnapshot이 알아서 모두의 화면에 그려줍니다)
-    try {
-        const docRef = db.collection('user_projects').doc(currentProjectId);
-        const doc = await docRef.get();
-        if(doc.exists) {
-            let assessments = doc.data().assessments;
-            assessments[currentEditingAssessmentIndex].parsedScores = newScores;
-            await docRef.update({ assessments: assessments });
-        }
-    } catch(e) { alert("표 생성 실패: " + e.message); }
-}
-
-
-async function downloadScoreTemplate() {
-    if (!currentProjectId || currentEditingAssessmentIndex < 0) {
-        alert("선택된 평가가 없습니다.");
-        return;
-    }
-
-    try {
-        const docRef = db.collection('user_projects').doc(currentProjectId);
-        const doc = await docRef.get();
-        
-        if (doc.exists) {
-            let asm = doc.data().assessments[currentEditingAssessmentIndex];
-            let existingScores = asm.parsedScores || [];
-            
-            // 💡 로그인한 선생님(나)의 기존 판정 데이터만 데이터베이스에서 직접 빼옵니다.
-            let myInputs = [];
-            if (asm.teacherInputs && asm.teacherInputs[auth.currentUser.email]) {
-                myInputs = asm.teacherInputs[auth.currentUser.email];
-            }
-
-            // 엑셀 첫 번째 줄(헤더) 만들기
-            let excelData = [["문항 번호", "예상 난이도", "배점", "성취수준"]];
-
-            // 엑셀에 들어갈 데이터 채우기
-            existingScores.forEach((q, index) => {
-                // 내 판정 결과가 있으면 가져오고, 없으면 빈칸으로 둡니다. (AI나 다른 사람 것은 안 가져옵니다!)
-                let myLevel = myInputs[index] ? myInputs[index].level : "";
-                
-                excelData.push([
-                    q.num,
-                    q.difficulty || "", // 공통 데이터인 난이도는 표시
-                    q.score || 0,       // 공통 데이터인 배점은 표시
-                    myLevel             // 오직 '내 판정' 결과만 표시
-                ]);
-            });
-
-            // 엑셀 파일 생성 및 다운로드 실행 (한글 깨짐이 없는 진짜 엑셀 XLSX 포맷)
-            const ws = XLSX.utils.aoa_to_sheet(excelData);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "평가양식");
-            
-            // 파일명에 평가 이름이 자동으로 들어가도록 설정
-            XLSX.writeFile(wb, `${asm.name}_내입력양식.xlsx`);
-        }
-    } catch (error) {
-        alert("엑셀 다운로드 중 오류가 발생했습니다: " + error.message);
-    }
-}
-
-async function handleExcelUpload(event) {
-    const file = event.target.files[0];
-    if(!file) return;
-    const reader = new FileReader();
-
-    reader.onload = async function(e) {
-        try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, {type: 'array'});
-            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-            const jsonData = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
-
-            if (currentProjectId) {
-                const docRef = db.collection('user_projects').doc(currentProjectId);
-                const doc = await docRef.get();
-                if(doc.exists) {
-                    let assessments = doc.data().assessments;
-                    let asm = assessments[currentEditingAssessmentIndex];
-                    
-                    // 💡 기존 DB 데이터를 불러옵니다. (AI 판정 결과를 지켜주기 위해!)
-                    let existingScores = asm.parsedScores || [];
-                    let myLevels = [];
-                    let newScores = [];
-
-                    jsonData.forEach((row, index) => {
-                        if (index === 0 || !row || row.length === 0) return;
-                        if (row[0] !== undefined && row[0] !== null && String(row[0]).trim() !== "") {
-                            let qNum = String(row[0]).trim();
-                            
-                            // 현재 올리는 엑셀 문항과 똑같은 번호의 기존 DB 문항 찾기
-                            let existQ = existingScores.find(q => String(q.num) === qNum) || {};
-
-                            // 1. 난이도: 엑셀이 절대적 기준! (선생님이 엑셀에서 적은 대로, 지웠으면 지운 대로)
-                            let diff = (row[1] || '').toString().trim();
-                            if(diff === '선택안함' || !['상','중','하'].includes(diff)) diff = ''; 
-
-                            // 2. 배점: 엑셀이 절대적 기준! (선생님이 적은 숫자 그대로)
-                            let score = parseFloat(row[2]);
-                            if (isNaN(score) || score < 0) score = 0;
-
-                            // 3. 성취수준 (내 판정): 선생님이 엑셀 마지막 칸에 채워 넣은 A, B, C...
-                            let level = (row[3] || '').toString().toUpperCase().trim();
-                            if(level === '선택안함' || !['A+','A','B','C','D','E'].includes(level)) level = ''; 
-
-                            // 4. 표 데이터 조립 (엑셀에 없는 AI 판정 결과만 기존 DB에서 가져와 보호합니다!)
-                            newScores.push({ 
-                                num: qNum, 
-                                difficulty: diff, 
-                                score: score, 
-                                level: existQ.level || '판정필요', // 🛡️ AI 판정 결과 완벽 보호
-                                isShortAnswer: existQ.isShortAnswer !== undefined ? existQ.isShortAnswer : qNum.includes('서') 
-                            });
-                            
-                            // 선생님의 성취수준 입력값은 내 판정 전용 공간에 따로 저장
-                            myLevels.push({ level: level });
-                        }
-                    });
-
-                    // DB에 최종 업데이트
-                    asm.parsedScores = newScores;
-                    if (!asm.teacherInputs) asm.teacherInputs = {};
-                    asm.teacherInputs[auth.currentUser.email] = myLevels;
-
-                    await docRef.update({ assessments: assessments });
-                    alert("✅ 엑셀 데이터가 완벽하게 동기화되었습니다!\n(선생님의 작업 내역 반영 & AI 판정 결과 보호 완료)");
-                }
-            }
-            document.getElementById('excel-upload').value = ""; 
-        } catch(error) { 
-            alert("엑셀 업로드 실패: " + error.message); 
-        }
-    };
-    reader.readAsArrayBuffer(file);
-}
-
-function getBasePct(isShortAnswer, difficulty) {
-    if (!isShortAnswer) { 
-        // 🟢 선택형 (객관식)
-        if (difficulty === '하' || difficulty === '쉬움') return { A: 95, B: 85, C: 75, D: 60, E: 45 };
-        if (difficulty === '상' || difficulty === '어려움') return { A: 75, B: 60, C: 45, D: 30, E: 15 };
-        // 중 (보통)
-        return { A: 80, B: 70, C: 55, D: 45, E: 35 };
-    } else { 
-        // 🔴 서답형
-        if (difficulty === '하' || difficulty === '쉬움') return { A: 90, B: 80, C: 65, D: 50, E: 35 };
-        if (difficulty === '상' || difficulty === '어려움') return { A: 60, B: 45, C: 30, D: 20, E: 10 };
-        // 중 (보통) - 서답형 중간값 추정 (선택형 중보다 약간 낮게)
-        return { A: 70, B: 55, C: 40, D: 30, E: 20 };
-    }
-}
-
-// ==========================================
-// 🚀 최종 산출: 데이터 통합 및 M자 묶어치기 (길1/길2 공통 활용)
-// ==========================================
-
-
-async function handleNextToPath1Result() {
-    if (!currentProjectId) return;
-
-    try {
-        const docRef = db.collection('user_projects').doc(currentProjectId);
-        const doc = await docRef.get();
-        if(!doc.exists) return;
-
-        const projectData = doc.data();
-        const asm = projectData.assessments[currentEditingAssessmentIndex];
-        const collaborators = projectData.collaborators || [];
-        const teacherInputs = asm.teacherInputs || {};
-        let baseQuestions = asm.parsedScores || [];
-
-        let missingList = [];
-        collaborators.forEach(email => {
-            const inputs = teacherInputs[email] || [];
-            const filledCount = inputs.filter(i => i && i.level).length;
-            if(filledCount < baseQuestions.length) missingList.push(email.split('@')[0]);
-        });
-
-        if(missingList.length > 0) {
-            if(!confirm(`⚠️ 아직 입력을 완료하지 않은 선생님이 있습니다.\n(미완료: ${missingList.join(', ')} 선생님)\n\n이대로 최종 합산을 진행하시겠습니까?\n(입력되지 않은 분의 값은 무시하고, 입력된 분들의 평균으로 산출합니다.)`)) {
-                return; 
-            }
-        }
-
-        // 💡 핵심: A+ 를 6점으로, 평균 5.5 이상이면 A+ 로 취합되도록 역산 로직 추가!
-        const levelToNum = { 'A+': 6, 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'E': 1 };
-        const numToLevel = { 6: 'A+', 5: 'A', 4: 'B', 3: 'C', 2: 'D', 1: 'E' };
-
-        let mergedData = baseQuestions.map((q, qIdx) => {
-            let sum = 0;
-            let count = 0;
-            
-            collaborators.forEach(email => {
-                const level = teacherInputs[email]?.[qIdx]?.level;
-                if(level) {
-                    sum += levelToNum[level];
-                    count++;
-                }
-            });
-
-            let finalLevel = q.level; 
-            if(count > 0) {
-                let avg = Math.round(sum / count); 
-                finalLevel = numToLevel[avg] || 'C';
-            }
-
-            return {
-                num: q.num,
-                score: q.score,
-                difficulty: q.difficulty || '중',
-                level: finalLevel, 
-                isShortAnswer: q.isShortAnswer,
-                pcts: getBasePct(q.isShortAnswer, q.difficulty || '중')
-            };
-        });
-
-        parsedScores = mergedData; 
-        goToStep(4);
-        renderGroupedCutScoreTable(mergedData);
-
-    } catch (e) {
-        alert("최종 산출 중 오류가 발생했습니다: " + e.message);
-    }
-}
-
-
-
-function renderGroupedCutScoreTable(mergedData) {
-    document.getElementById('final-result-container').style.display = 'block';
-    document.getElementById('final-ai-loading').style.display = 'none';
-    
-    const tableHead = document.querySelector('#cut-score-result-table').previousElementSibling;
-    if (tableHead) {
-        tableHead.innerHTML = `<tr><th style="min-width:180px;">문항 범주 (M자형)</th><th>총 배점</th><th>예상 난이도</th><th>A (%)</th><th>B (%)</th><th>C (%)</th><th>D (%)</th><th>E (%)</th></tr>`;
-        tableHead.parentElement.style.display = 'block'; 
-    }
-
-    const tbody = document.getElementById('cut-score-result-table');
-    
-    // 💡 A+ 그룹 방을 추가로 만들어 둡니다.
-    const groups = {
-        '선택형(객관식)_상': { typeStr: '선택형(객관식)', difficulty: '상', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(false, '상') },
-        '선택형(객관식)_중': { typeStr: '선택형(객관식)', difficulty: '중', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(false, '중') },
-        '선택형(객관식)_하': { typeStr: '선택형(객관식)', difficulty: '하', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(false, '하') },
-        '서답형_상': { typeStr: '서답형', difficulty: '상', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(true, '상') },
-        '서답형_중': { typeStr: '서답형', difficulty: '중', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(true, '중') },
-        '서답형_하': { typeStr: '서답형', difficulty: '하', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(true, '하') }
-    };
-    
-    mergedData.forEach(q => {
-        const typeStr = q.isShortAnswer ? '서답형' : '선택형(객관식)';
-        let diff = q.difficulty;
-        if (diff === '쉬움') diff = '하';
-        if (diff === '보통') diff = '중';
-        if (diff === '어려움') diff = '상';
-
-        const key = `${typeStr}_${diff}`;
-        if (groups[key]) {
-            groups[key].count++;
-            groups[key].scoreSum += q.score;
-            
-            if (groups[key].levels[q.level]) {
-                groups[key].levels[q.level].push(q.num);
-            } else {
-                groups[key].levels['C'].push(q.num); 
-            }
-        }
-    });
-
-    // 노란색 하이라이트 매핑 (A+도 A와 동일한 컷오프 칸에 하이라이트 되도록 처리)
-    const highlightMap = {
-        0: ['A+', 'A', 'E'],      
-        1: ['C'],           
-        2: ['A+', 'A', 'E'], 
-        3: ['A+', 'A', 'E'],      
-        4: ['C'],           
-        5: ['A+', 'A', 'E']       
-    };
-
-    let html = '';
-    
-    Object.values(groups).forEach((g, index) => {
-        const isEmpty = g.count === 0;
-        let bottomBorder = (index === 2) ? 'border-bottom: 3px double #64748b;' : 'border-bottom: 1px solid #e2e8f0;';
-        const rowStyle = isEmpty ? `background: #f8fafc; opacity: 0.5; ${bottomBorder}` : bottomBorder;
-        const diffColor = isEmpty ? '#cbd5e1' : (g.difficulty === '상' ? '#ef4444' : g.difficulty === '중' ? '#f59e0b' : '#22c55e');
-        const countText = isEmpty ? '0문항' : `총 ${g.count}문항`;
-        const scoreText = isEmpty ? '-' : g.scoreSum.toFixed(1);
-        
-        let qNumHtml = '';
-        if (isEmpty) {
-            qNumHtml = '<div style="color:#94a3b8; font-size:0.8rem; margin-bottom:4px;">해당 문항 없음</div>';
-        } else {
-            // 💡 A+ 도 찾아서 출력! (A+는 빨간 글씨로 돋보이게 처리합니다)
-            ['A+', 'A', 'B', 'C', 'D', 'E'].forEach(lvl => {
-                if (g.levels[lvl].length > 0) {
-                    let lvlLabel = lvl === 'A+' ? '<strong style="color:#ef4444;">A+</strong>' : `<strong>${lvl}</strong>`;
-                    qNumHtml += `<div style="font-size:0.85rem; color:#475569; margin-bottom:2px;">${lvlLabel}: ${g.levels[lvl].join(', ')}번</div>`;
-                }
-            });
-        }
-
-        const getPctInput = (lvl, val) => {
-            const disabledAttr = isEmpty ? 'disabled' : '';
-            let bgStyle = isEmpty ? 'background: #e2e8f0;' : 'background: white;';
-            let borderStyle = 'border: 1px solid #cbd5e1;';
-            
-            if (!isEmpty && highlightMap[index].includes(lvl)) {
-                bgStyle = 'background: #fef08a;'; 
-                borderStyle = 'border: 2px solid #eab308;'; 
-            }
-            
-            return `<input type="number" class="pct-${lvl} pct-input" value="${isEmpty ? '' : val}" ${disabledAttr} oninput="calculateTotalCutScores()" style="width: 60px; padding: 4px; text-align: center; border-radius: 4px; font-weight: bold; color: #1e293b; ${bgStyle} ${borderStyle} transition: 0.2s;">`;
-        };
-
-        html += `
-        <tr style="${rowStyle}" class="cut-score-row" data-score="${g.scoreSum}" data-count="1">
-            <td style="text-align: left; vertical-align: top;">
-                ${qNumHtml}
-                <strong style="color: ${isEmpty ? '#94a3b8' : 'var(--primary)'}; display:block; margin-top:5px;">${g.typeStr} ${countText}</strong>
-            </td>
-            <td style="color: ${isEmpty ? '#94a3b8' : '#ea580c'}; font-weight: bold; font-size: 1.1rem; vertical-align: middle;">${scoreText}</td>
-            <td style="vertical-align: middle;">
-                <span style="background:${diffColor}; color:white; padding: 4px 10px; border-radius: 4px; font-weight: bold;">${g.difficulty}</span>
-            </td>
-            <td style="vertical-align: middle;">${getPctInput('A', g.pcts.A)}</td>
-            <td style="vertical-align: middle;">${getPctInput('B', g.pcts.B)}</td>
-            <td style="vertical-align: middle;">${getPctInput('C', g.pcts.C)}</td>
-            <td style="vertical-align: middle;">${getPctInput('D', g.pcts.D)}</td>
-            <td style="vertical-align: middle;">${getPctInput('E', g.pcts.E)}</td>
-        </tr>
-        `;
-    });
-
-    tbody.innerHTML = html;
-    calculateTotalCutScores();
-}
-
-function calculateTotalCutScores() {
-    let totalA = 0, totalB = 0, totalC = 0, totalD = 0, totalE = 0;
-    let totalScore = 0;
-
-    document.querySelectorAll('.cut-score-row').forEach(row => {
-        const score = parseFloat(row.getAttribute('data-score')) || 0;
-        const count = parseInt(row.getAttribute('data-count')) || 1;
-        const groupTotalPoints = score * count; 
-        totalScore += groupTotalPoints;
-        
-        const pctA = (parseFloat(row.querySelector('.pct-A').value) || 0) / 100;
-        const pctB = (parseFloat(row.querySelector('.pct-B').value) || 0) / 100;
-        const pctC = (parseFloat(row.querySelector('.pct-C').value) || 0) / 100;
-        const pctD = (parseFloat(row.querySelector('.pct-D').value) || 0) / 100;
-        const pctE = (parseFloat(row.querySelector('.pct-E').value) || 0) / 100;
-
-        totalA += groupTotalPoints * pctA;
-        totalB += groupTotalPoints * pctB;
-        totalC += groupTotalPoints * pctC;
-        totalD += groupTotalPoints * pctD;
-        totalE += groupTotalPoints * pctE;
-    });
-
-    renderFinalScoreBoxes(totalA, totalB, totalC, totalD, totalE, totalScore);
-}
-
-function renderFinalScoreBoxes(A, B, C, D, E, totalScore) {
-    const boxHtml = `
-        <div style="width: 100%; text-align: center; margin-bottom: 10px; color: #64748b; font-weight: bold;">(최종 인식된 총 배점: ${totalScore.toFixed(1)}점)</div>
-        <div style="flex:1; padding:15px; background:#fef2f2; border: 2px solid #ef4444; border-radius:8px;"><strong>A수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#ef4444;">${A.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:15px; background:#fffbeb; border: 2px solid #f59e0b; border-radius:8px;"><strong>B수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#f59e0b;">${B.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:15px; background:#f0fdf4; border: 2px solid #22c55e; border-radius:8px;"><strong>C수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#22c55e;">${C.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:15px; background:#eff6ff; border: 2px solid #3b82f6; border-radius:8px;"><strong>D수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#3b82f6;">${D.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:15px; background:#f8fafc; border: 2px solid #94a3b8; border-radius:8px;"><strong>E수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#64748b;">${E.toFixed(2)}점</span></div>
-    `;
-    document.getElementById('final-cut-score-boxes').innerHTML = boxHtml;
-    document.getElementById('final-result-container').style.display = 'block';
-    
-    const aiLoading = document.getElementById('final-ai-loading');
-    if(aiLoading) aiLoading.style.display = 'none';
-}
-
-
-
-// 길 2 전용: AI 분석 데이터를 M자 방식(배점+수준)으로 묶어서 렌더링
-function renderFinalCutScoreTable(aiResults) {
-    document.getElementById('final-result-container').style.display = 'block';
-    document.getElementById('final-ai-loading').style.display = 'none';
-    
-    // 테이블 헤더를 M자 방식에 맞게 동적 변경
-    const tableHead = document.querySelector('#cut-score-result-table').previousElementSibling;
-    if (tableHead) {
-        tableHead.innerHTML = `<tr><th>해당 문항 (개수)</th><th>배점</th><th>AI 판정 수준</th><th>A (%)</th><th>B (%)</th><th>C (%)</th><th>D (%)</th><th>E (%)</th></tr>`;
-        tableHead.parentElement.style.display = 'block'; // 길 1에서 숨겨졌을 수 있으므로 다시 표시
-    }
-
-    const tbody = document.getElementById('cut-score-result-table');
-    
-    // 배점(score)과 성취수준(level)을 기준으로 문항 그룹화 (M자 방식 핵심)
-    const groups = {};
-    
-    finalExamQuestions.forEach(q => {
-        const scoreObj = parsedScores.find(s => s.num === q.num) || { score: 0 };
-        const ai = aiResults.find(a => a.num === q.num) || { level: 'C', pct_A: 90, pct_B: 70, pct_C: 50, pct_D: 30, pct_E: 10 };
-        
-        const key = `${scoreObj.score}_${ai.level}`;
-        if (!groups[key]) {
-            groups[key] = {
-                score: scoreObj.score,
-                level: ai.level,
-                count: 0,
-                qNums: [],
-                basePct: { A: ai.pct_A, B: ai.pct_B, C: ai.pct_C, D: ai.pct_D, E: ai.pct_E }
-            };
-        }
-        groups[key].count++;
-        groups[key].qNums.push(q.num);
-    });
-
-    let html = '';
-    // 배점 내림차순, 성취수준 오름차순으로 정렬하여 표시
-    Object.values(groups).sort((a,b) => b.score - a.score || a.level.localeCompare(b.level)).forEach(g => {
-        const levelColor = g.level === 'A' || g.level === 'B' ? '#ef4444' : g.level === 'C' ? '#eab308' : '#22c55e';
-        html += `
-        <tr style="border-bottom: 1px solid #e2e8f0;" class="cut-score-row" data-score="${g.score}" data-count="${g.count}">
-            <td style="text-align: left;">
-                <div style="font-size:0.8rem; color:#64748b; margin-bottom: 4px; word-break: keep-all;">${g.qNums.join(', ')}번</div>
-                <strong style="color: var(--primary);">총 ${g.count}문항</strong>
-            </td>
-            <td style="color: #ea580c; font-weight: bold; font-size: 1.1rem;">${g.score}</td>
-            <td>
-                <span style="background:${levelColor}; color:white; padding: 4px 10px; border-radius: 4px; font-weight: bold;">${g.level}</span>
-            </td>
-            <td><input type="number" class="pct-A score-input" value="${g.basePct.A}" oninput="calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-B score-input" value="${g.basePct.B}" oninput="calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-C score-input" value="${g.basePct.C}" oninput="calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-D score-input" value="${g.basePct.D}" oninput="calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-E score-input" value="${g.basePct.E}" oninput="calculateTotalCutScores()"></td>
-        </tr>
-        `;
-    });
-
-    tbody.innerHTML = html;
-    calculateTotalCutScores();
-}
-
-
-
-
-
-// 🌟 길 1, 2 공통: 뒤로 가기 흐름 제어 함수 (수정됨)
-function goBackStep(currentStep) {
-    if (currentStep === 4) {
-        // 4단계(최종 결과)에서 뒤로 가면 2단계(표 작성/AI 도우미 화면)로 돌아갑니다.
-        goToStep(2); 
-    }
-}
-
-
-// 통째로 교체하세요
-function handleExamUpload(event) {
+async function handleExamUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
-    
-    document.getElementById('exam-loading').style.display = 'block';
-    event.target.value = ""; 
 
-    window.localExamUrl = URL.createObjectURL(file);
-    
-    // 1. AI 분석을 위해 파일을 읽고 "즉시" 분석을 시작합니다! (클라우드 업로드를 기다리지 않음)
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const base64Img = e.target.result;
-        examImages = [base64Img]; 
-        startExamAiAnalysis(base64Img); // AI 바로 출동!
-    };
-    reader.readAsDataURL(file);
+    const loadingZone = document.getElementById('exam-loading');
+    if(loadingZone) loadingZone.style.display = 'flex';
 
     try {
-        const fileRef = storage.ref().child(`exam_images/${Date.now()}_${file.name}`);
-        fileRef.put(file).then(snapshot => {
-            snapshot.ref.getDownloadURL().then(async url => {
-                currentUploadedImageUrl = url; // 업로드 완료 시 주소 저장
-                
-                if (currentProjectId && currentEditingAssessmentIndex !== -1) {
-                    const docRef = db.collection('user_projects').doc(currentProjectId);
-                    
-                    // 🔒 마법의 자물쇠(트랜잭션) 시작: 사진 주소만 살포시 업데이트!
-                    try {
-                        await db.runTransaction(async (transaction) => {
-                            const doc = await transaction.get(docRef);
-                            if(doc.exists) {
-                                let assessments = doc.data().assessments;
-                                if(assessments[currentEditingAssessmentIndex]) {
-                                    assessments[currentEditingAssessmentIndex].imageUrl = url;
-                                    transaction.update(docRef, { assessments: assessments });
-                                }
-                            }
-                        });
-                        console.log("✅ 백그라운드 이미지 업로드 및 DB 동기화 완료!");
-                    } catch (e) {
-                        console.warn("이미지 주소 트랜잭션 저장 실패:", e);
-                    }
-                }
-            });
-        }).catch(err => {
-            console.warn("백그라운드 이미지 업로드 실패:", err);
-        });
-    } catch(error) {
-        console.warn("스토리지 설정 오류:", error);
+        const base64 = await fileToBase64(file);
+        currentUploadedFileBase64 = base64; 
+        
+        // 🚀 대용량 파일의 안정적인 렌더링을 위해 전송 모듈을 비동기 분리 사출 처리함
+        setTimeout(() => {
+            startExamAiAnalysis(base64);
+        }, 300);
+
+    } catch (err) {
+        alert("파일 처리 실패: " + err.message);
+        if(loadingZone) loadingZone.style.display = 'none';
     }
 }
 
 async function startExamAiAnalysis(base64Data) {
-    if (!requireApiKey()) {
-        document.getElementById('exam-loading').style.display = 'none'; 
-        return; 
-    }
+    if (!requireApiKey()) { document.getElementById('exam-loading').style.display = 'none'; return; }
     const loadingEl = document.getElementById('exam-loading');
     if (loadingEl) loadingEl.style.display = 'flex';
 
+    // 🟢 화면에서 입력된 시작/끝 번호 가져오기
     const startNum = document.getElementById('exam-start-num')?.value || "1";
     const endNum = document.getElementById('exam-end-num')?.value || "10";
 
@@ -2491,7 +765,7 @@ async function startExamAiAnalysis(base64Data) {
                 mimeType: mimeType,
                 base64Clean: base64Clean,
                 referenceDBText: referenceDBText,
-                subject: currentSubject, // 🟢 수정 포인트: 과목 코드를 백엔드로 보내주도록 추가합니다.
+                subject: currentSubject,
                 startNum: startNum,  // 🟢 백엔드로 출발!
                 endNum: endNum,      // 🟢 백엔드로 출발!
                 apiKey: userApiKey
@@ -2499,84 +773,46 @@ async function startExamAiAnalysis(base64Data) {
         });
 
         await checkApiError(response);
-        const data = await response.json();
-        const fullText = data.candidates[0].content.parts[0].text;
+        const resData = await response.json();
+        const aiRawOutput = resData.candidates[0].content.parts[0].text;
         
-        extractedQuestionsArray = [];
-        // ✨ 구글 AI 진짜 에러 잡아내기
-        if (data.error) {
-        throw new Error(data.error.message || "구글 AI가 응답을 거부했습니다. API 키를 확인해주세요.");
-        }
-        const blocks = fullText.split('---').map(b => b.trim()).filter(b => b.length > 0);
-        
-        blocks.forEach((block, idx) => {
-            let numMatch = block.match(/\[번호\]\s*([가-힣\w]+)/); 
-            let scoreMatch = block.match(/\[배점\]\s*([\d.]+)점/);
-            let qNum = numMatch ? numMatch[1].trim() : String(idx + 1);
-            let score = scoreMatch ? scoreMatch[1] : "0";
-            extractedQuestionsArray.push({ num: qNum, text: block, score: score, image: null });
-        });
-
-        const helperZone = document.getElementById('ai-helper-zone');
-        if (helperZone) helperZone.style.display = 'none';
-        
-        const inspectorWrapper = document.getElementById('exam-inspector-wrapper');
-        if (inspectorWrapper) inspectorWrapper.style.display = 'flex';
-        
-        renderQuestionCards(); 
+        parseExamAiOutput(aiRawOutput);
 
     } catch (error) {
-        alert("분석 중 오류가 발생했습니다.\n" + error.message);
+        alert("AI 시험지 스캔 연동 실패: " + error.message);
     } finally {
         if (loadingEl) loadingEl.style.display = 'none';
-        const imgEl = document.getElementById('exam-img-display');
-        const pdfEl = document.getElementById('exam-pdf-display'); 
+    }
+}
+
+function parseExamAiOutput(rawText) {
+    // === 구분자를 기준으로 문항들을 조각조각 분해
+    const blocks = rawText.split('---').map(b => b.trim()).filter(b => b.length > 0);
+    extractedQuestionsArray = [];
+
+    blocks.forEach(block => {
+        // 정규식 토큰 분해 엔진 가동
+        const numMatch = block.match(/\[번호\]\s*([^\s|]+)/);
+        const scoreMatch = block.match(/\[배점\]\s*([^\s|]+)/);
         
-        if (examImages.length > 0) {
-            const fileData = examImages[0];
-            if (fileData.includes("application/pdf")) {
-                if(imgEl) imgEl.style.display = 'none';
-                if(pdfEl) { 
-                    pdfEl.src = window.localExamUrl || fileData; 
-                    pdfEl.style.display = 'block'; 
-                }
-            } else {
-                if(pdfEl) pdfEl.style.display = 'none';
-                if(imgEl) { 
-                    imgEl.src = window.localExamUrl || fileData; 
-                    imgEl.style.display = 'block'; 
-                }
-            }
+        if (numMatch) {
+            // [번호] 태그가 포함된 첫 줄 라인을 완전히 지워 순수한 문항 텍스트만 도려냄
+            const cleanText = block.replace(/^\[번호\][\s\S]*?\n/, '').trim();
+            
+            extractedQuestionsArray.push({
+                num: numMatch[1].replace(/번/g, '').trim(),
+                score: scoreMatch ? scoreMatch[1].replace(/점/g, '').trim() : "4.5",
+                text: cleanText,
+                image: null 
+            });
         }
-    }
-}      
+    });
 
-// 전역 변수로 관리하여 삭제/수정이 용이하게 합니다
-let extractedQuestionsArray = [];
-
-// 🟢 [추가] AI 대기 화면에서 특정 문항 삭제 및 번호 정렬
-function deleteQuestion(idx) {
-    if(!confirm("이 문항을 목록에서 삭제하시겠습니까?")) return;
-    extractedQuestionsArray.splice(idx, 1);
     renderQuestionCards();
-}
-
-function mergeWithPrevious(idx) {
-    if (idx <= 0) return;
-    if(!confirm("이 문항의 내용을 위 문항과 합치시겠습니까?")) return;
-    extractedQuestionsArray[idx - 1].text += "\n" + extractedQuestionsArray[idx].text;
-    if (!extractedQuestionsArray[idx - 1].image && extractedQuestionsArray[idx].image) {
-        extractedQuestionsArray[idx - 1].image = extractedQuestionsArray[idx].image;
-    }
-    extractedQuestionsArray.splice(idx, 1);
-    renderQuestionCards();
-}
-
-function removeQuestionImage(idx) {
-    if(confirm("이 문항에 첨부된 그림 조각을 삭제하시겠습니까?")) {
-        extractedQuestionsArray[idx].image = null;
-        renderQuestionCards();
-    }
+    
+    // 업로드 컨트롤 공간 뷰 변환
+    document.getElementById('exam-upload-placeholder').style.display = 'none';
+    document.getElementById('exam-editor-zone').style.display = 'block';
 }
 
 function renderQuestionCards() {
@@ -2674,293 +910,469 @@ function renderQuestionCards() {
     if (window.MathJax) MathJax.typesetPromise([listContainer]);
 }
 
+// ==========================================
 
-
-// 🟢 (추가) 텍스트를 수정할 때마다 수식을 다시 그려주는 함수
-function updateMathPreview(idx, newText) {
-    extractedQuestionsArray[idx].text = newText;
-    const previewEl = document.getElementById(`math-preview-${idx}`);
-    if (previewEl) {
-        previewEl.innerHTML = newText.replace(/\n/g, '<br>');
-        if (window.MathJax && window.MathJax.typesetPromise) {
-            MathJax.typesetClear([previewEl]);
-            MathJax.typesetPromise([previewEl]).catch(err => console.error(err));
-        }
-    }
-}
-
-
-
-
-
-// ✨ [복구] 캡처 관련 변수 및 이벤트 리스너
-let isCapturing = false;
-let capStartX = 0, capStartY = 0;
-let currentCaptureQIdx = -1;
+let cropBoxes = []; 
+let currentTargetQuestionIndex = -1; 
 
 function startPartialCapture(idx) {
-    const canvas = document.getElementById('exam-capture-canvas');
-    const imgEl = document.getElementById('exam-img-display'); 
-    const pdfEl = document.getElementById('exam-pdf-display'); 
-
-    // 🟢 PDF가 화면에 떠 있는 경우, 친절한 안내 메시지 띄우기
-    if (pdfEl && pdfEl.style.display === 'block') {
-        alert("💡 [PDF 캡처 안내]\n\n웹 브라우저 보안 정책상 PDF는 이 버튼으로 직접 캡처할 수 없습니다.\n\n대신 키보드의 [윈도우키 + Shift + S]를 눌러 캡처하신 후, 옆에 있는 노란색 [복사한 그림 붙여넣기] 버튼을 이용해 주세요!");
-        return; 
+    currentTargetQuestionIndex = idx; 
+    
+    const canvas = document.getElementById('crop-canvas');
+    const ctx = canvas.getContext('2d');
+    const img = document.getElementById('exam-img-display');
+    
+    if(!img || !img.src || img.style.display === 'none') {
+        alert("캡처할 수 있는 원본 시험지 이미지 파일이 왼쪽에 로드되어 있지 않습니다."); return;
     }
 
-    if(!canvas) return;
-
-    currentCaptureQIdx = idx;
-    isCapturing = true;
-
-    // 도화지 크기를 이미지 크기에 맞게 조절
-    if(imgEl && imgEl.style.display !== 'none') {
-        canvas.width = imgEl.clientWidth;
-        canvas.height = imgEl.clientHeight;
-    }
-
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
     canvas.style.display = 'block';
-    canvas.style.cursor = 'crosshair';
-    alert("📸 왼쪽 화면에서 그림 영역을 드래그하여 캡처하세요.");
+    
+    ctx.drawImage(img, 0, 0);
+    alert("📸 [마우스 드래그 가이드]\n왼쪽 원본 이미지 위에서 마우스를 드래그하여 문제 영역을 사각형으로 지정한 후, 키보드의 [Enter]를 누르면 완벽하게 캡처 영역이 주입됩니다.");
+    
+    initCropCanvasEvents(canvas, ctx);
 }
 
-// 캔버스 마우스 이벤트 등록 (window.onload 내부 또는 파일 끝에 추가)
-function initCaptureEvents() {
-    const canvas = document.getElementById('exam-capture-canvas');
-    if(!canvas) return;
-    const ctx = canvas.getContext('2d');
-
+function initCropCanvasEvents(canvas, ctx) {
+    let isDrawing = false; let startX=0; let startY=0; let endX=0; let endY=0;
+    
     canvas.onmousedown = (e) => {
-        if(!isCapturing) return;
+        isDrawing = true;
         const rect = canvas.getBoundingClientRect();
-        capStartX = e.clientX - rect.left;
-        capStartY = e.clientY - rect.top;
+        const scaleX = canvas.width / rect.width; const scaleY = canvas.height / rect.height;
+        startX = (e.clientX - rect.left) * scaleX; startY = (e.clientY - rect.top) * scaleY;
     };
 
     canvas.onmousemove = (e) => {
-        if(!isCapturing) return;
+        if(!isDrawing) return;
         const rect = canvas.getBoundingClientRect();
-        const curX = e.clientX - rect.left;
-        const curY = e.clientY - rect.top;
+        const scaleX = canvas.width / rect.width; const scaleY = canvas.height / rect.height;
+        endX = (e.clientX - rect.left) * scaleX; endY = (e.clientY - rect.top) * scaleY;
         
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = '#ef4444';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(capStartX, capStartY, curX - capStartX, curY - capStartY);
+        // 실시간 가이드라인 잔상 삭제 및 재생성
+        const img = document.getElementById('exam-img-display');
+        ctx.drawImage(img, 0, 0);
+        ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 3;
+        ctx.strokeRect(startX, startY, endX - startX, endY - startY);
     };
 
-    canvas.onmouseup = (e) => {
-        if(!isCapturing) return;
-        const rect = canvas.getBoundingClientRect();
-        const endX = e.clientX - rect.left;
-        const endY = e.clientY - rect.top;
-
-        // 실제 이미지에서 영역 잘라내기
-        const imgEl = document.getElementById('exam-img-display');
-        const tempCanvas = document.createElement('canvas');
-        const tCtx = tempCanvas.getContext('2d');
-        
-        const scaleX = imgEl.naturalWidth / imgEl.clientWidth;
-        const scaleY = imgEl.naturalHeight / imgEl.clientHeight;
-
-        const w = (endX - capStartX) * scaleX;
-        const h = (endY - capStartY) * scaleY;
-        
-        tempCanvas.width = w;
-        tempCanvas.height = h;
-        tCtx.drawImage(imgEl, capStartX * scaleX, capStartY * scaleY, w, h, 0, 0, w, h);
-        
-        // 해당 문항에 이미지 저장
-        extractedQuestionsArray[currentCaptureQIdx].image = tempCanvas.toDataURL('image/png');
-        
-        // 상태 초기화
-        isCapturing = false;
-        canvas.style.display = 'none';
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        renderQuestionCards(); // 화면 갱신
-    };
-}
-// window.onload 끝부분에 initCaptureEvents(); 를 호출하도록 추가하세요.
-
-
-
-// ==========================================
-// 🤖 스마트 챗봇 창 크기 조절 (왼쪽은 얼음, 오른쪽 빈 공간으로만 확장)
-// ==========================================
-let isResizingChat = false;
-let chatStartX = 0;
-let chatStartWidth = 0;
-let leftPanelStartWidth = 0;
-
-function initChatResizer() {
-    const resizer = document.getElementById('chat-resizer-left'); 
-    const chatContainer = document.getElementById('ai-chat-container');
-
-    if(!resizer || !chatContainer) return;
-
-    resizer.addEventListener('mousedown', (e) => {
-        isResizingChat = true;
-        chatStartX = e.clientX;
-        chatStartWidth = chatContainer.getBoundingClientRect().width;
-
-        document.body.style.cursor = 'ew-resize';
-        document.body.style.userSelect = 'none';
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (!isResizingChat) return;
-        
-        // 💡 마우스가 왼쪽으로 갈수록 너비가 늘어납니다 (문제 영역을 덮음)
-        const diff = chatStartX - e.clientX;
-        const newWidth = chatStartWidth + diff;
-
-        if (newWidth > 250 && newWidth < window.innerWidth * 0.9) {
-            chatContainer.style.width = newWidth + 'px';
-        }
-    });
-
-    document.addEventListener('mouseup', () => {
-        if(isResizingChat) {
-            isResizingChat = false;
-            document.body.style.cursor = 'default';
-            document.body.style.userSelect = 'auto';
-        }
-    });
-}
-
-
-
-// 페이지 로드 시 크기 조절 기능 활성화
-const originalOnload = window.onload;
-
-// ==========================================
-// 🛠️ 관리자 모드: 기존 성취기준 수정 및 삭제 로직
-// ==========================================
-async function loadStandardsForEdit() {
-    const subject = document.getElementById('admin-edit-subject').value;
-    const stdSelect = document.getElementById('admin-edit-standard');
-    const editFields = document.getElementById('admin-edit-fields');
+    canvas.onmouseup = () => { isDrawing = false; };
     
-    stdSelect.innerHTML = '<option value="">데이터를 불러오는 중입니다...</option>';
-    editFields.style.display = 'none'; // 다른 과목 선택 시 창 숨기기
+    // 엔터키 입력 감지 리스너
+    window.onkeydown = (e) => {
+        if (e.key === 'Enter' && canvas.style.display === 'block') {
+            const w = endX - startX; const h = endY - startY;
+            if(Math.abs(w) < 5 || Math.abs(h) < 5) return;
 
-    if (!subject) {
-        stdSelect.innerHTML = '<option value="">앞에서 과목을 먼저 선택해 주세요</option>';
-        return;
+            const resCanvas = document.createElement('canvas');
+            resCanvas.width = Math.abs(w); resCanvas.height = Math.abs(h);
+            const resCtx = resCanvas.getContext('2d');
+            
+            const img = document.getElementById('exam-img-display');
+            resCtx.drawImage(img, startX, startY, w, h, 0, 0, Math.abs(w), Math.abs(h));
+            
+            extractedQuestionsArray[currentTargetQuestionIndex].image = resCanvas.toDataURL('image/jpeg');
+            canvas.style.display = 'none';
+            window.onkeydown = null; // 리스너 자원 해제
+            renderQuestionCards(); 
+        }
+    };
+}
+
+// ==========================================
+
+let parsedScores = []; 
+let lastBatchDiff = '중'; 
+
+let unsubscribeProject = null; 
+
+// ==========================================
+
+function initDashboard() {
+    db.collection('transformed_bank').get().then(snapshot => {
+        let cnt = snapshot.size;
+        const dashboardCnt = document.getElementById('dashboard-q-count');
+        if(dashboardCnt) dashboardCnt.innerText = `${cnt}개 문항 축적됨`;
+    }).catch(e => console.warn("대시보드 통계 로드 실패", e));
+}
+
+// ==========================================
+// 🛠️ 지필평가 자동 레이아웃 생성 코어 엔진 
+// ==========================================
+async function generateEmptyScoreTable() {
+    const countInput = document.getElementById('setup-q-count');
+    const count = parseInt(countInput.value) || 0;
+    if (count <= 0) { alert("올바른 문항 수를 입력하세요."); return; }
+
+    if(!confirm(`총 ${count}문항 크기의 빈 협업 채점표 인프라를 클라우드에 새로 생성하시겠습니까?\n(기존에 분석 및 판정해둔 정보는 모두 초기화됩니다.)`)) return;
+
+    let emptyScores = [];
+    for(let i = 1; i <= count; i++) {
+        emptyScores.push({
+            num: String(i),
+            score: 4.0,
+            difficulty: "중",
+            level: "판정필요",
+            isShortAnswer: false,
+            reason: "수동으로 생성된 빈 문항 인프라 베이스 공간입니다."
+        });
     }
 
     try {
-        const snapshot = await db.collection('standards_2022').where('subject', '==', subject).get();
-        let stds = [];
-        snapshot.forEach(doc => stds.push({ id: doc.id, ...doc.data() }));
-        stds.sort((a,b) => a.code.localeCompare(b.code));
-
-        stdSelect.innerHTML = '<option value="">-- 수정할 성취기준을 선택하세요 --</option>';
-        stds.forEach(std => {
-            const option = document.createElement('option');
-            option.value = std.id;
-            option.text = `${std.code} ${std.desc.substring(0, 20)}...`;
-            // 🌟 꿀팁: 선택 시 서버에 다시 요청하지 않도록 옵션 태그 안에 데이터를 숨겨둡니다.
-            option.dataset.code = std.code || '';
-            option.dataset.desc = std.desc || '';
-            option.dataset.l_high = std.levels?.high || '';
-            option.dataset.l_b = std.levels?.b || '';
-            option.dataset.l_mid = std.levels?.mid || '';
-            option.dataset.l_d = std.levels?.d || '';
-            option.dataset.l_low = std.levels?.low || '';
-            stdSelect.appendChild(option);
+        const docRef = db.collection('user_projects').doc(currentProjectId);
+        await db.runTransaction(async (transaction) => {
+            const doc = await transaction.get(docRef);
+            let assessments = doc.data().assessments;
+            assessments[currentEditingAssessmentIndex].parsedScores = emptyScores;
+            transaction.update(docRef, { assessments: assessments });
         });
-    } catch (error) {
-        stdSelect.innerHTML = '<option value="">불러오기 오류 발생</option>';
+        alert(`🎯 총 ${count}문항 규모의 실시간 클라우드 채점 매트릭스가 완벽히 배포되었습니다!`);
+    } catch(e) { alert("테이블 생성 실패: " + e.message); }
+}
+
+function downloadScoreTemplate() {
+    let csvContent = "\uFEFF문항번호,배점(숫자만),난이도(상/중/하),isShortAnswer(true/false)\n";
+    for(let i=1; i<=20; i++) {
+        csvContent += `${i},4.5,중,false\n`;
     }
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "지필평가_문항배점_양식지.csv";
+    link.click();
+}
+
+function handleExcelUpload(event) {
+    const file = event.target.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+
+            let uploadedScores = [];
+            jsonData.forEach((row, idx) => {
+                const num = row['문항번호'] ? row['문항번호'].toString().trim() : String(idx+1);
+                const score = parseFloat(row['배점(숫자만)']) || 4.0;
+                const diff = row['난이도(상/중/하)'] ? row['난이도(상/중/하)'].toString().trim() : "중";
+                const isShort = row['isShortAnswer(true/false)'] ? row['isShortAnswer(true/false)'].toString().toLowerCase().trim() === 'true' : false;
+
+                uploadedScores.push({
+                    num: num, score: score, difficulty: diff,
+                    level: "판정필요", isShortAnswer: isShort,
+                    reason: "엑셀 데이터 일괄 업로드 방식으로 반영된 원본 배점 속성 파일입니다."
+                });
+            });
+
+            const docRef = db.collection('user_projects').doc(currentProjectId);
+            await db.runTransaction(async (transaction) => {
+                const doc = await transaction.get(docRef);
+                let assessments = doc.data().assessments;
+                assessments[currentEditingAssessmentIndex].parsedScores = uploadedScores;
+                transaction.update(docRef, { assessments: assessments });
+            });
+            alert(`📈 성공! 총 ${uploadedScores.length}개 문항의 배점 속성 테이블이 일괄 동기화되었습니다.`);
+            document.getElementById('excel-file-input').value = "";
+        } catch(err) { alert("파일 파싱 에러: " + err.message); }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function handleNextToPath1Result() {
+    goToStep(3); 
+    calculateTotalCutScores(); 
+}
+
+function goBackStep(currentStep) {
+    if (currentStep === 2) {
+        if (unsubscribeProject) { unsubscribeProject(); unsubscribeProject = null; }
+        document.getElementById('cut-score-step2').style.display = 'none';
+        document.getElementById('project-detail-view').style.display = 'block';
+        document.getElementById('dynamic-indicator-bar').style.display = 'none';
+        loadProjectDetails();
+    } else {
+        goToStep(currentStep - 1);
+    }
+}
+
+function updateStep2Total() {
+    let total = 0;
+    document.querySelectorAll('.score-input').forEach(input => {
+        total += parseFloat(input.value) || 0;
+    });
+    const currentPath2TotalSpan = document.getElementById('current-path2-total');
+    if(currentPath2TotalSpan) currentPath2TotalSpan.innerText = total.toFixed(1);
+}
+
+// ==========================================
+// 🔮 이원목적분류표 기반 대칭형 컷오프 연산 코어 
+// ==========================================
+function calculateTotalCutScores() {
+    const listEl = document.getElementById('step3-summary-list');
+    const finalBoxes = document.getElementById('final-cut-score-boxes');
+    
+    let html = `<table class="score-table"><thead><tr style="background:#f1f5f9;"><th>문항</th><th>배점</th><th>내 판정</th><th>동료 교사 최종 합의 수준</th></tr></thead><tbody>`;
+    
+    let scoreSum = 0;
+    let totals = { A: 0, B: 0, C: 0, D: 0, E: 0 };
+
+    db.collection('user_projects').doc(currentProjectId).get().then(doc => {
+        if(!doc.exists) return;
+        const asm = doc.data().assessments[currentEditingAssessmentIndex];
+        const baseQuestions = asm.parsedScores || [];
+        const teacherInputs = asm.teacherInputs || {};
+
+        baseQuestions.forEach((q, qIdx) => {
+            // 🔒 핵심 알고리즘: 다수결 합의 원칙 필터링 기법 탑재
+            let votes = { 'A+':0, 'A': 0, 'B': 0, 'C': 0, 'D': 0, 'E': 0 };
+            
+            // 모든 공동작업자의 데이터 투표 취합
+            Object.keys(teacherInputs).forEach(email => {
+                const lvl = teacherInputs[email]?.[qIdx]?.level;
+                if (lvl && votes[lvl] !== undefined) votes[lvl]++;
+            });
+
+            // 과반수 혹은 최고득표 레벨 판정 (동점시 높은 수준 우선 방어막)
+            let agreedLevel = q.level || 'C'; // 기본값은 AI 판정 결과로 디펜스 설정
+            let maxVotes = 0;
+            ['A+','A', 'B', 'C', 'D', 'E'].forEach(l => {
+                if (votes[l] >= maxVotes && votes[l] > 0) {
+                    maxVotes = votes[l]; agreedLevel = l;
+                }
+            });
+
+            const score = q.score || 0;
+            scoreSum += score;
+
+            // 누적 컷오프 분할 스코어링 테이블 연산 가동
+            if (agreedLevel === 'A+' || agreedLevel === 'A') {
+                totals.A += score; totals.B += score; totals.C += score; totals.D += score; totals.E += score;
+            } else if (agreedLevel === 'B') {
+                totals.A += (score * 0.2); totals.B += score; totals.C += score; totals.D += score; totals.E += score;
+            } else if (agreedLevel === 'C') {
+                totals.B += (score * 0.15); totals.C += score; totals.D += score; totals.E += score;
+            } else if (agreedLevel === 'D') {
+                totals.C += (score * 0.1); totals.D += score; totals.E += score;
+            } else if (agreedLevel === 'E') {
+                totals.D += (score * 0.05); totals.E += score;
+            }
+
+            html += `<tr>
+                <td><strong>${q.num}</strong></td>
+                <td><span style="color:#2563eb; font-weight:bold;">${score}점</span></td>
+                <td><span style="background:#f1f5f9; padding:2px 6px; border-radius:4px; font-weight:bold;">${teacherInputs[auth.currentUser.email]?.[qIdx]?.level || '미선택'}</span></td>
+                <td><span style="background:#ea580c; color:white; padding:2px 8px; border-radius:4px; font-weight:bold;">${agreedLevel}</span></td>
+            </tr>`;
+        });
+
+        // 분할점수 산출 알고리즘 수식 결과 최소 한계선 보정 필터링
+        if (totals.A > scoreSum * 0.92) totals.A = scoreSum * 0.90;
+        if (totals.B > totals.A) totals.B = totals.A - 4;
+        if (totals.C > totals.B) totals.C = totals.B - 5;
+        if (totals.D > totals.C) totals.D = totals.C - 5;
+
+        // 고정 최소 방어막 스코어 라인 가동
+        if (totals.A < 75) totals.A = 80.0;
+        if (totals.B < 65) totals.B = 70.0;
+        if (totals.C < 55) totals.C = 60.0;
+        if (totals.D < 45) totals.D = 50.0;
+
+        html += `</tbody>
+            <tfoot style="background:#fffbeb; font-weight:bold;">
+                <tr><td>총 배점 합계</td><td style="color:#ea580c; font-size:1.1rem;" colspan="3">${scoreSum.toFixed(1)} 점</td></tr>
+            </tfoot></table>`;
+        listEl.innerHTML = html;
+
+        finalBoxes.innerHTML = `
+            <div class="result-box-card" style="border-color:#ef4444;"><strong style="color:#ef4444;">A 기준선 (우수)</strong><br><span>${totals.A.toFixed(1)}점 이상</span></div>
+            <div class="result-box-card" style="border-color:#f59e0b;"><strong style="color:#f59e0b;">B 기준선</strong><br><span>${totals.B.toFixed(1)}점 이상</span></div>
+            <div class="result-box-card" style="border-color:#22c55e;"><strong style="color:#22c55e;">C 기준선 (보통)</strong><br><span>${totals.C.toFixed(1)}점 이상</span></div>
+            <div class="result-box-card" style="border-color:#3b82f6;"><strong style="color:#3b82f6;">D 기준선</strong><br><span>${totals.D.toFixed(1)}점 이상</span></div>
+            <div class="result-box-card" style="border-color:#64748b;"><strong style="color:#64748b;">E 기준선 (최소)</strong><br><span>${totals.E.toFixed(1)}점 미만</span></div>
+        `;
+    });
+}
+
+// ==========================================
+// 🛠️ 국가 성취기준 관리자 모드: 서버 동기화 패키지 
+// ==========================================
+let currentEditingAllStandards = [];
+
+async function loadStandardsForEdit() {
+    const sub = document.getElementById('admin-edit-subject').value;
+    const list = document.getElementById('admin-standards-edit-list');
+    list.innerHTML = "<option value=''>로딩 중... ⏳</option>";
+
+    if (!sub) return;
+
+    try {
+        const snapshot = await db.collection('standards_2022').where('subject', '==', sub).get();
+        currentEditingAllStandards = [];
+        list.innerHTML = "<option value=''>-- 수정할 성취기준 선택 --</option>";
+
+        if (snapshot.empty) { list.innerHTML = "<option value=''>등록된 성취기준이 없습니다.</option>"; return; }
+
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            currentEditingAllStandards.push({ id: doc.id, ...data });
+            list.innerHTML += `<option value="${doc.id}">[${data.code}] ${data.desc.substring(0,25)}...</option>`;
+        });
+    } catch(e) { list.innerHTML = "<option value=''>데이터 로드 실패</option>"; }
 }
 
 function populateEditFields() {
-    const select = document.getElementById('admin-edit-standard');
-    const editFields = document.getElementById('admin-edit-fields');
-    const option = select.options[select.selectedIndex];
+    const id = document.getElementById('admin-standards-edit-list').value;
+    const box = document.getElementById('admin-edit-fields-box');
+    
+    if(!id) { box.style.display = 'none'; return; }
+    
+    const std = currentEditingAllStandards.find(item => item.id === id);
+    if (!std) return;
 
-    if (!option.value) {
-        editFields.style.display = 'none';
-        return;
-    }
-
-    // 숨겨둔 데이터를 꺼내어 입력칸(input)에 예쁘게 채워줍니다.
-    document.getElementById('edit-code').value = option.dataset.code;
-    document.getElementById('edit-desc').value = option.dataset.desc;
-    document.getElementById('edit-level-high').value = option.dataset.l_high;
-    document.getElementById('edit-level-b').value = option.dataset.l_b;
-    document.getElementById('edit-level-mid').value = option.dataset.l_mid;
-    document.getElementById('edit-level-d').value = option.dataset.l_d;
-    document.getElementById('edit-level-low').value = option.dataset.l_low;
-
-    editFields.style.display = 'block'; // 입력창 짠! 나타나기
+    document.getElementById('edit-std-code').value = std.code || "";
+    document.getElementById('edit-std-desc').value = std.desc || "";
+    document.getElementById('edit-std-high').value = std.levels?.high || "";
+    document.getElementById('edit-std-mid').value = std.levels?.mid || "";
+    document.getElementById('edit-std-low').value = std.levels?.low || "";
+    
+    box.style.display = 'block';
 }
 
-async function updateStandardInDB() {
-    const docId = document.getElementById('admin-edit-standard').value;
-    if (!docId) return;
+async function saveStandardToDB() {
+    const sub = document.getElementById('admin-edit-subject').value;
+    const code = document.getElementById('edit-std-code').value.trim();
+    const desc = document.getElementById('edit-std-desc').value.trim();
+    if (!sub || !code || !desc) { alert("과목, 코드, 성취기준 내용은 필수입니다."); return; }
 
-    const updatedData = {
-        code: document.getElementById('edit-code').value.trim(),
-        desc: document.getElementById('edit-desc').value.trim(),
+    const stdData = {
+        subject: sub, code: code, desc: desc,
         levels: {
-            high: document.getElementById('edit-level-high').value.trim(),
-            b: document.getElementById('edit-level-b').value.trim(),
-            mid: document.getElementById('edit-level-mid').value.trim(),
-            d: document.getElementById('edit-level-d').value.trim(),
-            low: document.getElementById('edit-level-low').value.trim()
+            high: document.getElementById('edit-std-high').value.trim(),
+            mid: document.getElementById('edit-std-mid').value.trim(),
+            low: document.getElementById('edit-std-low').value.trim()
         }
     };
 
-    if (!updatedData.code || !updatedData.desc) {
-        alert("성취기준 코드와 내용은 필수입니다!");
-        return;
-    }
+    try {
+        await db.collection('standards_2022').add(stdData);
+        alert("✨ 새로운 국가 성취기준이 마스터 테이블에 업로드되었습니다!");
+        loadStandardsForEdit();
+    } catch(e) { alert("추가 실패: " + e.message); }
+}
 
-    if(confirm("이대로 덮어쓰시겠습니까? (기존 내용은 사라집니다)")) {
+async function updateStandardInDB() {
+    const id = document.getElementById('admin-standards-edit-list').value;
+    if(!id) return;
+
+    const stdData = {
+        code: document.getElementById('edit-std-code').value.trim(),
+        desc: document.getElementById('edit-std-desc').value.trim(),
+        levels: {
+            high: document.getElementById('edit-std-high').value.trim(),
+            mid: document.getElementById('edit-std-mid').value.trim(),
+            low: document.getElementById('edit-std-low').value.trim()
+        }
+    };
+
+    if(confirm("수정 사항을 클라우드 마스터 서버에 반영하시겠습니까?")) {
         try {
-            await db.collection('standards_2022').doc(docId).update(updatedData);
-            alert("✅ 성공적으로 수정되었습니다!");
-            location.reload(); // 새로고침해서 최신 데이터 반영
+            await db.collection('standards_2022').doc(id).update(stdData);
+            alert("✅ 정상적으로 마스터 서버 데이터가 동기화되었습니다.");
+            loadStandardsForEdit();
         } catch(e) { alert("수정 실패: " + e.message); }
     }
 }
 
 async function deleteStandardFromDB() {
-    const docId = document.getElementById('admin-edit-standard').value;
-    if (!docId) return;
+    const id = document.getElementById('admin-standards-edit-list').value;
+    if(!id) return;
 
-    if(confirm("🚨 정말로 이 성취기준을 삭제하시겠습니까?\n한 번 삭제하면 되돌릴 수 없습니다!")) {
+    if(confirm("🚨 경고: 이 국가 성취기준을 데이터베이스에서 영구 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.")) {
         try {
-            await db.collection('standards_2022').doc(docId).delete();
-            alert("🗑️ 성취기준이 삭제되었습니다.");
-            location.reload();
+            await db.collection('standards_2022').doc(id).delete();
+            alert("🗑️ 성취기준이 파쇄 삭제되었습니다.");
+            document.getElementById('admin-edit-fields-box').style.display = 'none';
+            loadStandardsForEdit();
         } catch(e) { alert("삭제 실패: " + e.message); }
     }
 }
+
 // ==========================================
-// 🛠️ 관리자 모드: 기존 문항(Question) 수정 및 삭제 로직
+// 🛠️ 문제은행 문항 수동 관리자 패널 확장 모듈
 // ==========================================
-let currentEditingAllQuestions = []; // 현재 선택된 성취기준의 모든 문항 임시 저장
+let currentEditingAllQuestions = [];
 
-async function loadStandardsForManage() {
-    const subject = document.getElementById('admin-manage-q-subject').value;
-    const stdSelect = document.getElementById('admin-manage-q-standard');
-    stdSelect.innerHTML = '<option value="">로딩 중...</option>';
-    if (!subject) return;
+async function loadStandardsForQuestion() {
+    const sub = document.getElementById('admin-q-subject').value;
+    const stdSelect = document.getElementById('admin-q-standard');
+    const manageStdSelect = document.getElementById('admin-manage-q-standard'); 
+    
+    stdSelect.innerHTML = "<option value=''>로딩 중...</option>";
+    if(manageStdSelect) manageStdSelect.innerHTML = "<option value=''>로딩 중...</option>";
 
-    const snapshot = await db.collection('standards_2022').where('subject', '==', subject).get();
-    let stds = [];
-    snapshot.forEach(doc => stds.push({ id: doc.id, code: doc.data().code, desc: doc.data().desc }));
-    stds.sort((a,b) => a.code.localeCompare(b.code));
+    if (!sub) return;
 
-    stdSelect.innerHTML = '<option value="">-- 성취기준 선택 --</option>';
-    stds.forEach(std => {
-        stdSelect.innerHTML += `<option value="${std.id}">${std.code} ${std.desc.substring(0, 20)}...</option>`;
-    });
+    try {
+        const snapshot = await db.collection('standards_2022').where('subject', '==', sub).get();
+        let html = "<option value=''>-- 연계할 성취기준 선택 --</option>";
+        
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            html += `<option value="${doc.id}">${data.code} ${data.desc.substring(0,25)}...</option>`;
+        });
+        
+        stdSelect.innerHTML = html;
+        if(manageStdSelect) manageStdSelect.innerHTML = html.replace("-- 연계할 성취기준 선택 --", "-- 관리할 성취기준 선택 --");
+        
+        await updateQuestionCount(); 
+    } catch(e) { 
+        stdSelect.innerHTML = "<option value=''>로드 실패</option>"; 
+    }
 }
+
+async function saveQuestionToDB() {
+    const sub = document.getElementById('admin-q-subject').value;
+    const stdSelect = document.getElementById('admin-q-standard');
+    const text = document.getElementById('admin-q-text').value.trim();
+    const answer = document.getElementById('admin-q-answer').value.trim();
+    
+    if (!sub || !stdSelect.value || !text) { alert("과목, 성취기준, 문항 내용은 필수 항목입니다."); return; }
+    
+    const stdCode = stdSelect.options[stdSelect.selectedIndex].text.split(' ')[0];
+
+    const qData = {
+        subject: sub,
+        standard_code: stdCode,
+        question: text,
+        answer: answer,
+        level: document.getElementById('admin-q-level').value,
+        reason: document.getElementById('admin-q-reason').value.trim(),
+        source: "교사 직접 입력 서랍",
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    try {
+        await db.collection('transformed_bank').add(qData);
+        alert("✨ 새로운 평가 문항이 문제은행 DB에 성공적으로 적재되었습니다!");
+        document.getElementById('admin-q-text').value = "";
+        document.getElementById('admin-q-answer').value = "";
+        document.getElementById('admin-q-reason').value = "";
+        
+        await updateQuestionCount(); 
+    } catch(e) { alert("문항 저장 실패: " + e.message); }
+}
+
+function loadStandardsForManage() {
+    loadStandardsForQuestion(); 
+}
+
+// 🟢 [부활 및 교정 완료] 공통지문 보관함 변수 바인딩
+let commonPassages = []; 
 
 // ==========================================
 // 🛠️ 관리자 모드: 기존 문항(Question) 로드 및 수정/삭제 정교화 엔진
@@ -3209,7 +1621,7 @@ async function openProject(projectId, projectName) {
     });
     document.getElementById('dynamic-indicator-bar').style.display = 'none';
 
-    document.getElementById('project-detail-title').innerHTML = `📂 ${projectName} <button class="save-btn" onclick="openMemoBoard()" style="width: auto; margin: 0 0 0 15px; padding: 0.4rem 0.8rem; font-size: 0.85rem; background: #f59e0b; display: inline-block;">💬 업무 메모 <span id="unread-memo-count" style="background: #ef4444; color: white; border-radius: 10px; padding: 2px 6px; font-size: 0.7rem; margin-left: 5px; display: none;">0</span></button>`;
+    document.getElementById('project-detail-title').innerHTML = `📂 ${projectName} <button class="save-btn" onclick="openMemoBoard()" style="width: auto; margin: 0 0 0 15px; padding: 0.4rem 0.8rem; font-size: 0.85rem; background: #f59e0b; display: inline-block;">💬 업무 메모 <span id="unread-memo-count" style="background: #ef4444; color: white; border-radius: 10px; padding: 2px 6px; font-size: 0.7 diagnosis; margin-left: 5px; display: none;">0</span></button>`;
     document.getElementById('project-detail-view').style.display = 'block';
 
     await loadProjectDetails();
@@ -4590,8 +3002,442 @@ async function updateQuestionCount() {
     }
 }
 
+// 💬 업무 메모장 연동용 실시간 모듈 함수 배치
+let unsubscribeMemos = null;
+
+function openMemoBoard() {
+    document.getElementById('memo-modal').style.display = 'flex';
+    if (unsubscribeMemos) unsubscribeMemos();
+    unsubscribeMemos = db.collection('user_projects').doc(currentProjectId).onSnapshot(doc => {
+        if (doc.exists) {
+            const data = doc.data();
+            const memos = data.memos || [];
+            renderMemos(memos);
+            markMemosAsRead(memos); 
+        }
+    });
+}
+
+function closeMemoBoard() {
+    document.getElementById('memo-modal').style.display = 'none';
+    if (unsubscribeMemos) { unsubscribeMemos(); unsubscribeMemos = null; }
+    loadProjectDetails(); 
+}
+
+function renderMemos(memos) {
+    const listEl = document.getElementById('memo-list');
+    const currentUserEmail = auth.currentUser.email;
+    if (memos.length === 0) {
+        listEl.innerHTML = '<div style="text-align:center; color:#94a3b8; margin-top: 40%;">아직 등록된 메모가 없습니다.</div>'; return;
+    }
+    let html = '';
+    memos.forEach(memo => {
+        const isMe = memo.authorEmail === currentUserEmail;
+        const align = isMe ? 'flex-end' : 'flex-start';
+        const bgColor = isMe ? '#fef3c7' : '#f1f5f9';
+        const nameStr = isMe ? '나' : memo.authorName;
+        const readCount = (memo.readBy || []).filter(e => e !== memo.authorEmail).length;
+        const readBadge = readCount > 0 ? `<span style="font-size:0.75rem; color:#f59e0b; font-weight:bold; margin: 0 4px;">읽음 ${readCount}</span>` : '';
+        const timeStr = memo.timestamp ? new Date(memo.timestamp).toLocaleTimeString('ko-KR', {hour: '2-digit', minute:'2-digit'}) : '';
+
+        html += `
+        <div style="display: flex; flex-direction: column; align-items: ${align}; margin-bottom: 15px;">
+            <span style="font-size: 0.8rem; color: #64748b; margin-bottom: 4px; font-weight: bold;">${nameStr}</span>
+            <div style="display: flex; align-items: flex-end; flex-direction: ${isMe ? 'row-reverse' : 'row'};">
+                <div style="background: ${bgColor}; padding: 10px 14px; border-radius: 12px; max-width: 250px; font-size: 0.95rem; word-break: break-all; white-space: pre-wrap; color: #1e293b;">${memo.text}</div>
+                <div style="display: flex; flex-direction: column; align-items: ${isMe ? 'flex-end' : 'flex-start'}; margin: 0 6px;">
+                    ${readBadge} <span style="font-size: 0.7rem; color: #94a3b8;">${timeStr}</span>
+                </div>
+            </div>
+        </div>`;
+    });
+    listEl.innerHTML = html; listEl.scrollTop = listEl.scrollHeight;
+}
+
+async function submitMemo() {
+    const inputEl = document.getElementById('memo-input');
+    const text = inputEl.value.trim(); if (!text) return;
+    const user = auth.currentUser;
+    const newMemo = {
+        id: 'memo_' + Date.now() + Math.random().toString(36).substr(2, 5), text: text,
+        authorEmail: user.email, authorName: user.email.split('@')[0], timestamp: new Date().toISOString(), readBy: []
+    };
+    inputEl.value = '';
+    try {
+        await db.collection('user_projects').doc(currentProjectId).update({
+            memos: firebase.firestore.FieldValue.arrayUnion(newMemo)
+        });
+    } catch(e) { alert("메모 전송 실패: " + e.message); }
+}
+
+async function markMemosAsRead(memos) {
+    const userEmail = auth.currentUser.email; let needsUpdate = false;
+    let updatedMemos = memos.map(memo => {
+        if (memo.authorEmail !== userEmail && !(memo.readBy || []).includes(userEmail)) {
+            needsUpdate = true; return { ...memo, readBy: [...(memo.readBy || []), userEmail] };
+        }
+        return memo;
+    });
+    if (needsUpdate) {
+        try { await db.collection('user_projects').doc(currentProjectId).update({ memos: updatedMemos }); } catch(e) {}
+    }
+}
+
+// 🟢 [신규 개발] 분할 분석 지원용 클라우드 안전 매칭 누적 엔진 탑재
+async function sendAiResultsToTable() {
+    if (extractedQuestionsArray.length === 0) { alert("분석된 문항이 없습니다."); return; }
+
+    try {
+        const docRef = db.collection('user_projects').doc(currentProjectId);
+        await db.runTransaction(async (transaction) => {
+            const doc = await transaction.get(docRef);
+            if(!doc.exists) throw new Error("문서를 찾을 수 없습니다.");
+            
+            let assessments = doc.data().assessments;
+            let asm = assessments[currentEditingAssessmentIndex];
+            let baseScores = asm.parsedScores || []; 
+
+            extractedQuestionsArray.forEach((q) => {
+                let levelMatch = q.text.match(/\[수준\]\s*(A\+|[A-E])/);
+                let reasonMatch = q.text.match(/\[이유\]\s*([\s\S]*?)(?=\[|$)/); 
+                
+                let diffSelect = document.getElementById(`ai-diff-${extractedQuestionsArray.indexOf(q)}`);
+                let diff = (diffSelect && diffSelect.value !== "") ? diffSelect.value : "";
+                let isShort = String(q.num).includes('서') || String(q.num).startsWith('서');
+
+                let finalLevel = levelMatch ? levelMatch[1] : "판정필요";
+                let finalReason = reasonMatch ? reasonMatch[1].trim() : "AI 판정 이유가 분석되지 않았습니다.";
+
+                // 🌟 순서(Index)가 아닌 문항 번호(q.num) 기반으로 조회 매칭
+                let existingIdx = baseScores.findIndex(s => String(s.num).trim() === String(q.num).trim());
+
+                if (existingIdx !== -1) {
+                    baseScores[existingIdx].score = parseFloat(q.score) || 0;
+                    if(diff !== "") baseScores[existingIdx].difficulty = diff;
+                    baseScores[existingIdx].isShortAnswer = isShort; 
+                    baseScores[existingIdx].level = finalLevel; 
+                    baseScores[existingIdx].reason = finalReason; 
+                } else {
+                    baseScores.push({ 
+                        num: String(q.num).trim(), score: parseFloat(q.score) || 0, difficulty: diff || "중", 
+                        level: finalLevel, isShortAnswer: isShort, reason: finalReason
+                    });
+                }
+            });
+
+            // 문항 정렬 엔진 작동
+            baseScores.sort((a, b) => {
+                let aNum = parseInt(a.num.replace(/[^0-9]/g, '')) || 0;
+                let bNum = parseInt(b.num.replace(/[^0-9]/g, '')) || 0;
+                return aNum - bNum;
+            });
+
+            assessments[currentEditingAssessmentIndex].parsedScores = baseScores;
+            if (currentUploadedImageUrl) assessments[currentEditingAssessmentIndex].imageUrl = currentUploadedImageUrl;
+            transaction.update(docRef, { assessments: assessments });
+        });
+        
+        const wrapper = document.getElementById('exam-inspector-wrapper');
+        if (wrapper && wrapper.style.display !== 'none') toggleExamViewer();
+        alert("✅ 분할 분석된 문항들이 기존 표의 번호 위치에 맞게 안전하게 병합되었습니다!");
+    } catch(e) { alert("반영 실패: " + e.message); }
+}
+
+// 🟢 [신규 개발] AI 실시간 가리기/보이기 전역 플래그 제어 인터페이스 설계
+let isAiHidden = false;
+let cachedProjectData = null;
+let cachedAsmData = null;
+
+function toggleAiVisibility() {
+    isAiHidden = !isAiHidden;
+    if (cachedProjectData && cachedAsmData) {
+        renderCollaborativeTable(cachedProjectData, cachedAsmData);
+    }
+}
+
+// 🟢 실시간 교사간 협업 매트릭스 렌더링 코어 교체 완본
+function renderCollaborativeTable(projectData, asm) {
+    const container = document.getElementById('score-table-container');
+    const currentUserEmail = auth.currentUser.email;
+    
+    let allMembers = projectData.collaborators || [];
+    if (projectData.ownerEmail && !allMembers.includes(projectData.ownerEmail)) {
+        allMembers.unshift(projectData.ownerEmail); 
+    }
+    if (!allMembers.includes(currentUserEmail)) {
+        allMembers.push(currentUserEmail); 
+    }
+    const collaborators = [...new Set(allMembers)]; 
+
+    const teacherInputs = asm.teacherInputs || {};
+    const baseQuestions = asm.parsedScores || [];
+
+    if (baseQuestions.length === 0) {
+        container.innerHTML = '<p style="text-align:center; padding: 2rem; color: #94a3b8;">[표 생성]을 누르거나 AI 분석을 시작하세요.</p>'; return;
+    }
+
+    let html = `<table class="score-table">
+                <thead style="position: sticky; top: 0; background: #f1f5f9; z-index: 1;">
+                <tr>
+                    <th>문항</th>
+                    <th style="min-width: 120px;">
+                        난이도<br>
+                        <div style="font-size:0.75rem; font-weight:normal; margin-top:4px; display:flex; gap:4px; justify-content:center;">
+                            <select id="batch-diff-val" style="padding:2px; border-radius:4px;" onchange="lastBatchDiff = this.value">
+                            <option value="상" ${lastBatchDiff === '상' ? 'selected' : ''}>상</option>
+                            <option value="중" ${lastBatchDiff === '중' ? 'selected' : ''}>중</option>
+                            <option value="하" ${lastBatchDiff === '하' ? 'selected' : ''}>하</option>
+                        </select>
+                            <button onclick="applyBatchDifficulty()" style="background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer;">일괄넣기</button>
+                        </div>
+                    </th> 
+                    <th>배점</th>
+                    
+                    <th style="background: #f8fafc; min-width: 115px; text-align: center; vertical-align: middle;">
+                        🤖 AI 판정<br>
+                        <button onclick="toggleAiVisibility()" style="margin-top:5px; background:${isAiHidden ? '#10b981' : '#64748b'}; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: 0.2s;">
+                            ${isAiHidden ? '👁️ 결과 보이기' : '🙈 결과 가리기'}
+                        </button>
+                    </th>
+                    
+                    <th style="background:#ecfdf5; border-bottom: 2px solid #10b981;">
+                        내 판정<br>
+                        <button onclick="copyAiLevelsToMine()" style="margin-top:5px; background:#10b981; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🤖 일괄 복사</button>
+                    </th>`;
+                    
+    collaborators.forEach(email => {
+        if (email !== currentUserEmail) html += `<th>${email.split('@')[0]} 선생님</th>`;
+    });
+    html += `<th style="min-width:90px; text-align:center;">문항 관리</th></tr></thead><tbody>`;
+
+    const levelToNum = { 'A+': 6, 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'E': 1 };
+
+    baseQuestions.forEach((q, qIdx) => {
+        const isShort = String(q.num).includes('서') || String(q.num).startsWith('서');
+        const myInput = teacherInputs[currentUserEmail]?.[qIdx]?.level || '';
+        
+        let minNum = myInput ? levelToNum[myInput] : null;
+        let maxNum = myInput ? levelToNum[myInput] : null;
+
+        collaborators.forEach(email => {
+            const theirInput = teacherInputs[email]?.[qIdx]?.level;
+            if (theirInput) {
+                const num = levelToNum[theirInput];
+                if (minNum === null || num < minNum) minNum = num;
+                if (maxNum === null || num > maxNum) maxNum = num;
+            }
+        });
+
+        const isWarning = (minNum !== null && maxNum !== null && (maxNum - minNum >= 2));
+        const trStyle = isWarning ? 'background:#fee2e2; border: 2px solid #ef4444;' : (isShort ? 'background:#fff7ed;' : '');
+        const diff = q.difficulty || '선택하세요';
+
+        let aiCellContentHtml = '';
+        if (isAiHidden) {
+            aiCellContentHtml = `
+                <span style="background:#f1f5f9; color:#94a3b8; padding:4px 8px; border-radius:4px; font-weight:bold; font-size:0.8rem; border:1px dashed #cbd5e1; display:inline-block; cursor:pointer;" onclick="alert('상단의 [👁️ 결과 보이기] 버튼을 누르시면 전체 AI 판정 내역이 공개됩니다!')">🔮 블라인드</span>
+                <br>
+                <button disabled style="margin-top: 6px; background: #f8fafc; color: #cbd5e1; border: 1px solid #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; cursor: not-allowed;">🔒 가려짐</button>`;
+        } else {
+            aiCellContentHtml = `
+                <span style="background:${q.level === 'A+' ? '#ef4444' : '#8b5cf6'}; color:white; padding:2px 6px; border-radius:4px; font-weight:bold;">${q.level || 'C'}</span>
+                <br>
+                <button onclick="showAiReason(${qIdx})" style="margin-top: 6px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">🔍 판정이유</button>`;
+        }
+
+        html += `<tr style="${trStyle}">
+            <td style="font-size: 0.9rem; font-weight:bold; text-align:center;">${q.num}${isWarning ? ' 🚨' : ''}</td>
+            <td style="width: 120px; vertical-align: middle;">
+                <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+                    <input type="checkbox" class="diff-batch-cb" data-idx="${qIdx}" style="transform: scale(1.3); margin: 0;">
+                    <select class="diff-select" onchange="updateBaseDifficulty(${qIdx}, this.value)" style="padding:4px; border-radius:4px; width: 75px; font-weight: 500;">
+                        <option value=""   ${diff==='선택하세요' || diff===''?'selected':''}>선택</option>
+                        <option value="상" ${diff==='상'?'selected':''}>상</option>
+                        <option value="중" ${diff==='중'?'selected':''}>중</option>
+                        <option value="하" ${diff==='하'?'selected':''}>하</option>
+                    </select>
+                </div>
+            </td>
+            <td><input type="number" step="0.1" class="score-input" data-num="${q.num}" value="${q.score}" onchange="updateBaseScore(${qIdx}, this.value)" style="width:50px;"></td>
+            <td style="text-align: center; vertical-align: middle;">${aiCellContentHtml}</td>
+            <td>
+                <select class="level-select" style="padding:4px; font-weight:bold;" onchange="saveMyInput(${qIdx}, this.value)">
+                    <option value="" ${!myInput ? 'selected' : ''}>선택</option>
+                    <option value="A+" ${myInput==='A+'?'selected':''}>A+</option>
+                    <option value="A" ${myInput==='A'?'selected':''}>A</option><option value="B" ${myInput==='B'?'selected':''}>B</option>
+                    <option value="C" ${myInput==='C'?'selected':''}>C</option><option value="D" ${myInput==='D'?'selected':''}>D</option><option value="E" ${myInput==='E'?'selected':''}>E</option>
+                </select>
+            </td>`;
+
+        collaborators.forEach(email => {
+            if (email !== currentUserEmail) {
+                const theirInput = teacherInputs[email]?.[qIdx]?.level;
+                html += `<td>${theirInput ? "<span style='color:#10b981; font-weight:bold;'>입력완료🔒</span>" : "<span style='color:#cbd5e1;'>대기중</span>"}</td>`;
+            }
+        });
+        html += `<td style="text-align:center; vertical-align: middle;"><button onclick="deleteTableQuestion(${qIdx})" style="background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.8rem;">🗑️ 삭제</button></td></tr>`;
+    });
+    html += `</tbody></table>`; container.innerHTML = html; 
+
+    let externalHtml = `<div style="text-align: right; margin-bottom: 10px;">
+    <button onclick="alert('더 안정적인 서비스 제공을 위해 현재 시스템을 점검 및 업데이트 중입니다. 핵심 기능인 점수 산출은 정상적으로 이용 가능합니다! 🛠️');" style="background: #94a3b8; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">📄 시험지 파일 및 편집 확인 (업데이트 예정) ⏳</button></div>`;
+
+    const readyStatus = asm.readyStatus || {};
+    let statusHtml = `<div style="padding: 15px; background: #f8fafc; border-radius: 8px; border: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">`;
+    statusHtml += `<div><strong style="color:#334155; display:block; margin-bottom:5px;">👥 공동 작업 진행 상황:</strong>`;
+    let allReady = true;
+    
+    collaborators.forEach(email => {
+        const status = readyStatus[email] || '대기 중';
+        if (status !== '완료') allReady = false; 
+        const name = email.split('@')[0]; 
+        const isReady = status === '완료'; const isWorking = status === '작성 중';
+        const textColor = isReady ? '#166534' : (isWorking ? '#991b1b' : '#64748b');
+        const bgColor = isReady ? '#dcfce7' : (isWorking ? '#fee2e2' : '#f1f5f9');
+        const iconText = isReady ? '✅ 저장 완료' : (isWorking ? '✍️ 작성 중' : '⏳ 대기 중');
+
+        statusHtml += `<span style="display:inline-block; margin-right: 8px; padding: 4px 8px; border-radius: 4px; background: ${bgColor}; color: ${textColor}; font-size: 0.85rem; font-weight: bold; border: 1px solid ${isReady ? '#86efac' : (isWorking ? '#fca5a5' : '#e2e8f0')};">
+            ${name}: ${iconText}</span>`;
+    });
+    statusHtml += `</div>`;
+
+    const myStatus = readyStatus[currentUserEmail] || '대기 중'; const amIReady = myStatus === '완료';
+    statusHtml += `<div><button onclick="markAsReady()" style="background: ${amIReady ? '#10b981' : '#ea580c'}; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.95rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            ${amIReady ? '✅ 내 판정 저장 완료' : '💾 내 판정 최종 저장하기'}</button></div></div>`;
+
+    externalHtml += statusHtml;
+    const externalContainer = document.getElementById('table-external-controls');
+    if(externalContainer) externalContainer.innerHTML = externalHtml;
+
+    updateStep2Total();
+    const nextBtn = document.getElementById('btn-next-to-step3');
+    if (nextBtn) {
+        nextBtn.style.display = 'inline-block';
+        if (allReady) {
+            nextBtn.style.opacity = '1'; nextBtn.style.cursor = 'pointer'; nextBtn.onclick = handleNextToPath1Result;
+            nextBtn.innerHTML = "분할점수 산출하기 (M자 그룹화) ➡️"; nextBtn.style.background = "#ea580c";
+        } else {
+            nextBtn.style.opacity = '0.5'; nextBtn.style.cursor = 'not-allowed';
+            nextBtn.innerHTML = "🔒 모두 '저장 완료' 시 산출 가능"; nextBtn.style.background = "#64748b";
+        }
+    }
+    parsedScores = baseQuestions; setTimeout(initDiffShiftClick, 100); 
+}
+
+async function startEditAssessment(index) {
+    currentEditingAssessmentIndex = index;
+    history.pushState({ section: 'cut-score', sub: 'step2' }, "", "#cut-score/step2");
+    document.getElementById('project-detail-view').style.display = 'none';
+    document.getElementById('cut-score-step2').style.display = 'block';
+    
+    if (unsubscribeProject) unsubscribeProject();
+    unsubscribeProject = db.collection('user_projects').doc(currentProjectId).onSnapshot(doc => {
+        if(doc.exists) {
+            const projectData = doc.data(); const asm = projectData.assessments[index];
+            document.getElementById('current-assessment-info').innerText = `📌 ${asm.name} (반영 비율: ${asm.weight}%)`;
+            
+            cachedProjectData = projectData; cachedAsmData = asm;
+            renderCollaborativeTable(projectData, asm);
+
+            if (asm.imageUrl) {
+                const imgEl = document.getElementById('exam-img-display');
+                const pdfEl = document.getElementById('exam-pdf-display');
+                const listContainer = document.getElementById('extracted-questions-list');
+
+                if (asm.imageUrl.toLowerCase().includes("pdf")) {
+                    if(imgEl) imgEl.style.display = 'none';
+                    if(pdfEl) { pdfEl.src = asm.imageUrl; pdfEl.style.display = 'block'; }
+                } else {
+                    if(pdfEl) pdfEl.style.display = 'none';
+                    if(imgEl) { imgEl.src = asm.imageUrl; imgEl.style.display = 'block'; }
+                }
+                currentUploadedImageUrl = asm.imageUrl;
+
+                const wrapper = document.getElementById('exam-inspector-wrapper');
+                const toggleBtn = document.getElementById('exam-viewer-toggle-btn');
+                if (wrapper) { wrapper.style.display = 'flex'; if (toggleBtn) toggleBtn.innerText = "📄 시험지 닫기 🔼"; }
+
+                if (extractedQuestionsArray.length === 0 && listContainer) {
+                    listContainer.innerHTML = `
+                        <div style="padding: 3rem 1rem; text-align: center; color: #475569; background: white; border-radius: 8px; border: 1px dashed #cbd5e1;">
+                            <span style="font-size: 3rem;">📄</span>
+                            <p style="font-weight: bold; font-size: 1.1rem; margin-top: 10px; color: #1e3a8a;">시험지가 로드되었습니다.</p>
+                            <p style="font-size: 0.95rem; line-height: 1.6;">방장 선생님이 이미 문항을 표에 반영했습니다.<br>왼쪽 시험지를 보고 위의 <strong>[표]</strong>에서 채점을 진행해 주세요.</p>
+                        </div>`;
+                }
+            }
+        }
+    });
+}
+
+// 🟢 협업 표 문항 영구 삭제 및 동적 정렬 함수 구현체 배치
+async function deleteTableQuestion(qIdx) {
+    if(!confirm("이 문항을 전체 협업 표에서 영구 삭제하시겠습니까?\n삭제 후 문항 번호 자동 조정 및 합계 점수가 실시간으로 동기화됩니다.")) return;
+    try {
+        const docRef = db.collection('user_projects').doc(currentProjectId);
+        const doc = await docRef.get(); if(!doc.exists) return;
+
+        let assessments = doc.data().assessments;
+        let asm = assessments[currentEditingAssessmentIndex];
+        let baseScores = asm.parsedScores || [];
+        
+        baseScores.splice(qIdx, 1);
+        let objIdx = 1; let subIdx = 1;
+        
+        baseScores.forEach(q => {
+            if (String(q.num).includes('서') || String(q.num).startsWith('서')) {
+                q.num = '서' + subIdx; subIdx++;
+            } else if (!isNaN(parseInt(q.num))) {
+                q.num = String(objIdx); objIdx++;
+            }
+        });
+        asm.parsedScores = baseScores;
+        if (asm.teacherInputs) {
+            Object.keys(asm.teacherInputs).forEach(email => {
+                if (asm.teacherInputs[email] && asm.teacherInputs[email].length > qIdx) {
+                    asm.teacherInputs[email].splice(qIdx, 1);
+                }
+            });
+        }
+        await docRef.update({ assessments: assessments });
+        alert("🗑️ 문항이 삭제되었으며 동료 교사들의 화면에 실시간 반영되었습니다.");
+    } catch(e) { alert("문항 삭제 실패: " + e.message); }
+}
+
+// 🟢 [부활 및 통합 완료] 인지적 복잡성 평가 루브릭 텍스트 모듈
+function getSystemRubric() {
+    return `
+[1] 일반적 특성 및 인지적 복잡성
+- A수준: 학생들이 성취기준을 포괄적으로 이해하고 지식을 유기적으로 연결하여 복잡한 문제를 해결할 수 있음.
+- B수준: 성취기준에 명시된 지식과 기능을 비교적 원활하게 수행하고 적용할 수 있음.
+- C수준: 기본적인 개념과 원리를 이해하고 전형적이고 단순한 상황에 적용할 수 있음.
+- D수준: 기초적인 지식과 기능을 부분적으로만 수행할 수 있음.
+- E수준: 성취기준에 대한 이해가 매우 제한적이며 보충 학습이 필요함.
+
+[2] 핵심 서술어 및 종결어미 패턴
+- A수준: 동사(설명하다, 분석하다, 정당화하다, 평가하다), 어미(~수 있다, ~을 원활히 수행한다)
+- B수준: 동사(수행하다, 비교하다, 적용하다), 어미(~할 수 있다)
+- C수준: 동사(이해하다, 계산하다, 구하다), 어미(~한다)
+- D수준: 동사(알다, 식별하다), 어미(~하는 수준이다)
+- E수준: 동사(기억하다, 모방하다), 어미(~에 그친다)
+
+[3] 수식어 및 부사어 결합 조건
+- A수준: 체계적으로, 논리적으로, 엄밀하게, 다각도로
+- B수준: 비교적 정확하게, 일반적인 상황에서
+- C수준: 전형적인, 간단한, 안내된
+- D수준: 일부, 제한된 상황에서
+- E수준: 교사의 도움이 주어질 때, 최소한의
+
+[4] MCP(최소 능력자) 판별 준거
+- A수준: 단순 암기나 반복 숙달을 넘어서 추론과 정당화 역량을 보이는가?
+- B수준: 복잡도가 중간 수준인 상황에서 개념을 결합할 수 있는가?
+- C수준: 단일 교과 지식을 정형화된 공식에 대입할 수 있는가?
+- D수준: 용어나 기호의 정의를 최소한으로 식별할 수 있는가?
+- E수준: 기본 연산이나 사실 기억에 도달하지 못했는가?`;
+}
+
 // ==========================================
-// 🌟 마법의 전역 변수 바인딩 다리 (최종 완본 게이트웨이)
+// 🌟 [최종 통합] Vite 모듈 환경용 전역 브릿지 허브 게이트웨이 (중복 제로 완본)
 // ==========================================
 const exposeToWindow = {
     handleLogin, handleLogout, handleDeleteAccount, openFeedback, openAdminFeedback,
@@ -4617,7 +3463,7 @@ const exposeToWindow = {
     calculateTotalCutScores, openSpecificFeedbackPanel, updateStep2Total, markAsReady, goToStep, updateQuestionCount,
     
     deleteQuestion, mergeWithPrevious, removeQuestionImage, deleteTableQuestion, toggleAiVisibility,
-    deleteSavedAssessment, // 🟢 신설된 아카이브 전용 삭제 함수 외부 개방
+    deleteSavedAssessment, 
    
     changeGroup, openMemoBoard, closeMemoBoard, submitMemo, changeSubject, showAiReason,
     toggleDictionaryPanel, changeDictGroup, loadDictionaryStandards, toggleAccordion,
