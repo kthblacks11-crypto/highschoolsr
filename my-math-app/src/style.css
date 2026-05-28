@@ -385,3 +385,12 @@ header {
 .dict-accordion-body.open {
     display: block; /* 클릭하면 열림 */
 }
+
+/* 📚 사전 패널 내 교과군 탭 버튼 스타일 */
+.dict-group-btn {
+    flex: 1; padding: 6px 0; background: white; border: 1px solid #cbd5e1;
+    border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold;
+    color: #64748b; transition: 0.2s;
+}
+.dict-group-btn:hover { background: #f1f5f9; }
+.dict-group-btn.active { background: #1e3a8a; color: white; border-color: #1e3a8a; }

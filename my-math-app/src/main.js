@@ -4999,23 +4999,58 @@ function toggleDictionaryPanel() {
     if (panel) {
         panel.classList.toggle('open');
         if (panel.classList.contains('open')) {
-            initDictionarySubjects(); // 열릴 때 과목 목록 채우기
+            // 패널이 열렸을 때 드롭다운이 비어있으면 초기 세팅(수학) 실행
+            const select = document.getElementById('dict-subject-select');
+            if (select.options.length <= 1) {
+                changeDictGroup('math');
+            }
         }
     }
 }
 
-// 2. 현재 DB에 있는 과목들만 모아서 드롭다운에 채워주기
-function initDictionarySubjects() {
-    const select = document.getElementById('dict-subject-select');
-    if (select.options.length > 1) return; // 이미 채워져 있으면 건너뜀
-
-    for (const key in subjectData) {
-        if (subjectData[key].standards && subjectData[key].standards.length > 0) {
+// ✨ [수정됨] 2. 교과군(수학, 국어 등) 버튼 클릭 시 작동하는 메인 화면과 동일한 (준비중) 로직
+function changeDictGroup(groupId) {
+    // 탭 버튼 활성화 스타일 변경
+    document.querySelectorAll('.dict-group-btn').forEach(btn => btn.classList.remove('active'));
+    const targetBtn = document.querySelector(`button[onclick="changeDictGroup('${groupId}')"]`);
+    if(targetBtn) targetBtn.classList.add('active');
+    
+    // 해당 교과군에 맞춰 드롭다운 렌더링
+    const selectEl = document.getElementById('dict-subject-select');
+    selectEl.innerHTML = '';
+    
+    const map = curriculumMap[groupId];
+    let firstEnabledSubject = null;
+    
+    for (const category in map) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = category;
+        
+        map[category].forEach(sub => {
             const opt = document.createElement('option');
-            opt.value = key;
-            opt.innerText = subjectData[key].title;
-            select.appendChild(opt);
-        }
+            opt.value = sub.id;
+            
+            // 🌟 성취기준 데이터가 1개라도 있는지 확인하여 (준비중) 처리
+            if (typeof subjectData !== 'undefined' && subjectData[sub.id] && subjectData[sub.id].standards && subjectData[sub.id].standards.length > 0) {
+                opt.innerText = sub.name;
+                if (!firstEnabledSubject) firstEnabledSubject = sub.id; // 첫 번째 활성화 과목 기억
+            } else {
+                opt.innerText = sub.name + " (준비중)";
+                opt.disabled = true;           // 마우스 선택 불가
+                opt.style.color = "#94a3b8";   // 회색 처리
+            }
+            optgroup.appendChild(opt);
+        });
+        selectEl.appendChild(optgroup);
+    }
+    
+    // 첫 활성화 과목으로 자동 선택 후 아코디언 로드
+    if (firstEnabledSubject) {
+        selectEl.value = firstEnabledSubject;
+        loadDictionaryStandards();
+    } else {
+        selectEl.innerHTML = '<option value="">-- 등록된 과목이 없습니다 --</option>';
+        document.getElementById('dict-accordion-container').innerHTML = '<p style="text-align:center; color:#ef4444; font-size:0.95rem; margin-top:2rem;">이 교과군에는 아직 등록된 성취기준이 없습니다.</p>';
     }
 }
 
@@ -5119,7 +5154,7 @@ const exposeToWindow = {
     
    
     changeGroup, openMemoBoard, closeMemoBoard, submitMemo, changeSubject, showAiReason,
-    toggleDictionaryPanel, initDictionarySubjects, loadDictionaryStandards, toggleAccordion
+    toggleDictionaryPanel, changeDictGroup, loadDictionaryStandards, toggleAccordion
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
