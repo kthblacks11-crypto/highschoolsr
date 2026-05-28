@@ -3451,19 +3451,17 @@ async function saveAssessmentToProject() {
 }
 
 window.onload = async () => {
-    await loadStandardsFromDB(); 
-    changeSubject();             
+    await loadStandardsFromDB(); // 1. DB에서 데이터 완벽하게 다운로드 완료 대기
+    changeGroup('math');         // 2. 다운로드 완료 직후 '수학' 탭 활성화 (준비중 에러 완벽 해결!)
+    
     syncPendingFeedback();       
-    initChatResizer(); // 챗봇 리사이저 추가
-    initCaptureEvents(); // 📸 그림 캡처 이벤트 생명 불어넣기 (추가됨)
+    initChatResizer(); 
+    initCaptureEvents(); 
     const uploadArea = document.getElementById('upload-area');
     if (uploadArea) {
-    // 클릭 이벤트뿐만 아니라 붙여넣기 이벤트도 해당 영역에만 집중시킵니다.
-    uploadArea.addEventListener('paste', handlePaste);
-    
-    // 친절한 UI: 사용자가 해당 영역을 클릭해서 포커스를 맞출 수 있도록 tabindex 추가
-    uploadArea.setAttribute('tabindex', '0'); 
-}
+        uploadArea.addEventListener('paste', handlePaste);
+        uploadArea.setAttribute('tabindex', '0'); 
+    }
 };
 async function saveWrittenAssessmentShell() {
     const name = document.getElementById('written-assess-name').value.trim();
@@ -4921,17 +4919,7 @@ async function rejectFeedback(feedbackId) {
     }
 }
 
-// ==========================================
-// 🌟 처음 접속 시 자동으로 '수학 -> 공통수학1' 화면을 띄워주는 초기화 로직
-// ==========================================
-window.addEventListener('DOMContentLoaded', () => {
-    // 파이어베이스 데이터베이스를 불러오는 시간을 고려해 0.5초(500ms) 뒤에 자동으로 수학 탭을 실행합니다.
-    setTimeout(() => {
-        if (typeof changeGroup === 'function') {
-            changeGroup('math');
-        }
-    }, 500);
-});
+
 
 // ==========================================
 // 🌟 [최종 업데이트] Vite 모듈 환경에서 HTML 버튼들이 함수를 찾을 수 있도록 외부(window)로 연결해주는 마법의 다리
