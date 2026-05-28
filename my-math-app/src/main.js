@@ -3624,7 +3624,18 @@ async function saveWrittenAssessmentShell() {
 }
 
 let unsubscribeProject = null; 
+// 🟢 [신규 추가] AI 판정결과 블라인드 기능 상태값 및 실시간 화면 갱신용 캐시 저장소
+let isAiHidden = false;
+let cachedProjectData = null;
+let cachedAsmData = null;
 
+// 🟢 [신규 추가] AI 판정 결과를 가리거나 보여주는 토글 함수
+function toggleAiVisibility() {
+    isAiHidden = !isAiHidden;
+    if (cachedProjectData && cachedAsmData) {
+        renderCollaborativeTable(cachedProjectData, cachedAsmData);
+    }
+}
 function startEditAssessment(index) {
     currentEditingAssessmentIndex = index;
     history.pushState({ section: 'cut-score', sub: 'step2' }, "", "#cut-score/step2");
@@ -3640,16 +3651,17 @@ function startEditAssessment(index) {
             const asm = projectData.assessments[index];
             document.getElementById('current-assessment-info').innerText = `📌 ${asm.name} (반영 비율: ${asm.weight}%)`;
             
+            // 🟢 [추가] 토글 버튼 작동 시 실시간 연동을 위한 데이터 캐싱 백업
+            cachedProjectData = projectData;
+            cachedAsmData = asm;
+
             renderCollaborativeTable(projectData, asm);
 
-            // 💡 협업자도 시험지를 볼 수 있도록 처리하는 로직
-            // 💡 협업자도 시험지를 볼 수 있도록 처리하는 로직
             if (asm.imageUrl) {
                 const imgEl = document.getElementById('exam-img-display');
                 const pdfEl = document.getElementById('exam-pdf-display');
                 const listContainer = document.getElementById('extracted-questions-list');
 
-                // 이미지인지 PDF인지 구분해서 띄우기
                 if (asm.imageUrl.toLowerCase().includes("pdf")) {
                     if(imgEl) imgEl.style.display = 'none';
                     if(pdfEl) { pdfEl.src = asm.imageUrl; pdfEl.style.display = 'block'; }
@@ -3659,15 +3671,13 @@ function startEditAssessment(index) {
                 }
                 currentUploadedImageUrl = asm.imageUrl;
 
-                // 💡 [완벽 해결] 시험지가 있다면 숨겨두지 말고 무조건 활짝 열어서 보여주기!
                 const wrapper = document.getElementById('exam-inspector-wrapper');
                 const toggleBtn = document.getElementById('exam-viewer-toggle-btn');
                 if (wrapper) {
-                    wrapper.style.display = 'flex'; // 강제로 엽니다
+                    wrapper.style.display = 'flex'; 
                     if (toggleBtn) toggleBtn.innerText = "📄 시험지 닫기 🔼";
                 }
 
-                // 협업자이거나 방장이 이미 표에 반영을 완료한 경우 (우측 화면이 비어있을 때 안내문)
                 if (extractedQuestionsArray.length === 0 && listContainer) {
                     listContainer.innerHTML = `
                         <div style="padding: 3rem 1rem; text-align: center; color: #475569; background: white; border-radius: 8px; border: 1px dashed #cbd5e1;">
@@ -4031,7 +4041,14 @@ function renderCollaborativeTable(projectData, asm) {
                         </div>
                     </th> 
                     <th>배점</th>
-                    <th>🤖 AI 판정</th>
+                    
+                    <th style="background: #f8fafc; min-width: 115px; text-align: center; vertical-align: middle;">
+                        🤖 AI 판정<br>
+                        <button onclick="toggleAiVisibility()" style="margin-top:5px; background:${isAiHidden ? '#10b981' : '#64748b'}; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: 0.2s;">
+                            ${isAiHidden ? '👁️ 결과 보이기' : '🙈 결과 가리기'}
+                        </button>
+                    </th>
+                    
                     <th style="background:#ecfdf5; border-bottom: 2px solid #10b981;">
                         내 판정<br>
                         <button onclick="copyAiLevelsToMine()" style="margin-top:5px; background:#10b981; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🤖 일괄 복사</button>
@@ -4040,6 +4057,7 @@ function renderCollaborativeTable(projectData, asm) {
     collaborators.forEach(email => {
         if (email !== currentUserEmail) html += `<th>${email.split('@')[0]} 선생님</th>`;
     });
+    
     html += `<th style="min-width:90px; text-align:center;">문항 관리</th></tr></thead><tbody>`;
 
     const levelToNum = { 'A+': 6, 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'E': 1 };
@@ -4064,6 +4082,22 @@ function renderCollaborativeTable(projectData, asm) {
         const trStyle = isWarning ? 'background:#fee2e2; border: 2px solid #ef4444;' : (isShort ? 'background:#fff7ed;' : '');
         const diff = q.difficulty || '선택하세요';
 
+        // 🟢 [수정] 블라인드 활성화 여부에 따라 알림창 가이드가 포함된 스티커 형태로 동적 렌더링 변경
+        let aiCellContentHtml = '';
+        if (isAiHidden) {
+            aiCellContentHtml = `
+                <span style="background:#f1f5f9; color:#94a3b8; padding:4px 8px; border-radius:4px; font-weight:bold; font-size:0.8rem; border:1px dashed #cbd5e1; display:inline-block; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05); cursor:pointer;" onclick="alert('상단의 [👁️ 결과 보이기] 버튼을 누르시면 전체 AI 판정 내역이 공개됩니다!')" title="상단의 보이기 버튼을 누르면 공개됩니다.">🔮 블라인드</span>
+                <br>
+                <button disabled style="margin-top: 6px; background: #f8fafc; color: #cbd5e1; border: 1px solid #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; cursor: not-allowed;">🔒 가려짐</button>
+            `;
+        } else {
+            aiCellContentHtml = `
+                <span style="background:${q.level === 'A+' ? '#ef4444' : '#8b5cf6'}; color:white; padding:2px 6px; border-radius:4px; font-weight:bold;">${q.level || 'C'}</span>
+                <br>
+                <button onclick="showAiReason(${qIdx})" style="margin-top: 6px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">🔍 판정이유</button>
+            `;
+        }
+
         html += `<tr style="${trStyle}">
             <td style="font-size: 0.9rem; font-weight:bold; text-align:center;">${q.num}${isWarning ? ' 🚨' : ''}</td>
             <td style="width: 120px; vertical-align: middle;">
@@ -4078,11 +4112,11 @@ function renderCollaborativeTable(projectData, asm) {
                 </div>
             </td>
             <td><input type="number" step="0.1" class="score-input" data-num="${q.num}" value="${q.score}" onchange="updateBaseScore(${qIdx}, this.value)" style="width:50px;"></td>
+            
             <td style="text-align: center; vertical-align: middle;">
-                <span style="background:${q.level === 'A+' ? '#ef4444' : '#8b5cf6'}; color:white; padding:2px 6px; border-radius:4px; font-weight:bold;">${q.level || 'C'}</span>
-                <br>
-                <button onclick="showAiReason(${qIdx})" style="margin-top: 6px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">🔍 판정이유</button>
+                ${aiCellContentHtml}
             </td>
+            
             <td>
                 <select class="level-select" style="padding:4px; font-weight:bold;" onchange="saveMyInput(${qIdx}, this.value)">
                     <option value="" ${!myInput ? 'selected' : ''}>선택</option>
@@ -4099,7 +4133,6 @@ function renderCollaborativeTable(projectData, asm) {
             }
         });
         
-        // 우측 끝에 개별 문항 삭제 버튼 탑재
         html += `<td style="text-align:center; vertical-align: middle;"><button onclick="deleteTableQuestion(${qIdx})" style="background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.8rem;">🗑️ 삭제</button></td>`;
         
         html += `</tr>`;
@@ -5385,7 +5418,7 @@ const exposeToWindow = {
     updateBaseScore, saveMyInput, copyAiLevelsToMine, applyBatchDifficulty,
     calculateTotalCutScores, openSpecificFeedbackPanel, updateStep2Total, markAsReady, goToStep, updateQuestionCount,
     
-    deleteQuestion, mergeWithPrevious, removeQuestionImage, deleteTableQuestion,
+    deleteQuestion, mergeWithPrevious, removeQuestionImage, deleteTableQuestion, toggleAiVisibility,
    
     changeGroup, openMemoBoard, closeMemoBoard, submitMemo, changeSubject, showAiReason,
     toggleDictionaryPanel, changeDictGroup, loadDictionaryStandards, toggleAccordion,
