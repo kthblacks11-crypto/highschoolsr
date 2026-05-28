@@ -631,6 +631,8 @@ async function executeAnalysis() {
     const isLoggedIn = await checkLogin();
     if (!isLoggedIn) return;
 
+    if (!requireApiKey()) return;
+
     if(document.getElementById('single-mode-ui')) document.getElementById('single-mode-ui').style.display = 'none';
     if(document.getElementById('multi-mode-ui')) document.getElementById('multi-mode-ui').style.display = 'none';
     document.getElementById('crop-canvas').style.display = 'none';
@@ -2430,6 +2432,7 @@ async function startExamAiAnalysis(base64Data) {
 
         const workerUrl = "https://math-asa-backend.kthblacks11.workers.dev";
         const userApiKey = localStorage.getItem('gemini_api_key');
+        
         const response = await fetch(workerUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2438,6 +2441,7 @@ async function startExamAiAnalysis(base64Data) {
                 mimeType: mimeType,
                 base64Clean: base64Clean,
                 referenceDBText: referenceDBText,
+                subject: currentSubject, // 🟢 수정 포인트: 과목 코드를 백엔드로 보내주도록 추가합니다.
                 apiKey: userApiKey
             })
         });
@@ -4251,17 +4255,18 @@ async function transformAndSaveExamToBank() {
             }
         }
 
-        let questionsPayload = extractedQuestionsArray.map(q => q.text);
+        let targetSubject = document.getElementById('cut-score-subject')?.value || currentSubject || "uncategorized";
 
         const workerUrl = "https://math-asa-backend.kthblacks11.workers.dev";
         const userApiKey = localStorage.getItem('gemini_api_key');
+        
         const response = await fetch(workerUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 action: "batch_transform",
                 standardsInfo: standardsInfo,
-                subject: subject,
+                subject: targetSubject, // 🟢 끌어올린 변수를 여기에 안전하게 적용합니다.
                 questionsPayload: questionsPayload,
                 apiKey: userApiKey
             })
