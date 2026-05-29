@@ -2885,7 +2885,6 @@ async function deleteQuestionFromDB() {
 // ==========================================
 let currentProjectId = null;
 
-// 🟢 [수정됨] 내가 만든 폴더와 초대받은 폴더 분리 및 버튼 위치 조정
 async function loadProjects() {
     const user = auth.currentUser;
     const listEl = document.getElementById('project-folder-list');
@@ -2906,7 +2905,7 @@ async function loadProjects() {
         
         let sharedProjects = [];
         sharedSnapshot.forEach(doc => {
-            if (doc.data().uid !== user.uid) sharedProjects.push({ id: doc.id, ...doc.data() }); // 내 것은 제외
+            if (doc.data().uid !== user.uid) sharedProjects.push({ id: doc.id, ...doc.data() }); 
         });
         
         const sortByDate = (a, b) => (b.createdAt ? b.createdAt.toMillis() : 0) - (a.createdAt ? a.createdAt.toMillis() : 0);
@@ -2928,31 +2927,33 @@ async function loadProjects() {
                     ? [...data.assessments].sort((a,b)=> (a.type==='written'&&b.type!=='written')?-1:1).map(a => `<span style="display:inline-block; background:${a.type === 'written' ? '#3b82f6' : '#10b981'}; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:bold; margin-right:4px; margin-top:4px;">${a.name}</span>`).join('') 
                     : '<span style="font-size: 0.75rem; color: #94a3b8;">평가 내역 없음</span>';
         
-                // 1. 첫째 줄: 폴더 삭제 버튼 단독 배치
                 const deleteBtn = isOwnerList ? `<button onclick="deleteProject('${data.id}', event)" style="position: absolute; top: 15px; right: 15px; background: #fee2e2; color: #ef4444; border: none; padding: 2px 5px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.65rem; z-index: 10;">폴더 삭제</button>` : '';
                 
-                // 2. 둘째 줄: 팀원 초대와 팀원 삭제 버튼을 하나의 가로 상자(flex)로 묶어서 나란히 배치
+                // 💡 더 이상 '팀원 삭제' 버튼을 쓰지 않고 '팀원 초대'만 남겨 깔끔하게 만듭니다.
                 const memberManagementBtns = isOwnerList ? `
                     <div style="position: absolute; top: 42px; right: 15px; display: flex; gap: 4px; z-index: 10;">
                         <button onclick="inviteCollaborator('${data.id}', event)" style="background: #dbeafe; color: #1e40af; border: none; padding: 2px 5px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.65rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">🤝 팀원 초대</button>
-                        <button onclick="kickFromProject('${data.id}', event)" style="background: #ffedd5; color: #c2410c; border: none; padding: 2px 5px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.65rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">🚫 팀원 삭제</button>
                     </div>
                 ` : '';
                 
-                // 3. 방장 여부에 따라 명단이 시작되는 높이 자동 조절 (두 줄 배치로 바뀌었으므로 68px로 콤팩트하게 상향 조정)
                 const listTop = isOwnerList ? '68px' : '10px';
                 
-                // 4. 참여 명단 세로형 배치 및 글자 크기 축소
                 let memberHtml = `<div style="position: absolute; top: ${listTop}; right: 15px; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; z-index: 5;">`;
                 memberHtml += '<span style="font-size: 0.6rem; color: #64748b; font-weight: bold; margin-bottom: 2px;">👥 참여 명단:</span>';
-                const memberList = data.collaborators ? data.collaborators.map(e => e.split('@')[0]) : [user.email.split('@')[0]];
+                const memberList = data.collaborators ? data.collaborators : [user.email];
                 
-                memberList.forEach(member => {
-                    memberHtml += `<span style="font-size: 0.6rem; color: #10b981; font-weight: bold; background: #ecfdf5; padding: 2px 6px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); white-space: nowrap;">👤 ${member}</span>`;
+                memberList.forEach(memberEmail => {
+                    const memberName = memberEmail.split('@')[0];
+                    let removeBtn = '';
+                    
+                    // 💡 방장일 경우, 본인을 제외한 다른 멤버 배지 옆에만 X(삭제) 버튼을 작게 띄웁니다.
+                    if (isOwnerList && memberEmail !== user.email) {
+                        removeBtn = `<button onclick="kickFromProject('${data.id}', '${memberEmail}', event)" style="margin-left: 4px; background: transparent; color: #ef4444; border: none; cursor: pointer; font-size: 0.75rem; font-weight: bold; padding: 0;">✕</button>`;
+                    }
+                    memberHtml += `<span style="font-size: 0.6rem; color: #10b981; font-weight: bold; background: #ecfdf5; padding: 2px 6px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); white-space: nowrap; display: inline-flex; align-items: center;">👤 ${memberName} ${removeBtn}</span>`;
                 });
                 memberHtml += '</div>';
         
-                // 5. 글씨가 우측 명단을 침범하지 않도록 padding-right: 110px 추가
                 cardHtml += `
                 <div style="position: relative; border: 1px solid #cbd5e1; border-radius: 8px; padding: 1.5rem; background: white; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05); min-height: 120px;" 
                      onmouseover="this.style.borderColor='#3b82f6'; this.style.transform='translateY(-3px)';" 
@@ -2973,7 +2974,6 @@ async function loadProjects() {
             return cardHtml;
         };
 
-        // 💡 1번 요구사항: 구분선과 제목으로 내 폴더와 초대 폴더를 완벽하게 분리합니다.
         if (myProjects.length > 0) {
             html += `<div style="grid-column: 1 / -1; margin-top: 1rem;"><h3 style="color: #1e3a8a; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 10px;">👤 내가 만든 프로젝트</h3></div>`;
             html += renderCards(myProjects, true);
@@ -3598,7 +3598,6 @@ window.addEventListener('popstate', function(event) {
 });
 
 async function sendAiResultsToTable(isFromSaveBank = false) {
-    // 단독 버튼으로 실행될 때만 취소 방어막 띄우기
     if (!isFromSaveBank) {
         if (!confirm("추출한 문항을 표에 반영하시겠습니까?\n(취소를 누르면 이전 화면으로 멈춰있습니다.)")) return;
     }
@@ -3647,7 +3646,6 @@ async function sendAiResultsToTable(isFromSaveBank = false) {
                 }
             });
 
-            // 🌟 문항 번호 순서대로 예쁘게 정렬
             baseScores.sort((a, b) => {
                 const aIsShort = String(a.num).startsWith('서');
                 const bIsShort = String(b.num).startsWith('서');
@@ -3670,13 +3668,20 @@ async function sendAiResultsToTable(isFromSaveBank = false) {
         
         alert("✅ 분할 분석된 문항들이 기존 표의 번호 위치에 맞게 안전하게 병합되었습니다!");
 
-        // 💡 [핵심] 표에 성공적으로 들어갔다면, 추출된 데이터를 비워 알림창을 지웁니다!
         extractedQuestionsArray = []; 
         renderQuestionCards(); 
         
         const applyBtnContainer = document.getElementById('external-apply-btn-zone');
         if (applyBtnContainer) applyBtnContainer.style.display = 'none';
 
+        // 💡 [핵심] 표 반영이 완료되면 시험지 뷰어를 자동으로 닫아줍니다!
+        const wrapper = document.getElementById('exam-inspector-wrapper');
+        const toggleBtn = document.getElementById('exam-viewer-toggle-btn');
+        if (wrapper) {
+            wrapper.style.display = 'none';
+            if (toggleBtn) toggleBtn.innerText = "📄 시험지 파일 및 편집 확인 🔽";
+        }
+        
     } catch(e) { 
         alert("반영 실패: " + e.message); 
     }
@@ -3812,35 +3817,18 @@ async function inviteCollaborator(projectId, event) {
         alert("초대 중 오류가 발생했습니다: " + e.message);
     }
 }
-// 🚫 잘못 초대된 팀원 삭제 함수 (새로 추가)
-async function kickFromProject(projectId, event) {
-    event.stopPropagation(); // 💡 버튼 클릭 시 폴더 안으로 들어가는 현상 방지
+// 🚫 잘못 초대된 팀원 삭제 함수 (팝업 간소화)
+async function kickFromProject(projectId, targetEmail, event) {
+    event.stopPropagation(); 
     
-    const doc = await db.collection('user_projects').doc(projectId).get();
-    if (!doc.exists) return;
-    
-    const collabs = doc.data().collaborators || [];
-    if (collabs.length === 0) {
-        alert("현재 초대된 팀원이 없습니다.");
-        return;
-    }
-
-    // 현재 팀원 목록을 보여주고 삭제할 이메일을 입력받음
-    let msg = "👥 [현재 참여 중인 팀원 목록]\n";
-    collabs.forEach((email, idx) => {
-        msg += `${idx + 1}. ${email}\n`;
-    });
-    msg += "\n삭제하려는 선생님의 이메일을 정확히 입력(복사/붙여넣기)해 주세요.";
-
-    const targetEmail = prompt(msg);
-    if (!targetEmail) return;
+    // 이메일을 직접 칠 필요 없이, 클릭한 X 버튼의 대상 멤버를 재차 묻기만 합니다.
+    if (!confirm(`[${targetEmail.split('@')[0]}] 선생님을 이 프로젝트에서 정말로 제외하시겠습니까?`)) return;
 
     try {
         await db.collection('user_projects').doc(projectId).update({
-            collaborators: firebase.firestore.FieldValue.arrayRemove(targetEmail.trim())
+            collaborators: firebase.firestore.FieldValue.arrayRemove(targetEmail)
         });
-        alert(`🗑️ [${targetEmail}] 선생님이 프로젝트에서 제외되었습니다.`);
-        loadProjects(); // 화면 새로고침하여 반영
+        loadProjects(); // 화면 바로 새로고침
     } catch (error) {
         alert("삭제에 실패했습니다: " + error.message);
     }
@@ -3883,11 +3871,16 @@ function renderCollaborativeTable(projectData, asm) {
                     </th> 
                     <th>배점</th>
                     
-                    <th style="background: #f8fafc; min-width: 115px; text-align: center; vertical-align: middle;">
+                    <th style="background: #f8fafc; min-width: 135px; text-align: center; vertical-align: middle;">
                         🤖 AI 판정<br>
-                        <button onclick="toggleAiVisibility()" style="margin-top:5px; background:${isAiHidden ? '#10b981' : '#64748b'}; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: 0.2s;">
-                            ${isAiHidden ? '👁️ 결과 보이기' : '🙈 결과 가리기'}
-                        </button>
+                        <div style="display: flex; justify-content: center; gap: 4px; margin-top: 5px;">
+                            <button onclick="toggleAiVisibility()" style="background:${isAiHidden ? '#10b981' : '#64748b'}; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: 0.2s;">
+                                ${isAiHidden ? '👁️ 보이기' : '🙈 가리기'}
+                            </button>
+                            <button onclick="resetAiLevels()" style="background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: 0.2s;">
+                                🔄 초기화
+                            </button>
+                        </div>
                     </th>
                     
                     <th style="background:#ecfdf5; border-bottom: 2px solid #10b981;">
@@ -3923,17 +3916,18 @@ function renderCollaborativeTable(projectData, asm) {
         const trStyle = isWarning ? 'background:#fee2e2; border: 2px solid #ef4444;' : (isShort ? 'background:#fff7ed;' : '');
         const diff = q.difficulty || '선택하세요';
 
-        // 🟢 [수정] 블라인드 활성화 여부에 따라 알림창 가이드가 포함된 스티커 형태로 동적 렌더링 변경
         let aiCellContentHtml = '';
         if (isAiHidden) {
             aiCellContentHtml = `
-                <span style="background:#f1f5f9; color:#94a3b8; padding:4px 8px; border-radius:4px; font-weight:bold; font-size:0.8rem; border:1px dashed #cbd5e1; display:inline-block; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05); cursor:pointer;" onclick="alert('상단의 [👁️ 결과 보이기] 버튼을 누르시면 전체 AI 판정 내역이 공개됩니다!')" title="상단의 보이기 버튼을 누르면 공개됩니다.">🔮 블라인드</span>
+                <span style="background:#f1f5f9; color:#94a3b8; padding:4px 8px; border-radius:4px; font-weight:bold; font-size:0.8rem; border:1px dashed #cbd5e1; display:inline-block; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05); cursor:pointer;" onclick="alert('상단의 [👁️ 보이기] 버튼을 누르시면 전체 AI 판정 내역이 공개됩니다!')" title="상단의 보이기 버튼을 누르면 공개됩니다.">🔮 블라인드</span>
                 <br>
                 <button disabled style="margin-top: 6px; background: #f8fafc; color: #cbd5e1; border: 1px solid #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; cursor: not-allowed;">🔒 가려짐</button>
             `;
         } else {
+            // 판정필요 상태일 때는 회색 배경 적용
+            const badgeColor = q.level === 'A+' ? '#ef4444' : (q.level === '판정필요' ? '#94a3b8' : '#8b5cf6');
             aiCellContentHtml = `
-                <span style="background:${q.level === 'A+' ? '#ef4444' : '#8b5cf6'}; color:white; padding:2px 6px; border-radius:4px; font-weight:bold;">${q.level || 'C'}</span>
+                <span style="background:${badgeColor}; color:white; padding:2px 6px; border-radius:4px; font-weight:bold;">${q.level || 'C'}</span>
                 <br>
                 <button onclick="showAiReason(${qIdx})" style="margin-top: 6px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">🔍 판정이유</button>
             `;
@@ -4035,6 +4029,30 @@ function renderCollaborativeTable(projectData, asm) {
     setTimeout(initDiffShiftClick, 100); 
 }
 
+// ✨ (추가할 초기화 함수 - 위 함수 바로 아래에 넣어주세요)
+async function resetAiLevels() {
+    if(!confirm("모든 AI 판정 결과를 '판정필요' 상태로 초기화하시겠습니까?\n(배점과 난이도, 선생님이 판정한 '내 판정' 기록은 그대로 유지됩니다.)")) return;
+
+    try {
+        const docRef = db.collection('user_projects').doc(currentProjectId);
+        const doc = await docRef.get();
+        if(doc.exists) {
+            let assessments = doc.data().assessments;
+            let baseScores = assessments[currentEditingAssessmentIndex].parsedScores || [];
+            
+            baseScores.forEach(q => {
+                q.level = '판정필요';
+                q.reason = '선생님의 요청으로 AI 판정 결과가 초기화되었습니다.';
+            });
+
+            await docRef.update({ assessments: assessments });
+            // onSnapshot을 통해 화면이 알아서 리렌더링 됩니다.
+        }
+    } catch(e) {
+        alert("초기화 실패: " + e.message);
+    }
+}
+
 async function deleteTableQuestion(qIdx) {
     if(!confirm("이 문항을 전체 협업 표에서 영구 삭제하시겠습니까?\n삭제 후 문항 번호 자동 조정 및 합계 점수가 실시간으로 동기화됩니다.")) return;
     
@@ -4072,7 +4090,7 @@ async function deleteTableQuestion(qIdx) {
         }
 
         await docRef.update({ assessments: assessments });
-        alert("🗑️ 문항이 삭제되었으며 동료 교사들의 화면에 실시간 반영되었습니다.");
+        // 💡 두 번째 뜨던 귀찮은 alert 알림창을 삭제하여 바로 반영되도록 했습니다!
         
     } catch(e) {
         alert("문항 삭제 실패: " + e.message);
@@ -5629,7 +5647,7 @@ const exposeToWindow = {
     changeGroup, openMemoBoard, closeMemoBoard, submitMemo, changeSubject, showAiReason,
     toggleDictionaryPanel, changeDictGroup, loadDictionaryStandards, toggleAccordion,
     toggleCommonPassageTray, handlePassageFiles, pastePassageFromClipboard, removePassage, 
-    toggleExamRangeInputs, previewExamFile, executeExamAnalysis 
+    toggleExamRangeInputs, previewExamFile, executeExamAnalysis, resetAiLevels 
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
