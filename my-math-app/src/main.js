@@ -1202,7 +1202,8 @@ async function startLevelMatching(code) {
         <div class="guide-item"><strong>D (미흡)</strong> ${standard.levels.d || standard.levels.mid.replace("이해하고", "알고").replace("계산을 할 수 있다", "간단한 계산을 할 수 있다")}</div>
         <div class="guide-item"><strong>E (하)</strong> ${standard.levels.low}</div>
     `;
-    
+    if (window.MathJax) MathJax.typesetPromise([levelsContainer]);
+
     if (currentQuestions.length === 0) {
         document.getElementById('level-question-text').innerHTML = "<p style='text-align:center; margin-top:2rem;'>아직 이 성취기준에 등록된 문항이 없습니다.<br>문제 분석하기 기능을 통해 문항을 추가해 보세요!</p>";
         document.getElementById('level-options').innerHTML = '';
@@ -1663,6 +1664,7 @@ async function loadStandardsForQuestion() {
         console.error("목록 불러오기 실패:", error);
         stdSelect.innerHTML = '<option value="">불러오기 오류 발생</option>';
     }
+    
 }
 
 async function saveQuestionToDB() {
@@ -2514,7 +2516,11 @@ function renderQuestionCards() {
             </div>
             
             <div style="background: #fffbeb; border: 1px solid #fde68a; padding: 10px; border-radius: 6px; margin-top: 10px; text-align: left;">
-                <p style="margin: 0 0 5px 0; font-size: 0.8rem; font-weight: bold; color: #92400e;">🖼️ 그림/도표 넣는 방법</p>
+                <p style="margin: 0 0 5px 0; font-size: 0.85rem; font-weight: bold; color: #92400e;">🖼️ 그림/도표 넣는 방법</p>
+                <p style="margin: 0 0 10px 0; font-size: 0.75rem; color: #b45309; line-height: 1.5;">
+                    💡 <strong>자체 캡처:</strong> 지금 시스템의 왼쪽 화면에 띄워진 이미지를 마우스로 직접 드래그해서 찍습니다.<br>
+                    💡 <strong>복사한 그림 붙여넣기:</strong> 단축키(Win+Shift+S)나 알캡처로 <strong>미리 복사해 둔 이미지</strong>를 불러옵니다. PDF 파일인 경우 이 버튼을 사용하세요.
+                </p>
                 <div style="display: flex; gap: 5px; flex-wrap: wrap;">
                     <button onclick="startPartialCapture(${idx})" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:0.8rem;">📸 자체 캡처 (이미지용)</button>
                     <button onclick="pasteImageToQuestion(${idx})" style="background:#fef3c7; border:1px solid #fde68a; color:#92400e; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:0.8rem; font-weight:bold;">📋 복사한 그림 붙여넣기 (PDF용)</button>
@@ -2976,8 +2982,8 @@ async function loadProjects() {
             projects.forEach(data => {
                 const dateStr = data.createdAt ? data.createdAt.toDate().toLocaleDateString() : "방금 전";
                 let badges = data.assessments && data.assessments.length > 0 
-                    ? [...data.assessments].sort((a,b)=> (a.type==='written'&&b.type!=='written')?-1:1).map(a => `<span style="display:inline-block; background:${a.type === 'written' ? '#3b82f6' : '#10b981'}; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:bold; margin-right:4px; margin-top:4px;">${a.name}</span>`).join('') 
-                    : '<span style="font-size: 0.75rem; color: #94a3b8;">평가 내역 없음</span>';
+                    ? [...data.assessments].sort((a,b)=> (a.type==='written'&&b.type!=='written')?-1:1).map(a => `<span style="display:inline-block; background:${a.type === 'written' ? '#3b82f6' : '#10b981'}; color:white; padding:4px 8px; border-radius:4px; font-size:0.8rem; font-weight:bold; white-space:nowrap;">${a.name}</span>`).join('') 
+                    : '<span style="font-size: 0.8rem; color: #94a3b8;">평가 내역 없음</span>';
         
                 const deleteBtn = isOwnerList ? `<button onclick="deleteProject('${data.id}', event)" style="position: absolute; top: 15px; right: 15px; background: #fee2e2; color: #ef4444; border: none; padding: 2px 5px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.65rem; z-index: 10;">폴더 삭제</button>` : '';
                 
@@ -3019,7 +3025,7 @@ async function loadProjects() {
                         <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📁</div>
                         <h4 style="margin: 0 0 0.5rem 0; color: #1e293b; font-size: 1.1rem; word-break: keep-all;">${data.name}</h4>
                         <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; color: #64748b;">생성일: ${dateStr}</p>
-                        <div style="border-top: 1px dashed #cbd5e1; padding-top: 0.8rem; margin-top: 15px;">${badges}</div>
+                        <div style="border: 2px dashed #cbd5e1; border-left: 5px solid #3b82f6; border-radius: 6px; padding: 10px; margin-top: 15px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; background: #f8fafc;">${badges}</div>
                     </div>
                 </div>`;
             });
@@ -4384,9 +4390,11 @@ function compressCaptureImage(base64Str, callback) {
     };
 }
 
-async function transformAndSaveExamToBank() {
+async function transformAndSaveExamToBank(skipConfirm = false) {
     if(extractedQuestionsArray.length === 0) return;
-    if(!confirm("추출된 문항들을 AI 변형 문항으로 재구성하여 '문제 서랍(DB)'에 저장하시겠습니까?\n(첨부된 그림 조각들도 함께 저장되어 성취평가제 신뢰도 제고에 활용됩니다.)")) return;
+    if(!skipConfirm) {
+        if(!confirm("추출된 문항들을 AI 변형 문항으로 재구성하여 '문제 서랍(DB)'에 저장하시겠습니까?\n(첨부된 그림 조각들도 함께 저장되어 성취평가제 신뢰도 제고에 활용됩니다.)")) return;
+    }
 
     if (!requireApiKey()) return;
 
@@ -4830,13 +4838,8 @@ async function saveGlobalEdits(nameInputs, weightInputs) {
 }
 
 async function saveBankAndApplyTable() {
-    // 여기서만 한 번 취소 여부를 묻습니다.
-    if (!confirm("데이터베이스에 문항을 안전하게 저장하고 표에 반영하시겠습니까?\n(취소를 누르면 이전 화면으로 멈춰있습니다.)")) {
-        return; 
-    }
-    await transformAndSaveExamToBank();
-    
-    // 알림창이 두 번 뜨는 것을 막기 위해 true를 전달합니다.
+    if (!confirm("데이터베이스에 문항을 안전하게 저장하고 표에 반영하시겠습니까?\n(취소를 누르면 이전 화면으로 멈춰있습니다.)")) { return; }
+    await transformAndSaveExamToBank(true); // <--- 여기에 true 추가!
     await sendAiResultsToTable(true); 
 }
 
@@ -4872,7 +4875,7 @@ function openSpecificFeedbackPanel() {
     if (!question) return;
 
     const panel = document.getElementById('specific-feedback-panel');
-    panel.style.display = 'block';
+    panel.style.display = 'flex';
 
     // 1. 현재 문항 정보 채워넣기 (화면에서 수식 렌더링 무시하고 글자만 추출)
     const tempDiv = document.createElement('div');

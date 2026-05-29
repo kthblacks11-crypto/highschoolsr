@@ -800,50 +800,50 @@
 </div>
 <canvas id="capture-overlay" style="display:none; position:fixed; top:0; left:0; z-index:99999; cursor:crosshair;"></canvas>
 
-<div id="specific-feedback-panel" style="display: none; position: fixed; top: 120px; right: 20px; width: 340px; background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); border: 1px solid var(--border); z-index: 9999; padding: 1.5rem; max-height: 80vh; overflow-y: auto;">
-    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 15px;">
-        <h3 style="margin: 0; color: #ea580c; font-size: 1.1rem;">🙋 판정 이의 제기</h3>
-        <span style="cursor: pointer; font-size: 1.5rem; color: #94a3b8;" onclick="document.getElementById('specific-feedback-panel').style.display='none'">&times;</span>
-    </div>
-    
-    <div style="font-size: 0.85rem; color: #475569; margin-bottom: 15px; background: #f8fafc; padding: 10px; border-radius: 8px;">
-        <strong>현재 문항:</strong>
-        <div id="fb-current-q" style="margin-top: 5px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;"></div>
-    </div>
-
-    <label style="font-weight: bold; font-size: 0.95rem; color: #1e293b;">📌 성취기준 변경 제안</label>
-    <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 15px; margin-top: 8px;">
-        <div style="font-size: 0.85rem; color: #475569; background: #f1f5f9; padding: 8px 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
-            현재: <strong id="fb-current-std" style="color: #2563eb; display: block; margin-top: 4px;"></strong>
+<div class="modal" id="specific-feedback-panel" onclick="if(event.target === this) this.style.display='none'">
+    <div class="modal-content" style="max-width: 400px; padding: 1.5rem;">
+        <span class="close-btn" onclick="document.getElementById('specific-feedback-panel').style.display='none'">&times;</span>
+        <h3 style="margin-top: 0; color: #ea580c; font-size: 1.2rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 15px;">🙋 판정 이의 제기</h3>
+        
+        <div style="font-size: 0.85rem; color: #475569; margin-bottom: 15px; background: #f8fafc; padding: 10px; border-radius: 8px;">
+            <strong>현재 문항:</strong>
+            <div id="fb-current-q" style="margin-top: 5px; max-height: 80px; overflow-y: auto; line-height: 1.5;"></div>
         </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="color: #ea580c; font-size: 1.1rem;">▶</span>
-            <select id="fb-proposed-std" style="flex: 1; padding: 0.6rem; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; background: white;"></select>
+
+        <label style="font-weight: bold; font-size: 0.95rem; color: #1e293b;">📌 성취기준 변경 제안</label>
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 15px; margin-top: 8px;">
+            <div style="font-size: 0.85rem; color: #475569; background: #f1f5f9; padding: 8px 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                현재: <strong id="fb-current-std" style="color: #2563eb; display: inline-block; margin-left: 5px;"></strong>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="color: #ea580c; font-size: 1.1rem;">▶</span>
+                <select id="fb-proposed-std" style="flex: 1; padding: 0.6rem; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; background: white;"></select>
+            </div>
         </div>
+
+        <label style="font-weight: bold; font-size: 0.95rem; color: #1e293b;">📊 성취수준 변경 제안</label>
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; margin-top: 8px;">
+            <div style="font-size: 0.85rem; color: #475569; background: #f1f5f9; padding: 8px 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                현재: <strong id="fb-current-level" style="color: #2563eb; font-size: 1.1rem; margin-left: 5px;"></strong>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="color: #ea580c; font-size: 1.1rem;">▶</span>
+                <select id="fb-proposed-level" style="flex: 1; padding: 0.6rem; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; background: white;">
+                    <option value="A">A (상)</option>
+                    <option value="B">B (우수)</option>
+                    <option value="C">C (중)</option>
+                    <option value="D">D (미흡)</option>
+                    <option value="E">E (하)</option>
+                </select>
+            </div>
+        </div>
+
+        <label style="font-weight: bold; font-size: 0.9rem; color: #1e293b;">✍️ 판정 이유 및 의견</label>
+        <textarea id="fb-reason" rows="4" placeholder="이 문항이 제안하신 기준과 수준에 부합하는 논리적 이유를 적어주세요." style="width: 100%; padding: 0.8rem; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box; margin-top: 5px; margin-bottom: 15px; font-family: inherit; font-size: 0.85rem;"></textarea>
+
+        <button id="fb-submit-btn" class="save-btn" onclick="submitSpecificFeedback()" style="background: #ea580c; margin: 0; padding: 0.8rem;">🚀 AI 검토 및 시스템에 전송</button>
+        <div id="fb-loading-msg" style="display: none; text-align: center; margin-top: 10px; font-size: 0.85rem; color: #ea580c; font-weight: bold;">AI 수석 위원이 선생님의 의견을 검토 중입니다... ⏳</div>
     </div>
-
-    <label style="font-weight: bold; font-size: 0.95rem; color: #1e293b;">📊 성취수준 변경 제안</label>
-    <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; margin-top: 8px;">
-        <div style="font-size: 0.85rem; color: #475569; background: #f1f5f9; padding: 8px 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
-            현재: <strong id="fb-current-level" style="color: #2563eb; font-size: 1.1rem; margin-left: 5px;"></strong>
-        </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="color: #ea580c; font-size: 1.1rem;">▶</span>
-            <select id="fb-proposed-level" style="flex: 1; padding: 0.6rem; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.85rem; background: white;">
-                <option value="A">A (상)</option>
-                <option value="B">B (우수)</option>
-                <option value="C">C (중)</option>
-                <option value="D">D (미흡)</option>
-                <option value="E">E (하)</option>
-            </select>
-        </div>
-    </div>
-
-    <label style="font-weight: bold; font-size: 0.9rem; color: #1e293b;">✍️ 판정 이유 및 의견</label>
-    <textarea id="fb-reason" rows="4" placeholder="이 문항이 제안하신 기준과 수준에 더 부합한다고 생각하시는 논리적 이유를 적어주세요." style="width: 100%; padding: 0.8rem; border-radius: 6px; border: 1px solid #cbd5e1; box-sizing: border-box; margin-top: 5px; margin-bottom: 15px; font-family: inherit; font-size: 0.85rem;"></textarea>
-
-    <button id="fb-submit-btn" class="save-btn" onclick="submitSpecificFeedback()" style="background: #ea580c; margin: 0; padding: 0.8rem;">🚀 AI 검토 및 시스템에 전송</button>
-    <div id="fb-loading-msg" style="display: none; text-align: center; margin-top: 10px; font-size: 0.85rem; color: #ea580c; font-weight: bold;">AI 수석 위원이 선생님의 의견을 검토 중입니다... ⏳</div>
 </div>
 
 <div class="modal" id="memo-modal">
