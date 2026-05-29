@@ -20,7 +20,7 @@
     <header>
         <div class="header-container">
             <div class="header-title-group">
-                <h1 id="main-title" style="margin-bottom: 0;">2022 개정교육과정 고등학교 수학</h1>
+                <h1 id="main-title" style="margin-bottom: 0;">2022 개정교육과정 고등학교</h1>
                 <div id="system-title" style="font-size: 1.2rem; font-weight: 700; color: #bae6fd; margin-top: 5px; letter-spacing: -0.5px;">성취기준 매칭 시스템</div>
                 <p id="main-subtitle" style="margin-top: 10px;">과목을 선택하면 단원명이 표시됩니다.</p>
             </div>
@@ -201,13 +201,36 @@
                 현재 총 배점: <span id="step2-total-score" style="font-size: 1.3rem; color: #ea580c;">0.0</span> / 100 점
             </div>
         </div>
-        <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
-            <span style="font-size: 0.9rem; font-weight: bold; color: #334155;">🎯 분석할 문항 범위 지정:</span>
-            <input type="number" id="exam-start-num" value="1" style="width: 50px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;"> 번 부터
-            <input type="number" id="exam-end-num" value="10" style="width: 50px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;"> 번 까지
-        </div>
+        
         <div id="ai-helper-zone" style="display:none; background:#f8fafc; border:2px dashed #8b5cf6; border-radius:8px; padding:1.5rem; margin-bottom:1.5rem;">
             <h4 style="margin-top:0; color:#6d28d9;">🤖 AI 시험지 정밀 분석기</h4>
+            
+            <!-- 🎯 분석 옵션 설정 박스 -->
+            <div style="margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px; background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                
+                <!-- 전체 추출 체크박스 -->
+                <label style="font-size: 0.95rem; font-weight: bold; color: #ea580c; cursor: pointer;">
+                    <input type="checkbox" id="exam-extract-all" onchange="toggleExamRangeInputs()"> 
+                    🌟 번호 지정 없이 문서 내 모든 문항 한 번에 자동 추출하기
+                </label>
+                
+                <hr style="border: 0; border-top: 1px dashed #cbd5e1; margin: 5px 0;">
+        
+                <!-- 범위 지정 영역 -->
+                <div id="exam-range-inputs" style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <span style="font-size: 0.9rem; font-weight: bold; color: #334155; width: 120px;">🎯 선택형 추출:</span>
+                        <input type="number" id="exam-start-num" value="1" style="width: 50px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;"> 번 부터
+                        <input type="number" id="exam-end-num" value="20" style="width: 50px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;"> 번 까지
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <span style="font-size: 0.9rem; font-weight: bold; color: #334155; width: 120px;">✍️ 서답형 추출:</span>
+                        <input type="number" id="exam-short-start" value="1" style="width: 50px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;"> 번 부터
+                        <input type="number" id="exam-short-end" value="5" style="width: 50px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;"> 번 까지
+                    </div>
+                </div>
+            </div>
+        
             <p style="font-size:0.85rem; color:#475569;">시험지 이미지를 올리면 AI가 문항과 배점, 예상 성취수준을 추출하여 아래 표에 자동으로 채워줍니다.</p>
             <input type="file" id="exam-file" accept="image/*,application/pdf" onchange="handleExamUpload(event)">
             <div id="exam-loading" style="display:none; color:#ea580c; font-weight:bold; margin-top:10px;">AI가 분석 중입니다... ⏳</div>

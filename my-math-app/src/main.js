@@ -2471,8 +2471,12 @@ async function startExamAiAnalysis(base64Data) {
     const loadingEl = document.getElementById('exam-loading');
     if (loadingEl) loadingEl.style.display = 'flex';
 
+    // 🟢 [수정 포인트 1] 새로 추가된 체크박스와 서답형 범위 값을 HTML에서 가져옵니다.
+    const isExtractAll = document.getElementById('exam-extract-all')?.checked || false;
     const startNum = document.getElementById('exam-start-num')?.value || "1";
-    const endNum = document.getElementById('exam-end-num')?.value || "10";
+    const endNum = document.getElementById('exam-end-num')?.value || "20";
+    const shortStartNum = document.getElementById('exam-short-start')?.value || "1";
+    const shortEndNum = document.getElementById('exam-short-end')?.value || "5";
 
     try {
         const mimeTypeMatch = base64Data.match(/data:(.*?);base64/);
@@ -2491,22 +2495,28 @@ async function startExamAiAnalysis(base64Data) {
                 mimeType: mimeType,
                 base64Clean: base64Clean,
                 referenceDBText: referenceDBText,
-                subject: currentSubject, // 🟢 수정 포인트: 과목 코드를 백엔드로 보내주도록 추가합니다.
-                startNum: startNum,  // 🟢 백엔드로 출발!
-                endNum: endNum,      // 🟢 백엔드로 출발!
+                subject: currentSubject,
+                // 🟢 [수정 포인트 2] 백엔드로 보내는 데이터에 새로운 값들을 포함시킵니다.
+                isExtractAll: isExtractAll,
+                startNum: startNum,
+                endNum: endNum,
+                shortStartNum: shortStartNum,
+                shortEndNum: shortEndNum,
                 apiKey: userApiKey
             })
         });
 
         await checkApiError(response);
         const data = await response.json();
+        
+        // ✨ 구글 AI 진짜 에러 잡아내기
+        if (data.error) {
+            throw new Error(data.error.message || "구글 AI가 응답을 거부했습니다. API 키를 확인해주세요.");
+        }
+        
         const fullText = data.candidates[0].content.parts[0].text;
         
         extractedQuestionsArray = [];
-        // ✨ 구글 AI 진짜 에러 잡아내기
-        if (data.error) {
-        throw new Error(data.error.message || "구글 AI가 응답을 거부했습니다. API 키를 확인해주세요.");
-        }
         const blocks = fullText.split('---').map(b => b.trim()).filter(b => b.length > 0);
         
         blocks.forEach((block, idx) => {
@@ -2549,7 +2559,7 @@ async function startExamAiAnalysis(base64Data) {
             }
         }
     }
-}      
+}     
 
 // 전역 변수로 관리하여 삭제/수정이 용이하게 합니다
 let extractedQuestionsArray = [];
@@ -5521,6 +5531,20 @@ async function updateQuestionCount() {
     }
 }
 
+// 체크박스 상태에 따라 번호 입력창 켜고 끄기
+function toggleExamRangeInputs() {
+    const isExtractAll = document.getElementById('exam-extract-all').checked;
+    const rangeDiv = document.getElementById('exam-range-inputs');
+    const inputs = rangeDiv.querySelectorAll('input[type="number"]');
+
+    if (isExtractAll) {
+        rangeDiv.style.opacity = '0.4';
+        inputs.forEach(input => input.disabled = true);
+    } else {
+        rangeDiv.style.opacity = '1';
+        inputs.forEach(input => input.disabled = false);
+    }
+}
 // ==========================================
 // 🌟 [최종 업데이트] Vite 모듈 환경에서 HTML 버튼들이 함수를 찾을 수 있도록 외부(window)로 연결해주는 마법의 다리
 // ==========================================
@@ -5551,7 +5575,7 @@ const exposeToWindow = {
    
     changeGroup, openMemoBoard, closeMemoBoard, submitMemo, changeSubject, showAiReason,
     toggleDictionaryPanel, changeDictGroup, loadDictionaryStandards, toggleAccordion,
-    toggleCommonPassageTray, handlePassageFiles, pastePassageFromClipboard, removePassage
+    toggleCommonPassageTray, handlePassageFiles, pastePassageFromClipboard, removePassage, toggleExamRangeInputs
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
