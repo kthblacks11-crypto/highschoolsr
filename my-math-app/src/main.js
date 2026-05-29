@@ -858,7 +858,7 @@ async function processAndSaveBackground(analysisText, apiKey) {
         if (qMatch) finalQuestion = qMatch[1].trim();
         if (aMatch) finalAnswer = aMatch[1].trim();
 
-        const stdCode = analysisText.match(/\[10공수\d-\d\d-\d\d\]/g)?.[0] || "unknown";
+        const stdCode = analysisText.match(/\[\d{2}[가-힣a-zA-Z0-9]+-\d{2}-\d{2}\]/g)?.[0] || "unknown";
 
         let matchedSubject = currentSubject;
         for (const key in subjectData) {
@@ -4884,7 +4884,7 @@ async function submitSpecificFeedback() {
                 proposedStd: proposedStd,
                 proposedLevel: proposedLevel,
                 reason: reason,
-                subject: detectSubjectIdFromStandardCode(q.standard_code),
+                subject: detectSubjectIdFromStandardCode(currentStandardCode),
                 apiKey: userApiKey
             })
         });
