@@ -670,23 +670,22 @@ async function executeAnalysis() {
 
         let bodyData = {
             standardsInfo: standardsInfo,
-            subject: detectSubjectIdFromStandardCode(q.standard_code), // 🌟 핵심! 백엔드가 스스로 판정할 수 있도록 과목 코드만 넘겨줍니다.
+            subject: currentSubject, // 🟢 [복구 완료]
             referenceDBText: referenceDBText,
             commonImages: commonPassages,
             apiKey: userApiKey 
         };
 
         if (isSingleMode) {
-            bodyData.action = "analyze_single"; // 깃발: 단일 분석 서랍 열기
+            bodyData.action = "analyze_single"; 
             const box = (singleCropMode === 'multi' && cropBoxes.length > 0) ? cropBoxes[0] : null;
             lastAnalyzedSingleImage = getCroppedBase64(box); 
             bodyData.imageBase64 = lastAnalyzedSingleImage;
         } else {
-            bodyData.action = "analyze_multi"; // 깃발: 대량 분석 서랍 열기
+            bodyData.action = "analyze_multi"; 
             bodyData.images = cropBoxes.map(box => getCroppedBase64(box));
         }
 
-        // 🌟 구글 주소 대신 선생님의 클라우드플레어 백엔드로 우회 신호 발송!
         const workerUrl = "https://script.google.com/macros/s/AKfycbwgx4RgF8FQxxL3jBgEQ5l369llADjhZ1NepulIdF4DdX18kBrB8oRQ4Ft0d5WdKtEF/exec"; 
         const response = await fetch(workerUrl, {
             method: 'POST',
@@ -694,7 +693,6 @@ async function executeAnalysis() {
             body: JSON.stringify(bodyData)
         });
 
-        // 🌟 가림막을 치우고 백엔드가 보내는 진짜 에러 메시지를 화면에 던지도록 수정!
         if (!response.ok) {
             const errData = await response.json();
             const realError = errData.error?.message || errData.error || "알 수 없는 서버 오류";
@@ -1432,16 +1430,15 @@ async function sendChatMessage() {
     historyEl.scrollTop = historyEl.scrollHeight;
 
     try {
-        // 🌟 챗봇 프롬프트를 전면 숨기고 클라우드플레어 챗봇 서랍(action: "chat_message") 호출!
         const workerUrl = "https://script.google.com/macros/s/AKfycbwgx4RgF8FQxxL3jBgEQ5l369llADjhZ1NepulIdF4DdX18kBrB8oRQ4Ft0d5WdKtEF/exec";
         const userApiKey = localStorage.getItem('gemini_api_key');
         const response = await fetch(workerUrl, {
             method: 'POST', 
             headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify({ 
-                action: "chat_message", // 깃발: 챗봇 대화 서랍 열기
+                action: "chat_message", 
                 currentChatContext: currentChatContext,
-                subject: detectSubjectIdFromStandardCode(q.standard_code),
+                subject: currentSubject, // 🟢 [복구 완료]
                 message: message,
                 apiKey: userApiKey
             })
@@ -5498,7 +5495,6 @@ function executeExamAnalysis() {
     startExamAiAnalysis(tempExamBase64);
 }
 
-// 2. 스마트 번호 정리 및 "전체 추출" 자동화 엔진
 async function startExamAiAnalysis(base64Data) {
     if (!requireApiKey()) {
         document.getElementById('exam-loading').style.display = 'none'; 
@@ -5510,8 +5506,6 @@ async function startExamAiAnalysis(base64Data) {
 
     const isChoiceChecked = document.getElementById('exam-check-choice')?.checked || false;
     const isShortChecked = document.getElementById('exam-check-short')?.checked || false;
-    
-    // 💡 [핵심] 두 개 다 체크하지 않았다면, 알아서 '전체 추출 모드'로 작동합니다! (경고창 삭제)
     const isExtractAll = (!isChoiceChecked && !isShortChecked);
     
     const startNum = document.getElementById('exam-start-num')?.value || "1";
@@ -5536,8 +5530,8 @@ async function startExamAiAnalysis(base64Data) {
                 mimeType: mimeType,
                 base64Clean: base64Clean,
                 referenceDBText: referenceDBText,
-                subject: detectSubjectIdFromStandardCode(q.standard_code),
-                isExtractAll: isExtractAll, // 자동 판별된 값이 백엔드로 넘어갑니다.
+                subject: currentSubject, // 🟢 [복구 완료] AI 요청 시에는 현재 화면 과목 전달
+                isExtractAll: isExtractAll,
                 isChoiceChecked: isChoiceChecked,
                 isShortChecked: isShortChecked,
                 startNum: startNum,
