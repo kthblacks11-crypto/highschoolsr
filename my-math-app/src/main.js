@@ -2982,11 +2982,10 @@ async function loadProjects() {
             projects.forEach(data => {
                 const dateStr = data.createdAt ? data.createdAt.toDate().toLocaleDateString() : "방금 전";
                 let badges = data.assessments && data.assessments.length > 0 
-                    ? [...data.assessments].sort((a,b)=> (a.type==='written'&&b.type!=='written')?-1:1).map(a => `<span style="display:inline-block; background:${a.type === 'written' ? '#3b82f6' : '#10b981'}; color:white; padding:4px 8px; border-radius:4px; font-size:0.8rem; font-weight:bold; white-space:nowrap;">${a.name}</span>`).join('') 
+                    ? [...data.assessments].sort((a,b)=> (a.type==='written'&&b.type!=='written')?-1:1).map(a => `<span style="display:inline-flex; align-items:center; justify-content:center; background:${a.type === 'written' ? '#3b82f6' : '#10b981'}; color:white; padding:4px 8px; border-radius:4px; font-size:0.8rem; font-weight:bold; white-space:normal; word-break:keep-all; line-height:1.2; text-align:center;">${a.name}</span>`).join('') 
                     : '<span style="font-size: 0.8rem; color: #94a3b8;">평가 내역 없음</span>';
-        
+
                 const deleteBtn = isOwnerList ? `<button onclick="deleteProject('${data.id}', event)" style="position: absolute; top: 15px; right: 15px; background: #fee2e2; color: #ef4444; border: none; padding: 2px 5px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.65rem; z-index: 10;">폴더 삭제</button>` : '';
-                
                 // 💡 더 이상 '팀원 삭제' 버튼을 쓰지 않고 '팀원 초대'만 남겨 깔끔하게 만듭니다.
                 const memberManagementBtns = isOwnerList ? `
                     <div style="position: absolute; top: 42px; right: 15px; display: flex; gap: 4px; z-index: 10;">
@@ -3499,6 +3498,7 @@ window.onload = async () => {
     syncPendingFeedback();       
     initChatResizer(); 
     initCaptureEvents(); 
+    initAdminDropdowns();
     const uploadArea = document.getElementById('upload-area');
     if (uploadArea) {
         uploadArea.addEventListener('paste', handlePaste);
@@ -5751,6 +5751,36 @@ function skipLevelQuestion() {
     if (currentQuestions.length === 0) return;
     currentLevelQ = (currentLevelQ + 1) % currentQuestions.length;
     loadLevelQuestion();
+}
+// ✅ 관리자 도구의 드롭다운을 전체 교과군으로 꽉 채워주는 함수
+function initAdminDropdowns() {
+    const adminSelectIds = [
+        'admin-subject', 
+        'admin-edit-subject', 
+        'admin-q-subject', 
+        'admin-manage-q-subject'
+    ];
+    
+    const groupNames = { 'math': '수학', 'korean': '국어', 'english': '영어', 'social': '사회', 'science': '과학' };
+    
+    adminSelectIds.forEach(id => {
+        const selectEl = document.getElementById(id);
+        if (!selectEl) return;
+        
+        let html = '<option value="">-- 과목을 선택하세요 --</option>';
+        
+        for (const groupId in curriculumMap) {
+            if (groupId === '기타') continue;
+            html += `<optgroup label="📚 ${groupNames[groupId] || '기타'}">`;
+            for (const category in curriculumMap[groupId]) {
+                curriculumMap[groupId][category].forEach(sub => {
+                    html += `<option value="${sub.id}">${sub.name}</option>`;
+                });
+            }
+            html += `</optgroup>`;
+        }
+        selectEl.innerHTML = html;
+    });
 }
 // ==========================================
 // 🌟 [최종 업데이트] Vite 모듈 환경에서 HTML 버튼들이 함수를 찾을 수 있도록 외부(window)로 연결해주는 마법의 다리
