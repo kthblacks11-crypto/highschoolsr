@@ -1221,10 +1221,26 @@ function loadLevelQuestion() {
     if (currentQuestions.length === 0) return;
     const question = currentQuestions[currentLevelQ];
     
-    // 💡 [추가된 로직] 엔터(\n)를 HTML 줄바꿈(<br>)으로 변경하고, 보기 번호 앞에 줄바꿈 및 들여쓰기 추가
+    // 1. 텍스트 줄바꿈 및 보기 번호 정렬
     let formattedText = question.q.replace(/\n/g, '<br>');
     formattedText = formattedText.replace(/(①|②|③|④|⑤)/g, '<br>&nbsp;&nbsp;$1');
     
+    // 🌟 2. [추가된 로직] Base64 이미지 데이터가 있으면 img 태그 만들기
+    let imageHtml = '';
+    // DB에 저장된 이미지 키값이 image, imageUrl, img 중 하나일 경우를 모두 대비
+    const questionImage = question.image || question.imageUrl || question.img; 
+    
+    if (questionImage) {
+        // Base64 문자열이 보통 "data:image/png;base64,..." 형태로 시작합니다.
+        // 이미지가 너무 크면 곤란하므로 최대 너비(max-width)를 100%로 설정해 박스 안에 예쁘게 맞춥니다.
+        imageHtml = `
+            <div style="margin: 20px 0; text-align: center;">
+                <img src="${questionImage}" alt="문항 첨부 이미지" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">
+            </div>
+        `;
+    }
+    
+    // 3. 화면에 출력 (텍스트 밑에 이미지가 나오도록 ${imageHtml} 추가)
     qBox.innerHTML = `
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">
             <strong style="color: #1e3a8a; font-size: 1.1rem;">[문항 ${currentLevelQ + 1} / ${currentQuestions.length}]</strong>
@@ -1235,6 +1251,7 @@ function loadLevelQuestion() {
         </div>
         <div style="font-size: 1rem; line-height: 1.8; color: #1e293b;">
             ${formattedText}
+            ${imageHtml}
         </div>
     `;
     
