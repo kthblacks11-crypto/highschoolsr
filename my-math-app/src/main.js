@@ -3597,17 +3597,17 @@ window.addEventListener('popstate', function(event) {
     }
 });
 
-// 🛠️ 오타 교정 및 멀티라인 이유 추출 정규식 적용 완본
-async function sendAiResultsToTable() {
-    if (!confirm("추출한 문항을 표에 반영하시겠습니까?\n(취소를 누르면 이전 화면으로 돌아갑니다.)")) {
-        return; // 취소 누르면 여기서 즉시 함수가 종료됩니다.
+async function sendAiResultsToTable(isFromSaveBank = false) {
+    // 단독 버튼으로 실행될 때만 취소 방어막 띄우기
+    if (!isFromSaveBank) {
+        if (!confirm("추출한 문항을 표에 반영하시겠습니까?\n(취소를 누르면 이전 화면으로 멈춰있습니다.)")) return;
     }
+
     if (extractedQuestionsArray.length === 0) { alert("분석된 문항이 없습니다."); return; }
 
     try {
         const docRef = db.collection('user_projects').doc(currentProjectId);
         
-        // 🔒 마법의 자물쇠(트랜잭션) 시작
         await db.runTransaction(async (transaction) => {
             const doc = await transaction.get(docRef);
             if(!doc.exists) throw new Error("문서를 찾을 수 없습니다.");
@@ -3617,7 +3617,6 @@ async function sendAiResultsToTable() {
             let baseScores = asm.parsedScores || []; 
 
             extractedQuestionsArray.forEach((q) => {
-                // 🟢 [개선] 정규식을 보완하여 여러 줄의 판정이유를 깨짐 없이 수집합니다.
                 let levelMatch = q.text.match(/\[수준\]\s*(A\+|[A-E])/);
                 let reasonMatch = q.text.match(/\[이유\]\s*([\s\S]*?)(?=\[|$)/); 
                 
@@ -3628,18 +3627,15 @@ async function sendAiResultsToTable() {
                 let finalLevel = levelMatch ? levelMatch[1] : "판정필요";
                 let finalReason = reasonMatch ? reasonMatch[1].trim() : "AI 판정 이유가 분석되지 않았습니다.";
 
-                // 🌟 [핵심] 순서(Index)가 아니라 문항 번호(q.num)를 기준으로 기존 표에서 찾아냅니다!
                 let existingIdx = baseScores.findIndex(s => String(s.num).trim() === String(q.num).trim());
 
                 if (existingIdx !== -1) {
-                    // 1~10번 분석 후 11~20번을 올렸을 때 기존 문항을 덮어쓰지 않고 보호합니다.
                     baseScores[existingIdx].score = parseFloat(q.score) || 0;
                     if(diff !== "") baseScores[existingIdx].difficulty = diff;
                     baseScores[existingIdx].isShortAnswer = isShort; 
                     baseScores[existingIdx].level = finalLevel; 
                     baseScores[existingIdx].reason = finalReason; 
                 } else {
-                    // 표에 없는 새로운 문항 번호라면 맨 뒤에 안전하게 추가(Append)합니다.
                     baseScores.push({ 
                         num: String(q.num).trim(), 
                         score: parseFloat(q.score) || 0, 
@@ -3651,8 +3647,13 @@ async function sendAiResultsToTable() {
                 }
             });
 
-            // 🌟 문항 번호 순서대로 표가 예쁘게 정렬되도록 오름차순 정렬 엔진 가동
+            // 🌟 문항 번호 순서대로 예쁘게 정렬
             baseScores.sort((a, b) => {
+                const aIsShort = String(a.num).startsWith('서');
+                const bIsShort = String(b.num).startsWith('서');
+                if (aIsShort && !bIsShort) return 1;
+                if (!aIsShort && bIsShort) return -1;
+
                 let aNum = parseInt(a.num.replace(/[^0-9]/g, '')) || 0;
                 let bNum = parseInt(b.num.replace(/[^0-9]/g, '')) || 0;
                 return aNum - bNum;
@@ -3667,11 +3668,15 @@ async function sendAiResultsToTable() {
             transaction.update(docRef, { assessments: assessments });
         });
         
-        const wrapper = document.getElementById('exam-inspector-wrapper');
-        if (wrapper && wrapper.style.display !== 'none') toggleExamViewer();
-        
         alert("✅ 분할 분석된 문항들이 기존 표의 번호 위치에 맞게 안전하게 병합되었습니다!");
+
+        // 💡 [핵심] 표에 성공적으로 들어갔다면, 추출된 데이터를 비워 알림창을 지웁니다!
+        extractedQuestionsArray = []; 
+        renderQuestionCards(); 
         
+        const applyBtnContainer = document.getElementById('external-apply-btn-zone');
+        if (applyBtnContainer) applyBtnContainer.style.display = 'none';
+
     } catch(e) { 
         alert("반영 실패: " + e.message); 
     }
@@ -4167,22 +4172,12 @@ async function updateBaseDifficulty(qIdx, diffValue) {
 }
 function toggleExamViewer() {
     const wrapper = document.getElementById('exam-inspector-wrapper');
-    const controls = document.getElementById('table-external-controls');
     const toggleBtn = document.getElementById('exam-viewer-toggle-btn');
-    const applyBtnContainer = document.getElementById('external-apply-btn-zone'); 
     
-    if (!wrapper || !controls) return;
+    if (!wrapper) return;
 
-    // 💡 시험지가 이동할 때 버튼도 위치를 계산해서 따라갑니다.
-    if (wrapper.parentNode !== controls.parentNode || wrapper.previousSibling !== controls) {
-        // 시험지를 표 아래로 이동시킴
-        controls.parentNode.insertBefore(wrapper, controls.nextSibling);
-        
-        // 시험지가 아래로 갔으므로, 반영 버튼은 시험지 '위쪽(top)'에 놓습니다. (스크롤 밖 우측 상단)
-        if(applyBtnContainer) {
-            wrapper.parentNode.insertBefore(applyBtnContainer, wrapper);
-        }
-    }
+    // 💡 시험지 영역을 표 아래로 억지로 이동시키던 코드를 완전히 삭제했습니다!
+    // 이제 시험지 화면은 원래 있던 위쪽 자리에서 얌전하게 열리고 닫힙니다.
 
     if (wrapper.style.display === 'none') {
         wrapper.style.display = 'flex';
@@ -4749,13 +4744,15 @@ async function saveGlobalEdits(nameInputs, weightInputs) {
     }
 }
 
-// ✨ 문제은행에 저장한 뒤, 곧바로 표에 반영하는 통합 함수
 async function saveBankAndApplyTable() {
-    if (!confirm("데이터베이스에 문항을 저장하고 표에 반영하시겠습니까?\n(취소를 누르면 이전 화면으로 돌아갑니다.)")) {
-        return; // 취소 누르면 여기서 즉시 함수가 종료됩니다.
+    // 여기서만 한 번 취소 여부를 묻습니다.
+    if (!confirm("데이터베이스에 문항을 안전하게 저장하고 표에 반영하시겠습니까?\n(취소를 누르면 이전 화면으로 멈춰있습니다.)")) {
+        return; 
     }
     await transformAndSaveExamToBank();
-    await sendAiResultsToTable();
+    
+    // 알림창이 두 번 뜨는 것을 막기 위해 true를 전달합니다.
+    await sendAiResultsToTable(true); 
 }
 
 
@@ -5469,7 +5466,6 @@ function executeExamAnalysis() {
     startExamAiAnalysis(tempExamBase64);
 }
 
-// 5. 누적 추출 및 스마트 번호 정리, 정렬, 버튼 유지가 포함된 메인 분석 함수
 async function startExamAiAnalysis(base64Data) {
     if (!requireApiKey()) {
         document.getElementById('exam-loading').style.display = 'none'; 
@@ -5477,8 +5473,9 @@ async function startExamAiAnalysis(base64Data) {
         return; 
     }
     const loadingEl = document.getElementById('exam-loading');
-    if (loadingEl) loadingEl.style.display = 'block';
+    if (loadingEl) loadingEl.style.display = 'flex'; 
 
+    // 🎯 HTML에서 범위 지정 가져오기
     const isExtractAll = document.getElementById('exam-extract-all')?.checked || false;
     const isChoiceChecked = document.getElementById('exam-check-choice')?.checked || false;
     const isShortChecked = document.getElementById('exam-check-short')?.checked || false;
@@ -5487,13 +5484,6 @@ async function startExamAiAnalysis(base64Data) {
     const endNum = document.getElementById('exam-end-num')?.value || "10";
     const shortStartNum = document.getElementById('exam-short-start')?.value || "1";
     const shortEndNum = document.getElementById('exam-short-end')?.value || "5";
-
-    if (!isExtractAll && !isChoiceChecked && !isShortChecked) {
-        alert("선택형/서답형 중 추출할 범위를 체크해주세요!");
-        if (loadingEl) loadingEl.style.display = 'none';
-        document.getElementById('start-analysis-btn').style.display = 'inline-block';
-        return;
-    }
 
     try {
         const mimeTypeMatch = base64Data.match(/data:(.*?);base64/);
@@ -5533,8 +5523,9 @@ async function startExamAiAnalysis(base64Data) {
         
         const fullText = data.candidates[0].content.parts[0].text;
         
+        // 🌟 [핵심] 기존에 뽑아둔 문항이 있다면 이어서 붙일지 묻기!
         if (typeof extractedQuestionsArray !== 'undefined' && extractedQuestionsArray.length > 0) {
-            const isAppend = confirm("기존에 추출된 문항이 있습니다. 기존 목록 뒤에 이어서 추가(누적)하시겠습니까?\n\n[확인]: 기존 내용 유지하고 뒤에 추가\n[취소]: 기존 내용 지우고 새로 시작");
+            const isAppend = confirm("기존에 추출된 문항이 있습니다. 기존 목록 뒤에 이어서 추가(누적)하시겠습니까?\n\n[확인]: 기존 내용 유지하고 뒤에 이어서 추가\n[취소]: 기존 내용 싹 지우고 새로 시작");
             if (!isAppend) {
                 extractedQuestionsArray = []; 
             }
@@ -5547,6 +5538,8 @@ async function startExamAiAnalysis(base64Data) {
         blocks.forEach((block, idx) => {
             let numMatch = block.match(/\[번호\]\s*([가-힣a-zA-Z\s\d]+)/); 
             let scoreMatch = block.match(/\[배점\]\s*([\d.]+)점?/);
+            
+            // 번호를 인식하지 못하면, 기존 배열 길이를 바탕으로 다음 번호로 쏙 들어갑니다!
             let qNumRaw = numMatch ? numMatch[1].trim() : String(extractedQuestionsArray.length + 1);
             
             let qNum = qNumRaw;
@@ -5562,16 +5555,12 @@ async function startExamAiAnalysis(base64Data) {
             extractedQuestionsArray.push({ num: qNum, text: block, score: score, image: null });
         });
 
-        // ✨ [핵심 추가] 객관식 먼저, 서답형 나중에 오도록 정렬 (숫자 오름차순)
         extractedQuestionsArray.sort((a, b) => {
-            const aIsShort = a.num.startsWith('서');
-            const bIsShort = b.num.startsWith('서');
-            
-            // 1. 객관식 vs 서답형 구분 (객관식이 앞, 서답형이 뒤)
+            const aIsShort = String(a.num).startsWith('서');
+            const bIsShort = String(b.num).startsWith('서');
             if (aIsShort && !bIsShort) return 1;  
             if (!aIsShort && bIsShort) return -1; 
             
-            // 2. 같은 유형 안에서는 숫자 오름차순으로 정렬
             const aNum = parseInt(a.num.replace(/[^0-9]/g, '')) || 0;
             const bNum = parseInt(b.num.replace(/[^0-9]/g, '')) || 0;
             return aNum - bNum;
@@ -5590,11 +5579,9 @@ async function startExamAiAnalysis(base64Data) {
     } finally {
         if (loadingEl) loadingEl.style.display = 'none';
         
-        // ✨ [핵심 추가] 분석이 완료되거나 에러가 나도 '시작 버튼'을 다시 살려둡니다! (파일 재업로드 불필요)
         const btn = document.getElementById('start-analysis-btn');
         if (btn) btn.style.display = 'inline-block';
         
-        // 이미지 유지 로직
         const imgEl = document.getElementById('exam-img-display');
         const pdfEl = document.getElementById('exam-pdf-display'); 
         
