@@ -5043,14 +5043,39 @@ async function rejectFeedback(feedbackId) {
     }
 }
 
-// ✨ AI 판정 이유를 띄워주는 알림창 함수
+// 💡 [수정] 경고창(alert) 대신 수식(MathJax)이 완벽하게 렌더링되는 자체 모달창으로 교체!
 function showAiReason(qIdx) {
     if (!parsedScores || !parsedScores[qIdx]) return;
     const q = parsedScores[qIdx];
     const reason = q.reason || "AI가 판정 이유를 응답하지 않았습니다.";
-    
-    // 단순 alert 대신 깔끔하게 내용을 보여줍니다.
-    alert(`[문항 ${q.num} | AI 판정: ${q.level}]\n\n💡 판정 이유:\n${reason}`);
+
+    // 기존에 열려있는 창이 있다면 닫기
+    let oldModal = document.getElementById('ai-reason-custom-modal');
+    if (oldModal) oldModal.remove();
+
+    // 자체 디자인된 HTML 팝업창 생성
+    const modalHtml = `
+    <div id="ai-reason-custom-modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(2px);">
+        <div style="background: white; padding: 2rem; border-radius: 12px; max-width: 500px; width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
+            <h3 style="margin-top: 0; margin-bottom: 1rem; color: #1e3a8a; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">
+                💡 [문항 ${q.num}] AI 판정 이유
+            </h3>
+            <div style="background: #f8fafc; padding: 1.2rem; border-radius: 8px; border: 1px solid #cbd5e1; margin-bottom: 1.5rem; line-height: 1.7; max-height: 60vh; overflow-y: auto; font-size: 0.95rem; color: #334155;">
+                ${reason.replace(/\n/g, '<br>')}
+            </div>
+            <div style="text-align: right;">
+                <button onclick="document.getElementById('ai-reason-custom-modal').remove()" style="background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">닫기</button>
+            </div>
+        </div>
+    </div>`;
+
+    // 화면 끝에 모달창 밀어넣기
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    // ✨ 모달창이 화면에 뜬 직후, 그 안의 $$ 수식을 MathJax로 변환!
+    if (window.MathJax && window.MathJax.typesetPromise) {
+        MathJax.typesetPromise([document.getElementById('ai-reason-custom-modal')]).catch(err => console.error(err));
+    }
 }
 
 // ==========================================
@@ -5627,15 +5652,16 @@ async function startExamAiAnalysis(base64Data) {
 function detectSubjectIdFromStandardCode(code) {
     if (!code) return 'uncategorized';
     
-    if (code.includes('통과1')) return 'sci_common1';
-    if (code.includes('통과2')) return 'sci_common2';
+    // AI가 띄어쓰기를 하거나 오타를 내는 경우까지 완벽하게 잡아냅니다!
+    if (code.includes('통과1') || code.includes('통과 1')) return 'sci_common1';
+    if (code.includes('통과2') || code.includes('통과 2')) return 'sci_common2';
     if (code.includes('물리')) return 'sci_phy';
     if (code.includes('화학')) return 'sci_chem';
     if (code.includes('생명') || code.includes('생과')) return 'sci_bio';
     if (code.includes('지구') || code.includes('지과')) return 'sci_earth';
     
-    if (code.includes('10수학') && code.includes('-01-')) return 'common1'; 
-    if (code.includes('10수학') && code.includes('-02-')) return 'common2'; 
+    if (code.includes('10수학') && (code.includes('-01-') || code.includes(' 1'))) return 'common1'; 
+    if (code.includes('10수학') && (code.includes('-02-') || code.includes(' 2'))) return 'common2'; 
     if (code.includes('대수')) return 'algebra';
     if (code.includes('미적')) return 'calculus1';
     if (code.includes('확통') || code.includes('확률')) return 'probStat';
@@ -5647,10 +5673,10 @@ function detectSubjectIdFromStandardCode(code) {
     if (code.includes('공영1') || (code.includes('10영어') && code.includes('-01-'))) return 'eng_common1';
     if (code.includes('공영2') || (code.includes('10영어') && code.includes('-02-'))) return 'eng_common2';
     
-    if (code.includes('통사1')) return 'soc_common1';
-    if (code.includes('통사2')) return 'soc_common2';
-    if (code.includes('한국사1')) return 'history1';
-    if (code.includes('한국사2')) return 'history2';
+    if (code.includes('통사1') || code.includes('통사 1')) return 'soc_common1';
+    if (code.includes('통사2') || code.includes('통사 2')) return 'soc_common2';
+    if (code.includes('한국사1') || code.includes('한국사 1')) return 'history1';
+    if (code.includes('한국사2') || code.includes('한국사 2')) return 'history2';
 
     return 'uncategorized';
 }
