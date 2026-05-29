@@ -670,7 +670,7 @@ async function executeAnalysis() {
 
         let bodyData = {
             standardsInfo: standardsInfo,
-            subject: currentSubject, // 🌟 핵심! 백엔드가 스스로 판정할 수 있도록 과목 코드만 넘겨줍니다.
+            subject: detectSubjectIdFromStandardCode(q.standard_code), // 🌟 핵심! 백엔드가 스스로 판정할 수 있도록 과목 코드만 넘겨줍니다.
             referenceDBText: referenceDBText,
             commonImages: commonPassages,
             apiKey: userApiKey 
@@ -1441,7 +1441,7 @@ async function sendChatMessage() {
             body: JSON.stringify({ 
                 action: "chat_message", // 깃발: 챗봇 대화 서랍 열기
                 currentChatContext: currentChatContext,
-                subject: currentSubject,
+                subject: detectSubjectIdFromStandardCode(q.standard_code),
                 message: message,
                 apiKey: userApiKey
             })
@@ -1669,7 +1669,10 @@ function resetBookmarkView() {
     document.getElementById('bookmark-list').innerHTML = "";
 }
 
-// 🟢 [수정됨] 미분류 탭을 완벽하게 지원하는 북마크 로직
+// 🟢 이 변수는 반드시 함수 바깥(위에) 있어야 합니다! 기존에 없다면 꼭 같이 복사해주세요.
+let bookmarkSnapshotUnsubscribe = null;
+
+// 🟢 [수정됨] 새로고침 없이 실시간 반영되는 완벽한 북마크 로직
 async function loadBookmark(level) {
     // ✨ 1. 모든 버튼을 살짝 투명하게 만들고 크기를 원래대로 되돌림
     ['A', 'B', 'C', 'D', 'E'].forEach(l => {
@@ -1694,87 +1697,93 @@ async function loadBookmark(level) {
     // 선택된 과목이 없으면 기본값으로 uncategorized 설정
     const subject = currentSubject || "uncategorized"; 
     const listContainer = document.getElementById('bookmark-list');
-    listContainer.innerHTML = "<p style='text-align:center; color:var(--primary); font-weight:bold;'>데이터베이스에서 문항을 불러오는 중입니다... ⏳</p>";
+    listContainer.innerHTML = "<p style='text-align:center; color:var(--primary); font-weight:bold;'>데이터베이스에서 문항을 실시간으로 불러오는 중입니다... ⏳</p>";
 
-    currentBookmarkQuestions = [];
-
-    // 🌟 [신규] '미분류 보관함'을 선택했을 때의 작동 방식
-    if (subject === "uncategorized") {
-        try {
-            const snapshot = await db.collection('transformed_bank').get();
-            snapshot.forEach(doc => {
-                const d = doc.data();
-                let extractedLevel = d.level || d.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1];
-                
-                // 코드가 없거나 unknown인 문항만 쏙쏙 골라냅니다.
-                if (extractedLevel === level && (d.standard_code === "unknown" || d.standard_code === "코드없음")) {
-                    
-                    // AI가 프롬프트에 따라 적어준 'AI 판단 과목' 추출 (없으면 분석 당시 탭 이름)
-                    const aiSubjectMatch = d.original_analysis?.match(/AI 판단 과목:\s*([^\n]+)/);
-                    const displaySubject = aiSubjectMatch ? aiSubjectMatch[1].trim() : d.subject;
-
-                    currentBookmarkQuestions.push({
-                        code: `📦 미분류 (${displaySubject})`,
-                        q: d.question,
-                        // 판정이유 부분만 잘라서 보여주기
-                        reason: d.original_analysis?.match(/판정 이유:[\s\S]*?(?=\[|$)/)?.[0] || "AI가 미분류 문항으로 판정하였습니다.",
-                        answer: d.answer,
-                        source: "✨ AI 분석 문항"
-                    });
-                }
-            });
-            currentBookmarkQuestions.sort((a, b) => a.code.localeCompare(b.code));
-            renderBookmarkList(level);
-            return; // 미분류 처리가 끝났으므로 함수 종료
-        } catch (err) {
-            console.error("미분류 DB 로드 에러:", err);
-            renderBookmarkList(level);
-            return;
-        }
+    // ✨ [핵심 1] 다른 탭을 누르면 기존 감시카메라를 끄고 새로 켭니다.
+    if (bookmarkSnapshotUnsubscribe) {
+        bookmarkSnapshotUnsubscribe();
     }
 
-    // 🌟 [기존 로직] 일반 과목(공통수학1 등)을 선택했을 때
-    const data = subjectData[subject];
-    if (data && data.standards) {
-        data.standards.forEach(std => {
-            if (std.questions && std.questions.length > 0) {
-                std.questions.forEach(q => {
-                    if (q.level === level) {
+    // 🌟 [신규] '미분류 보관함'을 선택했을 때의 실시간 감시
+    if (subject === "uncategorized") {
+        bookmarkSnapshotUnsubscribe = db.collection('transformed_bank')
+            .onSnapshot(snapshot => {
+                currentBookmarkQuestions = []; // 💡 데이터가 변경될 때마다 비우고 다시 채움
+                
+                snapshot.forEach(doc => {
+                    const d = doc.data();
+                    let extractedLevel = d.level || d.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1];
+                    
+                    // 코드가 없거나 unknown인 문항만 쏙쏙 골라냅니다.
+                    if (extractedLevel === level && (d.standard_code === "unknown" || d.standard_code === "코드없음")) {
+                        // AI가 프롬프트에 따라 적어준 'AI 판단 과목' 추출 (없으면 분석 당시 탭 이름)
+                        const aiSubjectMatch = d.original_analysis?.match(/AI 판단 과목:\s*([^\n]+)/);
+                        const displaySubject = aiSubjectMatch ? aiSubjectMatch[1].trim() : d.subject;
+
                         currentBookmarkQuestions.push({
-                            code: std.code, q: q.q, reason: q.reason,
-                            answer: q.answer || "등록된 정답/풀이가 없습니다.",
-                            source: "선생님 등록 문항"
+                            code: `📦 미분류 (${displaySubject})`,
+                            q: d.question,
+                            reason: d.reason || d.original_analysis?.match(/판정 이유:[\s\S]*?(?=\[|$)/)?.[0] || "AI가 미분류 문항으로 판정하였습니다.",
+                            answer: d.answer,
+                            source: "✨ AI 분석 문항"
+                        });
+                    }
+                });
+                currentBookmarkQuestions.sort((a, b) => a.code.localeCompare(b.code));
+                renderBookmarkList(level); // 화면 새로 그리기
+            }, err => {
+                console.error("미분류 DB 로드 에러:", err);
+                renderBookmarkList(level);
+            });
+        return; // 미분류 처리가 끝났으므로 함수 종료
+    }
+
+    // 🌟 [기존 로직] 일반 과목(공통수학1 등)을 선택했을 때의 실시간 감시
+    bookmarkSnapshotUnsubscribe = db.collection('transformed_bank')
+        .where('subject', '==', subject)
+        .onSnapshot(snapshot => {
+            currentBookmarkQuestions = []; // 💡 데이터가 변경될 때마다 비우고 다시 채움
+
+            // 1. 선생님이 시스템 뼈대에 직접 등록한 수동 문항 먼저 담기
+            const data = subjectData[subject];
+            if (data && data.standards) {
+                data.standards.forEach(std => {
+                    if (std.questions && std.questions.length > 0) {
+                        std.questions.forEach(q => {
+                            if (q.level === level) {
+                                currentBookmarkQuestions.push({
+                                    code: std.code, q: q.q, reason: q.reason,
+                                    answer: q.answer || "등록된 정답/풀이가 없습니다.",
+                                    source: "선생님 등록 문항"
+                                });
+                            }
                         });
                     }
                 });
             }
-        });
-    }
 
-    try {
-        const snapshot = await db.collection('transformed_bank').where('subject', '==', subject).get();
-        snapshot.forEach(doc => {
-            const d = doc.data();
-            // 💡 level 필드를 직접 읽어와 수동/AI 문항 모두 대응
-            let extractedLevel = d.level || d.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1];
+            // 2. 데이터베이스(AI가 등록한 문항) 담기
+            snapshot.forEach(doc => {
+                const d = doc.data();
+                let extractedLevel = d.level || d.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1];
+                
+                if (extractedLevel === level && d.standard_code !== "unknown" && d.standard_code !== "코드없음") {
+                    currentBookmarkQuestions.push({
+                        code: d.standard_code, 
+                        q: d.question || d.q || "문제 내용이 없습니다.",
+                        reason: d.reason || "AI가 원본을 분석하고 변형하며 판정한 문항입니다.",
+                        answer: d.answer || "등록된 정답/풀이가 없습니다.", 
+                        source: d.source || "✨ AI 추가 문항"
+                    });
+                }
+            });
             
-            if (extractedLevel === level && d.standard_code !== "unknown" && d.standard_code !== "코드없음") {
-                currentBookmarkQuestions.push({
-                    code: d.standard_code, 
-                    q: d.question || d.q || "문제 내용이 없습니다.",
-                    reason: d.reason || "AI가 원본을 분석하고 변형하며 판정한 문항입니다.",
-                    answer: d.answer || "등록된 정답/풀이가 없습니다.", 
-                    source: d.source || "✨ AI 추가 문항"
-                });
-            }
+            currentBookmarkQuestions.sort((a, b) => a.code.localeCompare(b.code));
+            renderBookmarkList(level); // 화면 새로 그리기
+        }, err => {
+            console.error("DB 로드 에러:", err);
+            renderBookmarkList(level); 
         });
-        
-        currentBookmarkQuestions.sort((a, b) => a.code.localeCompare(b.code));
-        renderBookmarkList(level);
-    } catch (err) {
-        console.error("DB 로드 에러:", err);
-        renderBookmarkList(level); 
-    }
 }
 
 function renderBookmarkList(level) {
@@ -4876,7 +4885,7 @@ async function submitSpecificFeedback() {
                 proposedStd: proposedStd,
                 proposedLevel: proposedLevel,
                 reason: reason,
-                subject: currentSubject, 
+                subject: detectSubjectIdFromStandardCode(q.standard_code),
                 apiKey: userApiKey
             })
         });
@@ -5523,7 +5532,7 @@ async function startExamAiAnalysis(base64Data) {
                 mimeType: mimeType,
                 base64Clean: base64Clean,
                 referenceDBText: referenceDBText,
-                subject: currentSubject,
+                subject: detectSubjectIdFromStandardCode(q.standard_code),
                 isExtractAll: isExtractAll, // 자동 판별된 값이 백엔드로 넘어갑니다.
                 isChoiceChecked: isChoiceChecked,
                 isShortChecked: isShortChecked,
@@ -5616,28 +5625,38 @@ async function startExamAiAnalysis(base64Data) {
     }
 }
 
-// 💡 이 함수를 main.js 아무 곳에나 추가해 두세요.
-function detectSubjectIdFromStandardCode(standardCode) {
-    if (!standardCode) return 'uncategorized'; // 코드가 없으면 미분류로
+// AI가 찾아낸 성취기준 코드로 과목 ID를 자동 판별하는 함수
+function detectSubjectIdFromStandardCode(code) {
+    if (!code) return 'uncategorized';
+    
+    if (code.includes('통과1')) return 'sci_common1';
+    if (code.includes('통과2')) return 'sci_common2';
+    if (code.includes('물리')) return 'sci_phy';
+    if (code.includes('화학')) return 'sci_chem';
+    if (code.includes('생명') || code.includes('생과')) return 'sci_bio';
+    if (code.includes('지구') || code.includes('지과')) return 'sci_earth';
+    
+    if (code.includes('10수학') && code.includes('-01-')) return 'common1'; 
+    if (code.includes('10수학') && code.includes('-02-')) return 'common2'; 
+    if (code.includes('대수')) return 'algebra';
+    if (code.includes('미적')) return 'calculus1';
+    if (code.includes('확통') || code.includes('확률')) return 'probStat';
+    if (code.includes('기하')) return 'geometry';
 
-    // 코드 앞부분 글자를 보고 과목 ID를 찰떡같이 찾아냅니다.
-    if (standardCode.includes('통과1')) return 'sci_common1';
-    if (standardCode.includes('통과2')) return 'sci_common2';
-    if (standardCode.includes('물리')) return 'sci_phy';
-    if (standardCode.includes('화학')) return 'sci_chem';
-    if (standardCode.includes('생명') || standardCode.includes('생과')) return 'sci_bio';
-    if (standardCode.includes('지구') || standardCode.includes('지과')) return 'sci_earth';
+    if (code.includes('공국1') || (code.includes('10국어') && code.includes('-01-'))) return 'kor_common1';
+    if (code.includes('공국2') || (code.includes('10국어') && code.includes('-02-'))) return 'kor_common2';
     
-    if (standardCode.startsWith('10수학') || standardCode.includes('공수')) return 'common1'; // 공통수학
-    if (standardCode.includes('수1') || standardCode.includes('수Ⅰ')) return 'algebra'; // 대수
-    if (standardCode.includes('미적')) return 'calculus1';
+    if (code.includes('공영1') || (code.includes('10영어') && code.includes('-01-'))) return 'eng_common1';
+    if (code.includes('공영2') || (code.includes('10영어') && code.includes('-02-'))) return 'eng_common2';
     
-    if (standardCode.includes('국어')) return 'kor_common1';
-    if (standardCode.includes('영어')) return 'eng_common1';
-    
-    // 기본값 (판독 불가 시)
+    if (code.includes('통사1')) return 'soc_common1';
+    if (code.includes('통사2')) return 'soc_common2';
+    if (code.includes('한국사1')) return 'history1';
+    if (code.includes('한국사2')) return 'history2';
+
     return 'uncategorized';
 }
+
 
 // 💡 그리고 기존 저장 코드에서 subject에 값을 넣을 때 위 함수를 사용합니다.
 // 예시: 
