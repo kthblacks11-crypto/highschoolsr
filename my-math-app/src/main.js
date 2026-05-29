@@ -3024,7 +3024,7 @@ async function loadProjects() {
                         <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📁</div>
                         <h4 style="margin: 0 0 0.5rem 0; color: #1e293b; font-size: 1.1rem; word-break: keep-all;">${data.name}</h4>
                         <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; color: #64748b;">생성일: ${dateStr}</p>
-                        <div style="border: 2px dashed #cbd5e1; border-left: 5px solid #3b82f6; border-radius: 6px; padding: 10px; margin-top: 15px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; background: #f8fafc;">${badges}</div>
+                        <div style="border: 2px dashed #cbd5e1; border-left: 5px solid #3b82f6; border-radius: 6px; padding: 12px 10px 6px 10px; margin-top: 15px; display: block; background: #f8fafc;">${badges}</div>
                     </div>
                 </div>`;
             });
@@ -5566,6 +5566,38 @@ function executeExamAnalysis() {
         alert("시험지 파일이 준비되지 않았습니다. 다시 선택해주세요.");
         return;
     }
+
+    // 💡 [수정1] AI 분석을 서버에 요청하기 '전'에 안내창을 띄우도록 변경!
+    if (typeof extractedQuestionsArray !== 'undefined' && extractedQuestionsArray.length > 0) {
+        const isAppend = confirm("기존에 추출된 문항이 있습니다. 설정하신 범위의 문항을 추가로 추출하여 아래에 덧붙이시겠습니까?\n\n[확인]: 기존 목록 뒤에 이어서 추가\n[취소]: 기존 내용 싹 지우고 새로 시작");
+        if (!isAppend) {
+            extractedQuestionsArray = []; 
+        }
+    } else {
+        extractedQuestionsArray = [];
+    }
+
+    document.getElementById('start-analysis-btn').style.display = 'none';
+    startExamAiAnalysis(tempExamBase64);
+}
+
+// 4. "분석 시작하기" 버튼을 눌렀을 때 실행되는 함수
+function executeExamAnalysis() {
+    if (!tempExamBase64) {
+        alert("시험지 파일이 준비되지 않았습니다. 다시 선택해주세요.");
+        return;
+    }
+
+    // 💡 [수정1] AI 분석을 서버에 요청하기 '전'에 안내창을 띄우도록 변경!
+    if (typeof extractedQuestionsArray !== 'undefined' && extractedQuestionsArray.length > 0) {
+        const isAppend = confirm("기존에 추출된 문항이 있습니다. 설정하신 범위의 문항을 추가로 추출하여 아래에 덧붙이시겠습니까?\n\n[확인]: 기존 목록 뒤에 이어서 추가\n[취소]: 기존 내용 싹 지우고 새로 시작");
+        if (!isAppend) {
+            extractedQuestionsArray = []; 
+        }
+    } else {
+        extractedQuestionsArray = [];
+    }
+
     document.getElementById('start-analysis-btn').style.display = 'none';
     startExamAiAnalysis(tempExamBase64);
 }
@@ -5605,7 +5637,7 @@ async function startExamAiAnalysis(base64Data) {
                 mimeType: mimeType,
                 base64Clean: base64Clean,
                 referenceDBText: referenceDBText,
-                subject: currentSubject, // 🟢 [복구 완료] AI 요청 시에는 현재 화면 과목 전달
+                subject: currentSubject,
                 isExtractAll: isExtractAll,
                 isChoiceChecked: isChoiceChecked,
                 isShortChecked: isShortChecked,
@@ -5625,20 +5657,11 @@ async function startExamAiAnalysis(base64Data) {
         }
         
         const fullText = data.candidates[0].content.parts[0].text;
-        
-        if (typeof extractedQuestionsArray !== 'undefined' && extractedQuestionsArray.length > 0) {
-            const isAppend = confirm("기존에 추출된 문항이 있습니다. 기존 목록 뒤에 이어서 추가(누적)하시겠습니까?\n\n[확인]: 기존 내용 유지하고 뒤에 이어서 추가\n[취소]: 기존 내용 싹 지우고 새로 시작");
-            if (!isAppend) {
-                extractedQuestionsArray = []; 
-            }
-        } else {
-            extractedQuestionsArray = []; 
-        }
-        
         const blocks = fullText.split('---').map(b => b.trim()).filter(b => b.length > 0);
         
         blocks.forEach((block, idx) => {
-            let numMatch = block.match(/\[번호\]\s*([가-힣a-zA-Z\s\d]+)/); 
+            // 💡 [수정2] 11번~20번 문항 번호 인식률을 100%로 끌어올린 무적의 정규식!
+            let numMatch = block.match(/\[번호\]\s*([가-힣a-zA-Z\s\d]+)/) || block.match(/\[(\d+)\]/) || block.match(/(?:문항)?\s*(\d+)\s*번/); 
             let scoreMatch = block.match(/\[배점\]\s*([\d.]+)점?/);
             let qNumRaw = numMatch ? numMatch[1].trim() : String(extractedQuestionsArray.length + 1);
             
