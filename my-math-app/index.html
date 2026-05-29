@@ -207,6 +207,7 @@
             
             <div style="margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px; background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
                 
+                <!-- 🎯 객관식(선택형) 범위 지정 -->
                 <label style="font-size: 0.95rem; font-weight: bold; color: #334155; cursor: pointer;">
                     <input type="checkbox" id="exam-check-choice" onchange="toggleExamRangeInputs()"> 🎯 선택형(객관식) 추출하기
                 </label>
@@ -215,6 +216,7 @@
                     <input type="number" id="exam-end-num" value="10" style="width: 50px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;"> 번 까지
                 </div>
         
+                <!-- ✍️ 서답형 범위 지정 -->
                 <label style="font-size: 0.95rem; font-weight: bold; color: #334155; cursor: pointer; margin-top: 5px;">
                     <input type="checkbox" id="exam-check-short" onchange="toggleExamRangeInputs()"> ✍️ 서답형(서술형) 추출하기
                 </label>
@@ -223,11 +225,13 @@
                     <input type="number" id="exam-short-end" value="5" style="width: 50px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;"> 번 까지
                 </div>
                 
-                <hr style="border: 0; border-top: 1px dashed #cbd5e1; margin: 5px 0;">
-                
-                <label style="font-size: 0.95rem; font-weight: bold; color: #ea580c; cursor: pointer;">
-                    <input type="checkbox" id="exam-extract-all" onchange="toggleExamRangeInputs()"> 🌟 범위 지정 없이 문서 내 모든 문항 한 번에 추출하기
-                </label>
+                <!-- 🌟 전체 추출 안내 멘트 (체크박스 삭제) -->
+                <div style="background: #fff7ed; padding: 10px; border-radius: 6px; border: 1px solid #fed7aa; margin-top: 5px;">
+                    <p style="margin: 0; font-size: 0.85rem; color: #9a3412; font-weight: bold; line-height: 1.5;">
+                        🌟 위 두 옵션을 모두 선택하지 않으면 문서 내 <span style="text-decoration: underline;">모든 문항을 한 번에 자동 추출</span>합니다.<br>
+                        <span style="color: #c2410c; font-weight: normal;">(※ 지문이 길어 문항이 중간에 끊길 경우, 추출이 안 된 번호부터 범위를 지정하여 추가로 추출하세요.)</span>
+                    </p>
+                </div>
             </div>
         
             <p style="font-size:0.85rem; color:#475569; margin-bottom: 8px;">1. 시험지 이미지(또는 PDF) 파일을 먼저 선택하세요.</p>

@@ -3638,7 +3638,8 @@ async function sendAiResultsToTable(isFromSaveBank = false) {
                     baseScores.push({ 
                         num: String(q.num).trim(), 
                         score: parseFloat(q.score) || 0, 
-                        difficulty: diff || "중", 
+                        // 💡 [핵심] 기존 'diff || "중"' 에서 "중"을 삭제하여 기본값이 빈칸(선택)이 되도록 수정
+                        difficulty: diff || "", 
                         level: finalLevel, 
                         isShortAnswer: isShort,
                         reason: finalReason
@@ -3674,7 +3675,6 @@ async function sendAiResultsToTable(isFromSaveBank = false) {
         const applyBtnContainer = document.getElementById('external-apply-btn-zone');
         if (applyBtnContainer) applyBtnContainer.style.display = 'none';
 
-        // 💡 [핵심] 표 반영이 완료되면 시험지 뷰어를 자동으로 닫아줍니다!
         const wrapper = document.getElementById('exam-inspector-wrapper');
         const toggleBtn = document.getElementById('exam-viewer-toggle-btn');
         if (wrapper) {
@@ -5400,28 +5400,16 @@ async function updateQuestionCount() {
     }
 }
 
-// 1. 체크박스 상태에 따라 화면을 부드럽게 열고 닫는 함수
+// 1. 체크박스 상태에 따라 번호 입력창을 켜고 끄는 함수 (전체 추출 체크박스 로직 삭제)
 function toggleExamRangeInputs() {
     const isChoiceChecked = document.getElementById('exam-check-choice')?.checked;
     const isShortChecked = document.getElementById('exam-check-short')?.checked;
-    const isAllChecked = document.getElementById('exam-extract-all')?.checked;
 
     const choiceDiv = document.getElementById('exam-range-choice');
     const shortDiv = document.getElementById('exam-range-short');
     
-    // 전체 추출을 누르면 범위 지정 비활성화
-    if (isAllChecked) {
-        if(choiceDiv) choiceDiv.style.display = 'none';
-        if(shortDiv) shortDiv.style.display = 'none';
-        if(document.getElementById('exam-check-choice')) document.getElementById('exam-check-choice').disabled = true;
-        if(document.getElementById('exam-check-short')) document.getElementById('exam-check-short').disabled = true;
-    } else {
-        if(document.getElementById('exam-check-choice')) document.getElementById('exam-check-choice').disabled = false;
-        if(document.getElementById('exam-check-short')) document.getElementById('exam-check-short').disabled = false;
-        
-        if (choiceDiv) choiceDiv.style.display = isChoiceChecked ? 'flex' : 'none';
-        if (shortDiv) shortDiv.style.display = isShortChecked ? 'flex' : 'none';
-    }
+    if (choiceDiv) choiceDiv.style.display = isChoiceChecked ? 'flex' : 'none';
+    if (shortDiv) shortDiv.style.display = isShortChecked ? 'flex' : 'none';
 }
 
 // 2. 임시로 이미지를 보관해둘 변수
@@ -5484,6 +5472,7 @@ function executeExamAnalysis() {
     startExamAiAnalysis(tempExamBase64);
 }
 
+// 2. 스마트 번호 정리 및 "전체 추출" 자동화 엔진
 async function startExamAiAnalysis(base64Data) {
     if (!requireApiKey()) {
         document.getElementById('exam-loading').style.display = 'none'; 
@@ -5491,12 +5480,13 @@ async function startExamAiAnalysis(base64Data) {
         return; 
     }
     const loadingEl = document.getElementById('exam-loading');
-    if (loadingEl) loadingEl.style.display = 'flex'; 
+    if (loadingEl) loadingEl.style.display = 'block';
 
-    // 🎯 HTML에서 범위 지정 가져오기
-    const isExtractAll = document.getElementById('exam-extract-all')?.checked || false;
     const isChoiceChecked = document.getElementById('exam-check-choice')?.checked || false;
     const isShortChecked = document.getElementById('exam-check-short')?.checked || false;
+    
+    // 💡 [핵심] 두 개 다 체크하지 않았다면, 알아서 '전체 추출 모드'로 작동합니다! (경고창 삭제)
+    const isExtractAll = (!isChoiceChecked && !isShortChecked);
     
     const startNum = document.getElementById('exam-start-num')?.value || "1";
     const endNum = document.getElementById('exam-end-num')?.value || "10";
@@ -5521,7 +5511,7 @@ async function startExamAiAnalysis(base64Data) {
                 base64Clean: base64Clean,
                 referenceDBText: referenceDBText,
                 subject: currentSubject,
-                isExtractAll: isExtractAll,
+                isExtractAll: isExtractAll, // 자동 판별된 값이 백엔드로 넘어갑니다.
                 isChoiceChecked: isChoiceChecked,
                 isShortChecked: isShortChecked,
                 startNum: startNum,
@@ -5541,7 +5531,6 @@ async function startExamAiAnalysis(base64Data) {
         
         const fullText = data.candidates[0].content.parts[0].text;
         
-        // 🌟 [핵심] 기존에 뽑아둔 문항이 있다면 이어서 붙일지 묻기!
         if (typeof extractedQuestionsArray !== 'undefined' && extractedQuestionsArray.length > 0) {
             const isAppend = confirm("기존에 추출된 문항이 있습니다. 기존 목록 뒤에 이어서 추가(누적)하시겠습니까?\n\n[확인]: 기존 내용 유지하고 뒤에 이어서 추가\n[취소]: 기존 내용 싹 지우고 새로 시작");
             if (!isAppend) {
@@ -5556,8 +5545,6 @@ async function startExamAiAnalysis(base64Data) {
         blocks.forEach((block, idx) => {
             let numMatch = block.match(/\[번호\]\s*([가-힣a-zA-Z\s\d]+)/); 
             let scoreMatch = block.match(/\[배점\]\s*([\d.]+)점?/);
-            
-            // 번호를 인식하지 못하면, 기존 배열 길이를 바탕으로 다음 번호로 쏙 들어갑니다!
             let qNumRaw = numMatch ? numMatch[1].trim() : String(extractedQuestionsArray.length + 1);
             
             let qNum = qNumRaw;
