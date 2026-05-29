@@ -3042,11 +3042,9 @@ function goToStep(stepNum) {
     if(indicatorTarget) indicatorTarget.style.color = 'var(--primary)';
 }
 
-// 🟢 [수정됨] 폴더 클릭 시 열기 (상세 화면으로 이동)
 async function openProject(projectId, projectName) {
     currentProjectId = projectId;
     
-    // 대시보드와 기존 단계별 화면 숨기기
     document.getElementById('cut-score-dashboard').style.display = 'none';
     [1, 2, 3, 4].forEach(n => {
         const step = document.getElementById(`cut-score-step${n}`);
@@ -3054,8 +3052,8 @@ async function openProject(projectId, projectName) {
     });
     document.getElementById('dynamic-indicator-bar').style.display = 'none';
 
-    // 프로젝트 상세 화면 띄우기
-    document.getElementById('project-detail-title').innerHTML = `📂 ${projectName} <button class="save-btn" onclick="openMemoBoard()" style="width: auto; margin: 0 0 0 15px; padding: 0.4rem 0.8rem; font-size: 0.85rem; background: #f59e0b; display: inline-block;">💬 업무 메모 <span id="unread-memo-count" style="background: #ef4444; color: white; border-radius: 10px; padding: 2px 6px; font-size: 0.7rem; margin-left: 5px; display: none;">0</span></button>`;
+    // ✨ id 대신 class를 사용하여 내부/외부 버튼 모두 연동되도록 수정
+    document.getElementById('project-detail-title').innerHTML = `📂 ${projectName} <button class="save-btn" onclick="openMemoBoard()" style="width: auto; margin: 0 0 0 15px; padding: 0.4rem 0.8rem; font-size: 0.85rem; background: #f59e0b; display: inline-block;">💬 업무 메모 <span class="unread-memo-badge" style="background: #ef4444; color: white; border-radius: 10px; padding: 2px 6px; font-size: 0.7rem; margin-left: 5px; display: none;">0</span></button>`;
     document.getElementById('project-detail-view').style.display = 'block';
 
     await loadProjectDetails();
@@ -3068,35 +3066,40 @@ function backToProjectList() {
     loadProjects();
 }
 
-// 🟢 [신규] 프로젝트 내역(1회고사, 수행 등) 불러오기 및 렌더링
+let projectDetailsUnsubscribe = null;
+
 async function loadProjectDetails() {
     const listEl = document.getElementById('project-assessment-list');
-    listEl.innerHTML = '<p style="text-align:center; padding: 1rem;">데이터를 계산 중입니다... ⏳</p>';
+    listEl.innerHTML = '<p style="text-align:center; padding: 1rem;">데이터를 불러오는 중입니다... ⏳</p>';
     
-    try {
-        const doc = await db.collection('user_projects').doc(currentProjectId).get();
+    if (projectDetailsUnsubscribe) {
+        projectDetailsUnsubscribe();
+    }
+
+    // ✨ 한 번만 읽는 get() 대신 실시간 동기화 onSnapshot() 적용
+    projectDetailsUnsubscribe = db.collection('user_projects').doc(currentProjectId).onSnapshot(doc => {
         if(doc.exists) {
             const data = doc.data();
             renderProjectAssessments(data.assessments || []);
             
-            // 💡 안 읽은 메모 개수 계산해서 뱃지에 표시하기
+            // ✨ 메인 폴더창 & 작업창의 '모든' 업무메모 뱃지 카운트 실시간 동기화
             const memos = data.memos || [];
             const userEmail = auth.currentUser.email;
+            // 내가 쓰지 않고, 읽은 사람 목록에 내가 없는 메시지 카운트
             const unreadCount = memos.filter(m => m.authorEmail !== userEmail && !(m.readBy || []).includes(userEmail)).length;
             
-            const badge = document.getElementById('unread-memo-count');
-            if (badge) {
+            document.querySelectorAll('.unread-memo-badge').forEach(badge => {
                 if (unreadCount > 0) {
                     badge.innerText = unreadCount;
                     badge.style.display = 'inline-block';
                 } else {
                     badge.style.display = 'none';
                 }
-            }
+            });
         }
-    } catch(e) {
+    }, error => {
         listEl.innerHTML = '<p style="color:red; text-align:center;">데이터를 불러오는 데 실패했습니다.</p>';
-    }
+    });
 }
 
 function renderProjectAssessments(assessments) {
@@ -3259,8 +3262,20 @@ function rearrangeQuestionNumbers() {
     });
 }
 
-// 🟢 [신규] 수행평가 수동 입력 로직
-function openManualAssessmentModal() { document.getElementById('manual-assessment-modal').style.display = 'flex'; }
+function openManualAssessmentModal() { 
+    document.getElementById('manual-assess-name').value = '';
+    document.getElementById('manual-assess-weight').value = '';
+    // ✨ 입력하지 않아도 0점이 되지 않도록 실제 값을 꽂아줍니다.
+    document.getElementById('manual-a').value = '80';
+    document.getElementById('manual-b').value = '70';
+    document.getElementById('manual-c').value = '60';
+    document.getElementById('manual-d').value = '50';
+    document.getElementById('manual-e').value = '40';
+    
+    document.getElementById('sub-factors-list').innerHTML = '';
+    currentEditingManualIndex = -1; 
+    document.getElementById('manual-assessment-modal').style.display = 'flex'; 
+}
 
 
 let currentEditingManualIndex = -1;
@@ -3307,20 +3322,25 @@ function closeManualAssessmentModal() {
     document.getElementById('sub-factors-list').innerHTML = ''; // 서랍 초기화
 }
 
-// ✨ [수정] 수행평가 저장 (새로 추가 & 수정 모두 대응)
 async function saveManualAssessment() {
     const name = document.getElementById('manual-assess-name').value.trim();
     const weight = parseFloat(document.getElementById('manual-assess-weight').value) || 0;
     
-    const a = (parseFloat(document.getElementById('manual-a').value) || 0) * (weight / 100);
-    const b = (parseFloat(document.getElementById('manual-b').value) || 0) * (weight / 100);
-    const c = (parseFloat(document.getElementById('manual-c').value) || 0) * (weight / 100);
-    const d = (parseFloat(document.getElementById('manual-d').value) || 0) * (weight / 100);
-    const e = (parseFloat(document.getElementById('manual-e').value) || 0) * (weight / 100);
+    // ✨ 빈칸일 경우 0이 아니라 최소한의 기본값을 잡도록 방어코드 추가
+    const valA = parseFloat(document.getElementById('manual-a').value) || 80;
+    const valB = parseFloat(document.getElementById('manual-b').value) || 70;
+    const valC = parseFloat(document.getElementById('manual-c').value) || 60;
+    const valD = parseFloat(document.getElementById('manual-d').value) || 50;
+    const valE = parseFloat(document.getElementById('manual-e').value) || 40;
+
+    const a = valA * (weight / 100);
+    const b = valB * (weight / 100);
+    const c = valC * (weight / 100);
+    const d = valD * (weight / 100);
+    const e = valE * (weight / 100);
     
     if(!name || weight <= 0) { alert("평가명과 반영 비율을 정확히 입력하세요."); return; }
 
-    // 🌟 동적으로 추가된 하위 평가요소들의 명단과 원본 등급점수 수집
     let subFactors = [];
     document.querySelectorAll('.sub-factor-row').forEach(row => {
         subFactors.push({
@@ -3339,8 +3359,6 @@ async function saveManualAssessment() {
         const doc = await docRef.get();
         if(doc.exists) {
             let assessments = doc.data().assessments || [];
-            
-            // 데이터 오브젝트 패킹 시 하위 요소 정보 명시적 병합
             const assessmentData = {
                 name: name, weight: weight, type: 'manual',
                 scores: { A: a, B: b, C: c, D: d, E: e },
@@ -3356,9 +3374,7 @@ async function saveManualAssessment() {
             
             await docRef.update({ assessments: assessments });
             alert("✅ 수행평가 구조와 분할점수가 안전하게 저장되었습니다!");
-            
             closeManualAssessmentModal();
-            loadProjectDetails(); 
         }
     } catch(err) { alert("저장 실패: " + err.message); }
 }
@@ -3369,7 +3385,6 @@ async function saveAssessmentToProject() {
     const boxes = document.getElementById('final-cut-score-boxes').querySelectorAll('span');
     if (boxes.length < 5) { alert("점수 산출이 먼저 완료되어야 합니다."); return; }
 
-    // ✨ [핵심 수정] 산출 단계를 건너뛰었을 경우를 대비해, 현재 표 데이터를 강제로 다시 읽어옵니다.
     let latestScores = [];
     document.querySelectorAll('.score-input').forEach((input, idx) => {
         const selects = document.querySelectorAll('.level-select');
@@ -3382,7 +3397,6 @@ async function saveAssessmentToProject() {
             isShortAnswer: String(input.getAttribute('data-num')).includes('서')
         });
     });
-    // 읽어온 데이터가 있다면 전역 변수 업데이트
     if(latestScores.length > 0) parsedScores = latestScores;
 
     try {
@@ -3403,8 +3417,6 @@ async function saveAssessmentToProject() {
 
             assessments[currentEditingAssessmentIndex].scores = weightedScores;
             assessments[currentEditingAssessmentIndex].savedAt = new Date();
-            
-            // ✨ 완벽하게 표 데이터(parsedScores)를 DB에 함께 저장합니다.
             assessments[currentEditingAssessmentIndex].parsedScores = parsedScores;
             
             await docRef.update({ assessments: assessments });
@@ -3414,8 +3426,9 @@ async function saveAssessmentToProject() {
                 const step = document.getElementById(`cut-score-step${n}`);
                 if(step) step.style.display = 'none';
             });
-            document.getElementById('cut-score-dashboard').style.display = 'block'; 
-            loadProjectDetails();
+            
+            // ✨ 메인 대시보드가 아닌 '프로젝트 상세(폴더) 뷰'로 돌아가게 변경
+            document.getElementById('project-detail-view').style.display = 'block'; 
             currentEditingAssessmentIndex = -1; 
         }
     } catch(e) { alert("업데이트 실패: " + e.message); }
@@ -4249,8 +4262,9 @@ async function markAsReady() {
 }
 
 async function applyBatchDifficulty() {
-    // 1. 현재 사용자가 선택한 난이도 값('상', '중', '하')을 변수에 임시 저장합니다.
     const val = document.getElementById('batch-diff-val').value;
+    lastBatchDiff = val; // ✨ 마지막으로 선택한 난이도를 시스템에 강제 저장!
+    
     const cbs = document.querySelectorAll('.diff-batch-cb:checked');
     if(cbs.length === 0) { alert("선택된 문항이 없습니다. 왼쪽 체크박스를 선택해주세요."); return; }
 
@@ -4268,7 +4282,6 @@ async function applyBatchDifficulty() {
     } catch(e) { 
         alert("일괄 적용 실패: " + e.message); 
     }
-
 }
 
 function initDiffShiftClick() {
@@ -5602,6 +5615,38 @@ async function startExamAiAnalysis(base64Data) {
         }
     }
 }
+
+// 💡 이 함수를 main.js 아무 곳에나 추가해 두세요.
+function detectSubjectIdFromStandardCode(standardCode) {
+    if (!standardCode) return 'uncategorized'; // 코드가 없으면 미분류로
+
+    // 코드 앞부분 글자를 보고 과목 ID를 찰떡같이 찾아냅니다.
+    if (standardCode.includes('통과1')) return 'sci_common1';
+    if (standardCode.includes('통과2')) return 'sci_common2';
+    if (standardCode.includes('물리')) return 'sci_phy';
+    if (standardCode.includes('화학')) return 'sci_chem';
+    if (standardCode.includes('생명') || standardCode.includes('생과')) return 'sci_bio';
+    if (standardCode.includes('지구') || standardCode.includes('지과')) return 'sci_earth';
+    
+    if (standardCode.startsWith('10수학') || standardCode.includes('공수')) return 'common1'; // 공통수학
+    if (standardCode.includes('수1') || standardCode.includes('수Ⅰ')) return 'algebra'; // 대수
+    if (standardCode.includes('미적')) return 'calculus1';
+    
+    if (standardCode.includes('국어')) return 'kor_common1';
+    if (standardCode.includes('영어')) return 'eng_common1';
+    
+    // 기본값 (판독 불가 시)
+    return 'uncategorized';
+}
+
+// 💡 그리고 기존 저장 코드에서 subject에 값을 넣을 때 위 함수를 사용합니다.
+// 예시: 
+// const dbData = {
+//     ...
+//     standard_code: q.standardCode,
+//     subject: detectSubjectIdFromStandardCode(q.standardCode), // 🔥 화면 선택 무시하고 AI가 찾은 코드로 강제 지정!
+//     ...
+// };
 
 // ==========================================
 // 🌟 [최종 업데이트] Vite 모듈 환경에서 HTML 버튼들이 함수를 찾을 수 있도록 외부(window)로 연결해주는 마법의 다리

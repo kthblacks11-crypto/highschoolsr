@@ -180,9 +180,16 @@
     
 
     <div id="cut-score-step2" class="cut-score-card" style="display: none;">
+        <!-- 👇 이 부분을 덮어쓰세요 👇 -->
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 20px;">
             <h3 style="margin: 0; color: #1e3a8a;">문항별 배점 및 성취수준 입력</h3>
-            <button class="btn-step-prev" onclick="document.getElementById('project-detail-view').style.display='block'; document.getElementById('cut-score-step2').style.display='none';" style="margin: 0; padding: 6px 12px; font-size: 0.9rem;">◀ 폴더로 돌아가기</button>
+            <div>
+                <!-- ✨ 작업 공간 안에서도 업무 메모를 열 수 있는 버튼 추가 -->
+                <button class="save-btn" onclick="openMemoBoard()" style="width: auto; margin: 0 10px 0 0; padding: 6px 12px; font-size: 0.9rem; background: #f59e0b; display: inline-block;">
+                    💬 업무 메모 <span class="unread-memo-badge" style="background: #ef4444; color: white; border-radius: 10px; padding: 2px 6px; font-size: 0.7rem; margin-left: 5px; display: none;">0</span>
+                </button>
+                <button class="btn-step-prev" onclick="document.getElementById('project-detail-view').style.display='block'; document.getElementById('cut-score-step2').style.display='none';" style="margin: 0; padding: 6px 12px; font-size: 0.9rem;">◀ 폴더로 돌아가기</button>
+            </div>
         </div>
         
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
