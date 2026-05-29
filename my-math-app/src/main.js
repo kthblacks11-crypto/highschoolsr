@@ -1037,7 +1037,6 @@ function changeGroup(groupId) {
     changeSubject();
 }
 
-// 세부 과목 변경 시 호출 (완벽 연동 버전)
 async function changeSubject() {
     currentSubject = document.getElementById('detail-subjects').value;
     
@@ -1065,10 +1064,15 @@ async function changeSubject() {
         } catch(e) { console.warn("문항 수 계산 실패", e); }
     }
 
-    // 🌟 3. [핵심] 3가지 화면 모두 즉시 새로고침하여 완벽하게 연동시킵니다!
-    initDashboard(); // 성취기준과 성취수준 갱신
-    if (typeof initChecklist === 'function') initChecklist(); // 나의 체크리스트 갱신
-    if (typeof loadBookmark === 'function') loadBookmark(); // 북마크 문항 갱신
+    // 🌟 3. [핵심] 3가지 화면 모두 즉시 새로고침
+    initDashboard(); 
+    if (typeof initChecklist === 'function') initChecklist(); 
+    if (typeof loadBookmark === 'function') loadBookmark(); 
+
+    // 👇 [여기에 3줄 추가] 과목을 바꾸면 무조건 초기 화면으로 강제 이동 및 퀴즈 상자 닫기
+    showSection('dashboard'); 
+    if (document.getElementById('quiz-standard-selection')) document.getElementById('quiz-standard-selection').style.display = 'block';
+    if (document.getElementById('quiz-level-matching')) document.getElementById('quiz-level-matching').style.display = 'none';
 }
 
 function initDashboard() {
@@ -1217,6 +1221,10 @@ function loadLevelQuestion() {
     if (currentQuestions.length === 0) return;
     const question = currentQuestions[currentLevelQ];
     
+    // 💡 [추가된 로직] 엔터(\n)를 HTML 줄바꿈(<br>)으로 변경하고, 보기 번호 앞에 줄바꿈 및 들여쓰기 추가
+    let formattedText = question.q.replace(/\n/g, '<br>');
+    formattedText = formattedText.replace(/(①|②|③|④|⑤)/g, '<br>&nbsp;&nbsp;$1');
+    
     qBox.innerHTML = `
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">
             <strong style="color: #1e3a8a; font-size: 1.1rem;">[문항 ${currentLevelQ + 1} / ${currentQuestions.length}]</strong>
@@ -1225,8 +1233,8 @@ function loadLevelQuestion() {
                 <button onclick="skipLevelQuestion()" style="background: white; border: 1px solid #cbd5e1; color: #475569; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='white'">다음 ▶</button>
             </div>
         </div>
-        <div style="font-size: 1rem; line-height: 1.6; color: #1e293b;">
-            ${question.q}
+        <div style="font-size: 1rem; line-height: 1.8; color: #1e293b;">
+            ${formattedText}
         </div>
     `;
     
