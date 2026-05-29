@@ -3599,6 +3599,9 @@ window.addEventListener('popstate', function(event) {
 
 // 🛠️ 오타 교정 및 멀티라인 이유 추출 정규식 적용 완본
 async function sendAiResultsToTable() {
+    if (!confirm("추출한 문항을 표에 반영하시겠습니까?\n(취소를 누르면 이전 화면으로 돌아갑니다.)")) {
+        return; // 취소 누르면 여기서 즉시 함수가 종료됩니다.
+    }
     if (extractedQuestionsArray.length === 0) { alert("분석된 문항이 없습니다."); return; }
 
     try {
@@ -4748,6 +4751,9 @@ async function saveGlobalEdits(nameInputs, weightInputs) {
 
 // ✨ 문제은행에 저장한 뒤, 곧바로 표에 반영하는 통합 함수
 async function saveBankAndApplyTable() {
+    if (!confirm("데이터베이스에 문항을 저장하고 표에 반영하시겠습니까?\n(취소를 누르면 이전 화면으로 돌아갑니다.)")) {
+        return; // 취소 누르면 여기서 즉시 함수가 종료됩니다.
+    }
     await transformAndSaveExamToBank();
     await sendAiResultsToTable();
 }
@@ -5463,7 +5469,7 @@ function executeExamAnalysis() {
     startExamAiAnalysis(tempExamBase64);
 }
 
-// 5. 누적 추출 및 스마트 번호 정리가 포함된 메인 분석 함수
+// 5. 누적 추출 및 스마트 번호 정리, 정렬, 버튼 유지가 포함된 메인 분석 함수
 async function startExamAiAnalysis(base64Data) {
     if (!requireApiKey()) {
         document.getElementById('exam-loading').style.display = 'none'; 
@@ -5527,7 +5533,6 @@ async function startExamAiAnalysis(base64Data) {
         
         const fullText = data.candidates[0].content.parts[0].text;
         
-        // 🌟 [핵심 수정: 누적 반영 기능] 🌟
         if (typeof extractedQuestionsArray !== 'undefined' && extractedQuestionsArray.length > 0) {
             const isAppend = confirm("기존에 추출된 문항이 있습니다. 기존 목록 뒤에 이어서 추가(누적)하시겠습니까?\n\n[확인]: 기존 내용 유지하고 뒤에 추가\n[취소]: 기존 내용 지우고 새로 시작");
             if (!isAppend) {
@@ -5557,6 +5562,21 @@ async function startExamAiAnalysis(base64Data) {
             extractedQuestionsArray.push({ num: qNum, text: block, score: score, image: null });
         });
 
+        // ✨ [핵심 추가] 객관식 먼저, 서답형 나중에 오도록 정렬 (숫자 오름차순)
+        extractedQuestionsArray.sort((a, b) => {
+            const aIsShort = a.num.startsWith('서');
+            const bIsShort = b.num.startsWith('서');
+            
+            // 1. 객관식 vs 서답형 구분 (객관식이 앞, 서답형이 뒤)
+            if (aIsShort && !bIsShort) return 1;  
+            if (!aIsShort && bIsShort) return -1; 
+            
+            // 2. 같은 유형 안에서는 숫자 오름차순으로 정렬
+            const aNum = parseInt(a.num.replace(/[^0-9]/g, '')) || 0;
+            const bNum = parseInt(b.num.replace(/[^0-9]/g, '')) || 0;
+            return aNum - bNum;
+        });
+
         const helperZone = document.getElementById('ai-helper-zone');
         if (helperZone) helperZone.style.display = 'none';
         
@@ -5567,9 +5587,14 @@ async function startExamAiAnalysis(base64Data) {
 
     } catch (error) {
         alert("분석 중 오류가 발생했습니다.\n" + error.message);
-        document.getElementById('start-analysis-btn').style.display = 'inline-block';
     } finally {
         if (loadingEl) loadingEl.style.display = 'none';
+        
+        // ✨ [핵심 추가] 분석이 완료되거나 에러가 나도 '시작 버튼'을 다시 살려둡니다! (파일 재업로드 불필요)
+        const btn = document.getElementById('start-analysis-btn');
+        if (btn) btn.style.display = 'inline-block';
+        
+        // 이미지 유지 로직
         const imgEl = document.getElementById('exam-img-display');
         const pdfEl = document.getElementById('exam-pdf-display'); 
         
