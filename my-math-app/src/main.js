@@ -2554,31 +2554,6 @@ async function startExamAiAnalysis(base64Data) {
 // 전역 변수로 관리하여 삭제/수정이 용이하게 합니다
 let extractedQuestionsArray = [];
 
-// 🟢 [추가] AI 대기 화면에서 특정 문항 삭제 및 번호 정렬
-function deleteQuestion(idx) {
-    if(!confirm("이 문항을 목록에서 삭제하시겠습니까?")) return;
-    extractedQuestionsArray.splice(idx, 1);
-    renderQuestionCards();
-}
-
-function mergeWithPrevious(idx) {
-    if (idx <= 0) return;
-    if(!confirm("이 문항의 내용을 위 문항과 합치시겠습니까?")) return;
-    extractedQuestionsArray[idx - 1].text += "\n" + extractedQuestionsArray[idx].text;
-    if (!extractedQuestionsArray[idx - 1].image && extractedQuestionsArray[idx].image) {
-        extractedQuestionsArray[idx - 1].image = extractedQuestionsArray[idx].image;
-    }
-    extractedQuestionsArray.splice(idx, 1);
-    renderQuestionCards();
-}
-
-function removeQuestionImage(idx) {
-    if(confirm("이 문항에 첨부된 그림 조각을 삭제하시겠습니까?")) {
-        extractedQuestionsArray[idx].image = null;
-        renderQuestionCards();
-    }
-}
-
 function renderQuestionCards() {
     const listContainer = document.getElementById('extracted-questions-list');
     listContainer.innerHTML = "";
