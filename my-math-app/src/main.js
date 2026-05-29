@@ -1058,7 +1058,8 @@ async function changeSubject() {
             snapshot.forEach(doc => {
                 const stdCode = doc.data().standard_code;
                 if (stdCode && stdCode !== "unknown" && stdCode !== "코드없음") {
-                    currentSubjectQCount[stdCode] = (currentSubjectQCount[stdCode] || 0) + 1;
+                    const cleanCode = stdCode.replace(/[\[\]\s]/g, ''); // 대괄호 제거
+                    currentSubjectQCount[cleanCode] = (currentSubjectQCount[cleanCode] || 0) + 1;
                 }
             });
         } catch(e) { console.warn("문항 수 계산 실패", e); }
@@ -1095,8 +1096,9 @@ function initDashboard() {
         btnArea.style.marginTop = '15px'; 
         
         // ✨ 마법의 문항 유무 판별 로직
-        const qCount = currentSubjectQCount[std.code] || 0;
-        const hasQuestions = (std.questions && std.questions.length > 0) || qCount > 0;
+        const cleanStdCode = std.code.replace(/[\[\]\s]/g, '');
+        const qCount = currentSubjectQCount[cleanStdCode] || 0;
+        const hasQuestions = (std.questions && std.questions.length > 0) || qCount > 0; 
         
         const quizBtn = document.createElement('button');
         
@@ -1152,7 +1154,11 @@ async function startLevelMatching(code) {
     let combinedQuestions = standard.questions ? [...standard.questions] : []; 
 
     try {
-        const snapshot = await db.collection('transformed_bank').where('standard_code', '==', code).get();
+        let cleanInputCode = code.replace(/[\[\]\s]/g, '');
+        let withBracketCode = `[${cleanInputCode}]`;
+        const snapshot = await db.collection('transformed_bank')
+         .where('standard_code', 'in', [cleanInputCode, withBracketCode])
+         .get();
         snapshot.forEach(doc => {
             const data = doc.data();
             let extractedLevel = data.level || data.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1] || "C"; 
@@ -1210,7 +1216,20 @@ function loadLevelQuestion() {
     const nextBtn = document.getElementById('next-q-btn');
     if (currentQuestions.length === 0) return;
     const question = currentQuestions[currentLevelQ];
-    qBox.innerHTML = `<strong>[문항 ${currentLevelQ + 1}/${currentQuestions.length}]</strong><br><br>${question.q}`;
+    
+    qBox.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">
+            <strong style="color: #1e3a8a; font-size: 1.1rem;">[문항 ${currentLevelQ + 1} / ${currentQuestions.length}]</strong>
+            <div style="display: flex; gap: 8px;">
+                <button onclick="prevLevelQuestion()" style="background: white; border: 1px solid #cbd5e1; color: #475569; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='white'">◀ 이전</button>
+                <button onclick="skipLevelQuestion()" style="background: white; border: 1px solid #cbd5e1; color: #475569; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='white'">다음 ▶</button>
+            </div>
+        </div>
+        <div style="font-size: 1rem; line-height: 1.6; color: #1e293b;">
+            ${question.q}
+        </div>
+    `;
+    
     optionsBox.innerHTML = ''; feedbackBox.style.display = 'none'; nextBtn.style.display = 'none';
     
     ['A', 'B', 'C', 'D', 'E'].forEach(level => {
@@ -2816,9 +2835,11 @@ async function loadQuestionsForEdit() {
 
     try {
         // 🌟 통합 서랍(transformed_bank)에서 해당 코드의 문항들만 쿼리
+        let cleanInputCode = stdCode.replace(/[\[\]\s]/g, '');
+        let withBracketCode = `[${cleanInputCode}]`;
         const snapshot = await db.collection('transformed_bank')
-                                 .where('standard_code', '==', stdCode)
-                                 .get();
+                         .where('standard_code', 'in', [cleanInputCode, withBracketCode])
+                         .get();
         
         currentEditingAllQuestions = []; // 전역 변수 초기화
         qSelect.innerHTML = '<option value="">-- 수정할 문항 선택 --</option>';
@@ -5428,12 +5449,13 @@ async function updateQuestionCount() {
                                      .where('subject', '==', targetSubject)
                                      .get();
                                      
-            snapshot.forEach(doc => {
-                const stdCode = doc.data().standard_code;
-                if (stdCode && stdCode !== "unknown" && stdCode !== "코드없음") {
-                    currentSubjectQCount[stdCode] = (currentSubjectQCount[stdCode] || 0) + 1;
-                }
-            });
+                  snapshot.forEach(doc => {
+                       const stdCode = doc.data().standard_code;
+                       if (stdCode && stdCode !== "unknown" && stdCode !== "코드없음") {
+                      const cleanCode = stdCode.replace(/[\[\]\s]/g, ''); // 대괄호 제거
+                      currentSubjectQCount[cleanCode] = (currentSubjectQCount[cleanCode] || 0) + 1;
+                      }
+                  });
             
             console.log("✅ 문항 수 갱신 완료:", currentSubjectQCount);
             
@@ -5691,6 +5713,17 @@ function detectSubjectIdFromStandardCode(code) {
 //     ...
 // };
 
+function prevLevelQuestion() {
+    if (currentQuestions.length === 0) return;
+    currentLevelQ = (currentLevelQ - 1 + currentQuestions.length) % currentQuestions.length;
+    loadLevelQuestion();
+}
+
+function skipLevelQuestion() {
+    if (currentQuestions.length === 0) return;
+    currentLevelQ = (currentLevelQ + 1) % currentQuestions.length;
+    loadLevelQuestion();
+}
 // ==========================================
 // 🌟 [최종 업데이트] Vite 모듈 환경에서 HTML 버튼들이 함수를 찾을 수 있도록 외부(window)로 연결해주는 마법의 다리
 // ==========================================
@@ -5722,7 +5755,8 @@ const exposeToWindow = {
     changeGroup, openMemoBoard, closeMemoBoard, submitMemo, changeSubject, showAiReason,
     toggleDictionaryPanel, changeDictGroup, loadDictionaryStandards, toggleAccordion,
     toggleCommonPassageTray, handlePassageFiles, pastePassageFromClipboard, removePassage, 
-    toggleExamRangeInputs, previewExamFile, executeExamAnalysis, resetAiLevels 
+    toggleExamRangeInputs, previewExamFile, executeExamAnalysis, resetAiLevels,
+    prevLevelQuestion, skipLevelQuestion 
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
