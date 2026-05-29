@@ -4374,7 +4374,7 @@ async function transformAndSaveExamToBank() {
             body: JSON.stringify({
                 action: "batch_transform",
                 standardsInfo: standardsInfo,
-                subject: targetSubject, // 🟢 끌어올린 변수를 여기에 안전하게 적용합니다.
+                subject: targetSubject, 
                 questionsPayload: questionsPayload,
                 apiKey: userApiKey
             })
@@ -4386,7 +4386,6 @@ async function transformAndSaveExamToBank() {
 
         const blocks = aiResult.split('===').map(b => b.trim()).filter(b => b.length > 0);
         let savedCount = 0;
-        let subject = document.getElementById('cut-score-subject')?.value || currentSubject || "uncategorized";
 
         for (let i = 0; i < Math.min(blocks.length, extractedQuestionsArray.length); i++) {
             const block = blocks[i];
@@ -4406,8 +4405,11 @@ async function transformAndSaveExamToBank() {
             let lvl = levelMatch ? levelMatch[1] : "C";
             if(lvl === "A+") lvl = "A";
 
+            // 💡 [핵심 수정] 과목 ID를 화면 탭에 의존하지 않고 성취기준 코드로 AI 자동 판별!
+            let autoSubject = detectSubjectIdFromStandardCode(finalCode);
+
             const saveData = {
-                subject: subject,
+                subject: autoSubject, // 🌟 자동으로 찾은 과목 서랍에 알아서 들어갑니다!
                 standard_code: finalCode, 
                 question: finalQ,
                 answer: finalA,          
@@ -4430,10 +4432,10 @@ async function transformAndSaveExamToBank() {
             savedCount++;
         }
 
-        alert(`🎉 완벽합니다! 총 ${savedCount}개의 시험지 문항이 완벽하게 백엔드 검증을 마친 뒤 저작권 회피 변형 문항으로 데이터베이스 서랍에 입고되었습니다.`);
+        alert(`🎉 완벽합니다! 총 ${savedCount}개의 시험지 문항이 변형되어 알맞은 과목 DB에 보관되었습니다.`);
 
+        // 저장 후 화면 버튼을 다시 파란색으로 깨워주는 함수 실행
         await updateQuestionCount(); 
-        initDashboard();
 
     } catch (error) {
         alert("변형 저장 중 오류 발생: " + error.message);
@@ -5394,12 +5396,14 @@ async function markMemosAsRead(memos) {
 
 async function updateQuestionCount() {
     currentSubjectQCount = {}; // 초기화
-    const currentSubject = document.getElementById('admin-q-subject').value;
+    
+    // 💡 [핵심 수정] 관리자 설정창 뿐만 아니라, 일반 탭 화면의 과목도 정확히 인식하도록 수정
+    const targetSubject = currentSubject || "uncategorized";
 
-    if (currentSubject && currentSubject !== 'uncategorized') {
+    if (targetSubject && targetSubject !== 'uncategorized') {
         try {
             const snapshot = await db.collection('transformed_bank')
-                                     .where('subject', '==', currentSubject)
+                                     .where('subject', '==', targetSubject)
                                      .get();
                                      
             snapshot.forEach(doc => {
@@ -5409,11 +5413,11 @@ async function updateQuestionCount() {
                 }
             });
             
-            console.log("새로 계산된 문항 수:", currentSubjectQCount);
+            console.log("✅ 문항 수 갱신 완료:", currentSubjectQCount);
             
-            // 💡 중요: 성취기준 목록 화면을 다시 그려주는 함수 호출
-            if (typeof renderStandardList === 'function') {
-                renderStandardList(); 
+            // 💡 대시보드 새로고침: 문항이 추가되면 회색 버튼이 파란색으로 즉시 바뀌도록 호출!
+            if (document.getElementById('card-container')) {
+                initDashboard(); 
             }
             
         } catch(e) { 
@@ -5625,7 +5629,7 @@ async function startExamAiAnalysis(base64Data) {
     }
 }
 
-// AI가 찾아낸 성취기준 코드로 과목 ID를 자동 판별하는 함수
+// ✨ AI가 찾아낸 성취기준 코드로 과목 ID를 자동 판별하는 마법의 함수
 function detectSubjectIdFromStandardCode(code) {
     if (!code) return 'uncategorized';
     
