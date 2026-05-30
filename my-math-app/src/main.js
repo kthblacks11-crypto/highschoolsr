@@ -6023,6 +6023,34 @@ function initAdminDropdowns() {
         selectEl.innerHTML = '<option value="">-- 위 교과군 버튼을 먼저 선택하세요 --</option>';
     });
 }
+
+async function loadStandardsForManage() {
+    const subject = document.getElementById('admin-manage-q-subject').value;
+    const stdSelect = document.getElementById('admin-manage-q-standard');
+    
+    stdSelect.innerHTML = '<option value="">데이터를 불러오는 중입니다...</option>';
+
+    if (!subject) {
+        stdSelect.innerHTML = '<option value="">과목을 선택하세요</option>';
+        return;
+    }
+
+    try {
+        const snapshot = await db.collection('standards_2022').where('subject', '==', subject).get();
+        let stds = [];
+        snapshot.forEach(doc => stds.push({ id: doc.id, code: doc.data().code, desc: doc.data().desc }));
+        
+        stds.sort((a,b) => a.code.localeCompare(b.code));
+
+        stdSelect.innerHTML = '<option value="">-- 수정할 성취기준 선택 --</option>';
+        stds.forEach(std => {
+            stdSelect.innerHTML += `<option value="${std.id}">${std.code} ${std.desc.substring(0, 25)}...</option>`;
+        });
+    } catch (error) {
+        console.error("목록 불러오기 실패:", error);
+        stdSelect.innerHTML = '<option value="">불러오기 오류 발생</option>';
+    }
+}
 // ==========================================
 // 🌟 [최종 업데이트] Vite 모듈 환경에서 HTML 버튼들이 함수를 찾을 수 있도록 외부(window)로 연결해주는 마법의 다리
 // ==========================================
