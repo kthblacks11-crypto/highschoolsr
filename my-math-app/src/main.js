@@ -21,7 +21,9 @@ db.enablePersistence()
 const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
+
 let currentUploadedImageUrl = null;
+let feedbackUnsubscribe = null; // 💡 멈춤 현상(메모리 누수)을 막기 위한 필수 변수 추가
 
 auth.onAuthStateChanged(async (user) => {
     const loginBtn = document.getElementById('login-btn');
@@ -42,14 +44,17 @@ auth.onAuthStateChanged(async (user) => {
             renderSavedAssessments(); 
         }
         
-        // 💡 관리자 권한 확인 및 실시간 의견 개수 뱃지 표시
+        // 💡 관리자 권한 확인 및 실시간 '새 메시지' 뱃지 표시
         if (user.email === "kthblacks11@gmail.com") {
             if(adminFeedbackBtn) {
                 adminFeedbackBtn.style.display = 'inline-block';
-                adminFeedbackBtn.style.position = 'relative'; // 뱃지 위치 조정을 위해 추가
+                adminFeedbackBtn.style.position = 'relative';
+                
+                // 기존 감시기 해제 (중복 실행 방지)
+                if (feedbackUnsubscribe) feedbackUnsubscribe();
                 
                 // DB에서 의견(developer_feedback) 개수를 실시간 감시
-                db.collection('developer_feedback').onSnapshot(snapshot => {
+                feedbackUnsubscribe = db.collection('developer_feedback').onSnapshot(snapshot => {
                     let badge = document.getElementById('admin-fb-badge');
                     if (!badge) {
                         badge = document.createElement('span');
@@ -58,8 +63,20 @@ auth.onAuthStateChanged(async (user) => {
                         adminFeedbackBtn.appendChild(badge);
                     }
                     
-                    if (snapshot.size > 0) {
-                        badge.innerText = snapshot.size;
+                    // 💡 [핵심] 선생님이 마지막으로 확인한 시간 이후에 등록된 새 글만 카운트
+                    const lastChecked = parseInt(localStorage.getItem('admin_last_checked_feedback') || "0");
+                    let newCount = 0;
+                    
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        const msgTime = data.timestamp ? data.timestamp.toMillis() : Date.now();
+                        if (msgTime > lastChecked) {
+                            newCount++;
+                        }
+                    });
+                    
+                    if (newCount > 0) {
+                        badge.innerText = newCount;
                         badge.style.display = 'flex';
                     } else {
                         badge.style.display = 'none';
@@ -76,6 +93,8 @@ auth.onAuthStateChanged(async (user) => {
         userInfo.innerText = "로그인이 필요합니다.";
         if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'none';
         if(adminModeBtn) adminModeBtn.style.display = 'none';
+        // 로그아웃 시 감시기 끄기
+        if (feedbackUnsubscribe) { feedbackUnsubscribe(); feedbackUnsubscribe = null; }
     }
 });
 
@@ -201,12 +220,17 @@ async function submitFeedback() {
     }
 }
 
-// ✨ 2. 관리자 의견 확인창을 렌더링하는 함수 (AI 초안 텍스트박스 분리 및 수정창 탑재)
+// ✨ 2. 관리자 의견 확인창을 렌더링하는 함수 (뱃지 초기화 기능 탑재)
 async function openAdminFeedback() {
     const user = auth.currentUser;
     const adminEmail = "kthblacks11@gmail.com"; 
     if (!user) { alert("먼저 구글 로그인을 해주세요."); return; }
     if (user.email !== adminEmail) { alert("관리자 계정만 접근할 수 있습니다."); return; }
+
+    // 💡 [핵심 추가] 창을 열면 '마지막 확인 시간'을 갱신하고 뱃지를 숨김!
+    localStorage.setItem('admin_last_checked_feedback', Date.now().toString());
+    const badge = document.getElementById('admin-fb-badge');
+    if (badge) badge.style.display = 'none';
 
     document.getElementById('admin-feedback-modal').style.display = 'flex';
     const listEl = document.getElementById('admin-feedback-list');
