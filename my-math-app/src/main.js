@@ -942,6 +942,34 @@ async function processAndSaveBackground(analysisText, apiKey) {
 }
 
 function showSection(id) {
+    // =======================================================
+    // 1. [추가] 화면 전환 전 가장 먼저 실행! (작업 중인 데이터 검사 및 초기화)
+    // =======================================================
+    const hasPassages = typeof commonPassages !== 'undefined' && commonPassages.length > 0;
+    const imageUpload = document.getElementById('question-image-upload');
+    const hasImage = imageUpload && imageUpload.value !== '';
+    const textInput = document.getElementById('question-text');
+    const hasText = textInput && textInput.value.trim() !== '';
+
+    if (hasPassages || hasImage || hasText) {
+        const isLeave = confirm("⚠️ 현재 작업 중인 내용(지문, 이미지 또는 텍스트)이 있습니다.\n\n다른 메뉴로 이동하면 작업 내역이 모두 초기화됩니다. 계속하시겠습니까?");
+        if (!isLeave) {
+            return; // 취소 시 여기서 함수를 종료하여 화면 이동을 막습니다.
+        }
+    }
+
+    // 경고창에서 '확인'을 눌렀거나 비어있었다면 잔여 데이터 완벽 청소
+    if (typeof clearAllPassages === 'function') clearAllPassages(); // 지문 비우기
+    const textInputs = ['question-text', 'chat-input']; 
+    textInputs.forEach(inputId => {
+        const el = document.getElementById(inputId);
+        if (el) el.value = '';
+    });
+    document.querySelectorAll('.result-content, .analysis-result').forEach(el => el.innerHTML = '');
+    // =======================================================
+
+
+    // --- 기존 선생님의 화면 이동 및 스타일 로직 시작 ---
     document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById(id).classList.add('active');
@@ -992,6 +1020,11 @@ function showSection(id) {
                 btn.style.boxShadow = 'none';
             }
         });
+    } else if (id === 'checklist') { 
+        // =======================================================
+        // 2. [추가] 나의 체크리스트 탭 클릭 시 DB 데이터 다시 불러오기
+        // =======================================================
+        if (typeof initChecklist === 'function') initChecklist();
     }
 }
 
