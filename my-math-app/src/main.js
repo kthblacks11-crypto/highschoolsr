@@ -1994,21 +1994,53 @@ function updateStep2Total() {
     }
 }
 
-// ✨ 빈 표를 만들고 모두에게 전송하기
+// ✨ 기존 데이터를 보존하면서 표 크기만 늘리고 줄이는 스마트 표 생성 함수
 async function generateEmptyScoreTable() {
     const choiceCount = parseInt(document.getElementById('choice-count').value) || 0;
     const shortCount = parseInt(document.getElementById('short-count').value) || 0;
     
-    let newScores = [];
-    for(let i=1; i<=choiceCount; i++) newScores.push({ num: String(i), difficulty: '선택하세요', score: 0, level: '판정필요', isShortAnswer: false });
-    for(let i=1; i<=shortCount; i++) newScores.push({ num: '서'+i, difficulty: '선택하세요', score: 0, level: '판정필요', isShortAnswer: true });
-
-    // HTML에 그리지 않고 DB에 바로 저장! (저장하면 onSnapshot이 알아서 모두의 화면에 그려줍니다)
     try {
         const docRef = db.collection('user_projects').doc(currentProjectId);
         const doc = await docRef.get();
         if(doc.exists) {
             let assessments = doc.data().assessments;
+            let existingScores = assessments[currentEditingAssessmentIndex].parsedScores || [];
+            let newScores = [];
+            
+            if (existingScores.length > 0) {
+                // 이미 데이터가 있을 때 유지 여부를 물어봅니다.
+                const isKeep = confirm("기존에 입력된 문항 데이터가 있습니다. 데이터를 유지하시겠습니까?\n\n[확인] 입력된 데이터 유지 (개수만 조절)\n[취소] 기존 데이터를 모두 삭제하고 초기화");
+                
+                if (isKeep) {
+                    let existingChoices = existingScores.filter(q => !(q.isShortAnswer || String(q.num).includes('서')));
+                    let existingShorts = existingScores.filter(q => q.isShortAnswer || String(q.num).includes('서'));
+                    
+                    // 객관식 조절 (넘치면 유지, 모자라면 새 빈칸 추가)
+                    for(let i=0; i<choiceCount; i++) {
+                        if (i < existingChoices.length) newScores.push(existingChoices[i]);
+                        else newScores.push({ num: String(i+1), difficulty: '선택하세요', score: 0, level: '판정필요', isShortAnswer: false });
+                    }
+                    
+                    // 서답형 조절 (넘치면 유지, 모자라면 새 빈칸 추가)
+                    for(let i=0; i<shortCount; i++) {
+                        if (i < existingShorts.length) {
+                            let sq = existingShorts[i];
+                            sq.num = '서' + (i+1); // 번호 자동 정렬
+                            newScores.push(sq);
+                        }
+                        else newScores.push({ num: '서'+(i+1), difficulty: '선택하세요', score: 0, level: '판정필요', isShortAnswer: true });
+                    }
+                } else {
+                    // 취소를 누르면 묻지도 따지지도 않고 완전 초기화
+                    for(let i=1; i<=choiceCount; i++) newScores.push({ num: String(i), difficulty: '선택하세요', score: 0, level: '판정필요', isShortAnswer: false });
+                    for(let i=1; i<=shortCount; i++) newScores.push({ num: '서'+i, difficulty: '선택하세요', score: 0, level: '판정필요', isShortAnswer: true });
+                }
+            } else {
+                // 기존 데이터가 아예 없을 때는 그냥 바로 생성
+                for(let i=1; i<=choiceCount; i++) newScores.push({ num: String(i), difficulty: '선택하세요', score: 0, level: '판정필요', isShortAnswer: false });
+                for(let i=1; i<=shortCount; i++) newScores.push({ num: '서'+i, difficulty: '선택하세요', score: 0, level: '판정필요', isShortAnswer: true });
+            }
+
             assessments[currentEditingAssessmentIndex].parsedScores = newScores;
             await docRef.update({ assessments: assessments });
         }
@@ -3554,7 +3586,20 @@ function startEditAssessment(index) {
             const projectData = doc.data();
             const asm = projectData.assessments[index];
             document.getElementById('current-assessment-info').innerText = `📌 ${asm.name} (반영 비율: ${asm.weight}%)`;
-            
+            const parsedScores = asm.parsedScores || [];
+            if (parsedScores.length > 0) {
+                let cCount = 0, sCount = 0;
+                parsedScores.forEach(q => {
+                    if(q.isShortAnswer || String(q.num).includes('서')) sCount++;
+                    else cCount++;
+                });
+                document.getElementById('choice-count').value = cCount;
+                document.getElementById('short-count').value = sCount;
+            } else {
+                // 저장된 게 없다면 기본값 20 / 5 유지
+                document.getElementById('choice-count').value = 20;
+                document.getElementById('short-count').value = 5;
+            }
             // 🟢 [추가] 토글 버튼 작동 시 실시간 연동을 위한 데이터 캐싱 백업
             cachedProjectData = projectData;
             cachedAsmData = asm;
@@ -4763,12 +4808,23 @@ async function editAssessmentInfo(index) {
     const newWeight = prompt("새로운 반영 비율(%)을 숫자로만 입력하세요:", asm.weight);
     if(newWeight === null || newWeight.trim() === "" || isNaN(newWeight)) return;
 
+    const oldWeight = asm.weight || 0;
     asm.name = newName.trim();
     asm.weight = parseFloat(newWeight);
 
+    // 💡 변경된 비율에 맞춰 A~E 최종 점수 자동 비례 계산
+    if (oldWeight !== asm.weight && oldWeight > 0 && asm.scores) {
+        const ratio = asm.weight / oldWeight;
+        asm.scores.A *= ratio;
+        asm.scores.B *= ratio;
+        asm.scores.C *= ratio;
+        asm.scores.D *= ratio;
+        asm.scores.E *= ratio;
+    }
+
     try {
         await docRef.update({ assessments: assessments });
-        alert("✅ 평가명과 반영 비율이 수정되었습니다.\n⚠️ 중요: 비율이 변경되었다면, 우측의 [산출/수정] 버튼을 눌러 들어간 뒤 다시 한번 [💾 결과 저장하기]를 눌러주셔야 최종 점수가 새 비율에 맞게 재계산됩니다.");
+        alert("✅ 평가명과 반영 비율이 수정되었으며, 최종 컷오프 점수도 새 비율에 맞춰 자동 재계산되었습니다!");
         loadProjectDetails(); // 화면 새로고침
     } catch(e) {
         alert("수정 실패: " + e.message);
@@ -4806,7 +4862,7 @@ function toggleGlobalEditMode() {
     }
 }
 
-// 👉 수정된 내용을 DB에 저장하는 함수
+// 👉 수정된 내용을 DB에 저장하는 함수 (일괄 수정 버전)
 async function saveGlobalEdits(nameInputs, weightInputs) {
     try {
         const docRef = db.collection('user_projects').doc(currentProjectId);
@@ -4815,19 +4871,29 @@ async function saveGlobalEdits(nameInputs, weightInputs) {
         if (doc.exists) {
             let assessments = doc.data().assessments;
 
-            // 각 줄의 input 창에서 값을 가져와 DB 배열에 덮어씁니다.
-            // data-idx를 쓰기 때문에 목록 순서가 바뀌어 있어도 엉뚱한 곳에 저장되지 않습니다!
             nameInputs.forEach((input, i) => {
                 const idx = parseInt(input.getAttribute('data-idx'));
                 const newName = input.value.trim();
                 const newWeight = parseFloat(weightInputs[i].value) || 0;
+                const oldWeight = assessments[idx].weight || 0;
 
                 if (newName) assessments[idx].name = newName;
+                
+                // 💡 변경된 비율에 맞춰 자동 비례 계산 적용
+                if (oldWeight !== newWeight && oldWeight > 0 && assessments[idx].scores) {
+                    const ratio = newWeight / oldWeight;
+                    assessments[idx].scores.A *= ratio;
+                    assessments[idx].scores.B *= ratio;
+                    assessments[idx].scores.C *= ratio;
+                    assessments[idx].scores.D *= ratio;
+                    assessments[idx].scores.E *= ratio;
+                }
+                
                 assessments[idx].weight = newWeight;
             });
 
             await docRef.update({ assessments: assessments });
-            alert("✅ 모든 평가명과 반영 비율이 일괄 수정되었습니다!\n(⚠️ 비율이 바뀌었으니, 각 평가의 [산출/수정] 버튼을 눌러 들어간 뒤 최종 점수를 한 번 더 '저장'해야 컷오프 점수가 다시 계산됩니다.)");
+            alert("✅ 모든 평가명과 반영 비율이 일괄 수정되었으며, 최종 점수도 새 비율에 맞게 자동 갱신되었습니다!");
         }
     } catch (e) {
         alert("수정 실패: " + e.message);
