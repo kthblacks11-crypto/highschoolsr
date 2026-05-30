@@ -943,7 +943,7 @@ async function processAndSaveBackground(analysisText, apiKey) {
 
 function showSection(id) {
     // =======================================================
-    // 1. [추가] 화면 전환 전 가장 먼저 실행! (작업 중인 데이터 검사 및 초기화)
+    // 1. 작업 중인 데이터 검사 (지문, 이미지, 텍스트)
     // =======================================================
     const hasPassages = typeof commonPassages !== 'undefined' && commonPassages.length > 0;
     const imageUpload = document.getElementById('question-image-upload');
@@ -951,25 +951,41 @@ function showSection(id) {
     const textInput = document.getElementById('question-text');
     const hasText = textInput && textInput.value.trim() !== '';
 
+    // 현재 다른 작업을 하고 있었다면 경고창 띄우기
     if (hasPassages || hasImage || hasText) {
         const isLeave = confirm("⚠️ 현재 작업 중인 내용(지문, 이미지 또는 텍스트)이 있습니다.\n\n다른 메뉴로 이동하면 작업 내역이 모두 초기화됩니다. 계속하시겠습니까?");
         if (!isLeave) {
-            return; // 취소 시 여기서 함수를 종료하여 화면 이동을 막습니다.
+            return; // 취소 시 화면 이동 중단
         }
     }
 
-    // 경고창에서 '확인'을 눌렀거나 비어있었다면 잔여 데이터 완벽 청소
-    if (typeof clearAllPassages === 'function') clearAllPassages(); // 지문 비우기
+    // =======================================================
+    // 2. 조용히(알림창 없이) 모든 작업 내역 청소하기
+    // =======================================================
+    // (1) 지문 보관함 싹 비우기 (조용히 배열만 초기화)
+    if (typeof commonPassages !== 'undefined') {
+        commonPassages = [];
+        const thumbnailContainer = document.getElementById('passage-thumbnails');
+        if (thumbnailContainer) thumbnailContainer.innerHTML = '';
+    }
+
+    // (2) 텍스트 입력창 비우기
     const textInputs = ['question-text', 'chat-input']; 
     textInputs.forEach(inputId => {
         const el = document.getElementById(inputId);
         if (el) el.value = '';
     });
+
+    // (3) 분석 결과창 비우기
     document.querySelectorAll('.result-content, .analysis-result').forEach(el => el.innerHTML = '');
+
+    // (4) 만약 '문제 분석하기' 내부에 있었다면 추가 초기화
+    if (typeof resetAnalysis === 'function') resetAnalysis(false); 
+
+
     // =======================================================
-
-
-    // --- 기존 선생님의 화면 이동 및 스타일 로직 시작 ---
+    // 3. 원래 화면 이동 및 투명 망토 처리 로직
+    // =======================================================
     document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById(id).classList.add('active');
@@ -977,30 +993,27 @@ function showSection(id) {
     const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(`'${id}'`));
     if (activeBtn) activeBtn.classList.add('active');
     
-    // 💡 투명 망토를 씌울 대상 (교과군, 세부과목 드롭다운 전체를 묶은 컨테이너)
     const curriculumSelector = document.querySelector('.curriculum-selector');
     const subTitle = document.getElementById('main-subtitle'); 
 
-    // 문제 분석이나 분할점수 산출 탭일 경우 투명 망토 씌우기 (공간은 그대로 유지!)
     if (id === 'problem-analysis' || id === 'cut-score') {
         if (curriculumSelector) curriculumSelector.style.visibility = 'hidden';
         if (subTitle) subTitle.style.visibility = 'hidden';
     } else {
-        // 다른 탭으로 오면 다시 보이게 하기
         if (curriculumSelector) curriculumSelector.style.visibility = 'visible';
         if (subTitle) subTitle.style.visibility = 'visible';
     }
     
     history.pushState({ section: id }, "", "#" + id);
 
-    // 💡 각 탭을 누를 때마다 화면 리셋 (초기화) 로직
+    // =======================================================
+    // 4. 각 탭 진입 시 데이터 새로고침
+    // =======================================================
     if (id === 'cut-score') {
         currentProjectId = null;
         document.querySelectorAll('.cut-score-card').forEach(card => card.style.display = 'none');
         document.getElementById('cut-score-dashboard').style.display = 'block';
         if (typeof loadProjects === 'function') loadProjects();
-    } else if (id === 'problem-analysis') {
-        if (typeof resetAnalysis === 'function') resetAnalysis();
     } else if (id === 'quiz') {
         const qSelect = document.getElementById('quiz-standard-selection');
         const qMatch = document.getElementById('quiz-level-matching');
@@ -1009,22 +1022,17 @@ function showSection(id) {
     } else if (id === 'bookmark') {
         const bList = document.getElementById('bookmark-list');
         if(bList) bList.innerHTML = ""; 
-
-        // ✨ 탭에 다시 들어오면 모든 북마크 버튼 스타일을 초기화
         ['A', 'B', 'C', 'D', 'E'].forEach(l => {
             const btn = document.getElementById(`bm-btn-${l}`);
             if (btn) {
-                btn.style.opacity = '1'; // 다시 100% 진하게
+                btn.style.opacity = '1';
                 btn.style.transform = 'scale(1)';
                 btn.style.border = '3px solid transparent';
                 btn.style.boxShadow = 'none';
             }
         });
     } else if (id === 'checklist') { 
-        // =======================================================
-        // 2. [추가] 나의 체크리스트 탭 클릭 시 DB 데이터 다시 불러오기
-        // =======================================================
-        if (typeof initChecklist === 'function') initChecklist();
+        if (typeof initChecklist === 'function') initChecklist(); // 나의 체크리스트 복원!
     }
 }
 
