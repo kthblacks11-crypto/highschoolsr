@@ -26,36 +26,53 @@ let currentUploadedImageUrl = null;
 auth.onAuthStateChanged(async (user) => {
     const loginBtn = document.getElementById('login-btn');
     const logoutBtn = document.getElementById('logout-btn');
-    const deleteAccountBtn = document.getElementById('delete-account-btn'); // 🟢 탈퇴 버튼 불러오기
+    const deleteAccountBtn = document.getElementById('delete-account-btn'); 
     const userInfo = document.getElementById('user-info');
     const adminFeedbackBtn = document.getElementById('admin-feedback-btn'); 
     const adminModeBtn = document.getElementById('admin-mode-btn'); 
 
     if (user) {
-        // 로그인 성공 시 UI 변경
         loginBtn.style.display = 'none';
         logoutBtn.style.display = 'inline-block';
-        if(deleteAccountBtn) deleteAccountBtn.style.display = 'inline-block'; // 🟢 탈퇴 버튼 보이기
+        if(deleteAccountBtn) deleteAccountBtn.style.display = 'inline-block'; 
         userInfo.innerText = user.displayName + " 선생님 환영합니다.";
         
-        // 💡 페이지 로드 시 window.onload에서 데이터를 이미 불러오므로, 
-        // 여기서는 유저 개인 정보(체크리스트, 저장된 평가 등)만 갱신합니다.
         initChecklist(); 
-        
         if (typeof renderSavedAssessments === "function") {
             renderSavedAssessments(); 
         }
         
-        // 관리자 권한 확인
+        // 💡 관리자 권한 확인 및 실시간 의견 개수 뱃지 표시
         if (user.email === "kthblacks11@gmail.com") {
-            if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'inline-block';
+            if(adminFeedbackBtn) {
+                adminFeedbackBtn.style.display = 'inline-block';
+                adminFeedbackBtn.style.position = 'relative'; // 뱃지 위치 조정을 위해 추가
+                
+                // DB에서 의견(developer_feedback) 개수를 실시간 감시
+                db.collection('developer_feedback').onSnapshot(snapshot => {
+                    let badge = document.getElementById('admin-fb-badge');
+                    if (!badge) {
+                        badge = document.createElement('span');
+                        badge.id = 'admin-fb-badge';
+                        badge.style.cssText = 'position: absolute; top: -8px; right: -8px; background: #ef4444; color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);';
+                        adminFeedbackBtn.appendChild(badge);
+                    }
+                    
+                    if (snapshot.size > 0) {
+                        badge.innerText = snapshot.size;
+                        badge.style.display = 'flex';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                });
+            }
             if(adminModeBtn) adminModeBtn.style.display = 'inline-block';
         }
     } else {
         // 로그아웃 상태
         loginBtn.style.display = 'inline-block';
         logoutBtn.style.display = 'none';
-        if(deleteAccountBtn) deleteAccountBtn.style.display = 'none'; // 🟢 탈퇴 버튼 숨기기
+        if(deleteAccountBtn) deleteAccountBtn.style.display = 'none'; 
         userInfo.innerText = "로그인이 필요합니다.";
         if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'none';
         if(adminModeBtn) adminModeBtn.style.display = 'none';
@@ -601,16 +618,21 @@ function resetAnalysis(keepPassages = false) {
 
     // 🟢 [핵심] 완전히 새로 시작할 때만(keepPassages가 false일 때만) 
     // 보관함 창을 닫고 데이터를 깨끗하게 비웁니다.
+    // 🟢 [핵심] 완전히 새로 시작할 때만 보관함 창을 닫습니다.
     if (keepPassages !== true) {
         const tray = document.getElementById('common-passage-tray');
         const icon = document.getElementById('tray-icon');
         if (tray) tray.style.display = 'none';
         if (icon) icon.innerText = '📚';
 
-        commonPassages = [];
-        if(document.getElementById('passage-thumbnails')) document.getElementById('passage-thumbnails').innerHTML = '';
+        // 💡 선생님 요청 반영: 지문 보관함이 이미 '비어있을 때만' 내부 배열을 청소합니다.
+        // (수학 등 다른 교과 작업 시에는 어차피 비어있으므로 안전하게 청소됨)
+        if (typeof commonPassages === 'undefined' || commonPassages.length === 0) {
+            commonPassages = [];
+            if(document.getElementById('passage-thumbnails')) document.getElementById('passage-thumbnails').innerHTML = '';
+        }
     }
-}
+} // <-- resetAnalysis 함수 끝
 
 async function checkApiError(response) {
     if (!response.ok) {
@@ -2864,23 +2886,49 @@ async function deleteStandardFromDB() {
 // ==========================================
 // 🛠️ 관리자 모드: 기존 문항(Question) 수정 및 삭제 로직
 // ==========================================
-let currentEditingAllQuestions = []; // 현재 선택된 성취기준의 모든 문항 임시 저장
+let currentEditingAllQuestions = {}; // 배열([])에서 객체({})로 변경!
 
-async function loadStandardsForManage() {
-    const subject = document.getElementById('admin-manage-q-subject').value;
+async function loadQuestionsForEdit() {
     const stdSelect = document.getElementById('admin-manage-q-standard');
-    stdSelect.innerHTML = '<option value="">로딩 중...</option>';
-    if (!subject) return;
+    const docId = stdSelect.value;
+    const fields = document.getElementById('question-edit-fields');
+    if(fields) fields.style.display = 'none';
 
-    const snapshot = await db.collection('standards_2022').where('subject', '==', subject).get();
-    let stds = [];
-    snapshot.forEach(doc => stds.push({ id: doc.id, code: doc.data().code, desc: doc.data().desc }));
-    stds.sort((a,b) => a.code.localeCompare(b.code));
+    const qSelect = document.getElementById('admin-manage-q-list');
+    if (!docId) {
+        if(qSelect) qSelect.innerHTML = '<option value="">-- 성취기준을 먼저 선택하세요 --</option>';
+        return;
+    }
 
-    stdSelect.innerHTML = '<option value="">-- 성취기준 선택 --</option>';
-    stds.forEach(std => {
-        stdSelect.innerHTML += `<option value="${std.id}">${std.code} ${std.desc.substring(0, 20)}...</option>`;
-    });
+    qSelect.innerHTML = '<option value="">문항을 불러오는 중... ⏳</option>';
+
+    try {
+        // 💡 선택된 성취기준의 진짜 코드를 DB에서 안전하게 가져옵니다.
+        const stdDoc = await db.collection('standards_2022').doc(docId).get();
+        if (!stdDoc.exists) throw new Error("성취기준 없음");
+        const stdCode = stdDoc.data().code.replace(/[\[\]\s]/g, '');
+        const withBracketCode = `[${stdCode}]`;
+
+        const snapshot = await db.collection('transformed_bank')
+                         .where('standard_code', 'in', [stdCode, withBracketCode])
+                         .get();
+        
+        currentEditingAllQuestions = {}; // 초기화
+        qSelect.innerHTML = '<option value="">-- 수정할 문항 선택 --</option>';
+
+        if (snapshot.empty) {
+            qSelect.innerHTML = '<option value="">등록된 문항이 없습니다.</option>';
+            return;
+        }
+
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            currentEditingAllQuestions[doc.id] = { id: doc.id, ...data }; 
+            qSelect.innerHTML += `<option value="${doc.id}">[${data.level}] ${data.question.substring(0, 30)}...</option>`;
+        });
+    } catch (error) {
+        qSelect.innerHTML = '<option value="">데이터 로드 실패</option>';
+    }
 }
 
 async function loadQuestionsForEdit() {
@@ -2923,15 +2971,18 @@ async function loadQuestionsForEdit() {
 }
 
 function populateQuestionEditFields() {
-    const idx = document.getElementById('admin-manage-q-list').value;
+    const qDocId = document.getElementById('admin-manage-q-list').value;
     const fields = document.getElementById('question-edit-fields');
-    if (idx === "") { fields.style.display = 'none'; return; }
+    if (!qDocId) { fields.style.display = 'none'; return; }
 
-    const q = currentEditingAllQuestions[idx];
-    document.getElementById('manage-q-text').value = q.q;
+    const q = currentEditingAllQuestions[qDocId];
+    if (!q) return;
+
+    // 💡 DB 필드명 매핑 보정 완벽 적용
+    document.getElementById('manage-q-text').value = q.question || q.q || "";
     document.getElementById('manage-q-answer').value = q.answer || "";
-    document.getElementById('manage-q-level').value = q.level;
-    document.getElementById('manage-q-reason').value = q.reason;
+    document.getElementById('manage-q-level').value = q.level || "C";
+    document.getElementById('manage-q-reason').value = q.reason || "";
     fields.style.display = 'block';
 }
 
@@ -5917,7 +5968,7 @@ function skipLevelQuestion() {
     currentLevelQ = (currentLevelQ + 1) % currentQuestions.length;
     loadLevelQuestion();
 }
-// ✅ 관리자 도구의 드롭다운을 전체 교과군으로 꽉 채워주는 함수
+// ✅ 관리자 도구의 드롭다운을 메인 화면처럼 예쁜 버튼 그룹으로 자동 변환해 주는 함수
 function initAdminDropdowns() {
     const adminSelectIds = [
         'admin-subject', 
@@ -5932,19 +5983,58 @@ function initAdminDropdowns() {
         const selectEl = document.getElementById(id);
         if (!selectEl) return;
         
-        let html = '<option value="">-- 과목을 선택하세요 --</option>';
+        // 이미 생성된 버튼이 있다면 중복 생성 방지
+        if (selectEl.previousElementSibling && selectEl.previousElementSibling.className === 'admin-group-btns') return;
         
-        for (const groupId in curriculumMap) {
-            if (groupId === '기타') continue;
-            html += `<optgroup label="📚 ${groupNames[groupId] || '기타'}">`;
-            for (const category in curriculumMap[groupId]) {
-                curriculumMap[groupId][category].forEach(sub => {
-                    html += `<option value="${sub.id}">${sub.name}</option>`;
+        // 버튼을 담을 상자 생성
+        const btnGroup = document.createElement('div');
+        btnGroup.className = 'admin-group-btns';
+        btnGroup.style.cssText = 'display: flex; gap: 5px; margin-bottom: 10px; flex-wrap: wrap;';
+        
+        const groups = ['math', 'korean', 'english', 'social', 'science'];
+        
+        groups.forEach(groupId => {
+            const btn = document.createElement('button');
+            btn.innerText = groupNames[groupId];
+            btn.style.cssText = 'flex: 1; padding: 6px; border: 1px solid #cbd5e1; background: white; border-radius: 4px; cursor: pointer; font-size: 0.85rem; transition: 0.2s;';
+            
+            btn.onclick = (e) => {
+                e.preventDefault();
+                // 클릭 시 다른 버튼들 색상 초기화
+                Array.from(btnGroup.children).forEach(b => { 
+                    b.style.background = 'white'; 
+                    b.style.color = '#334155'; 
+                    b.style.fontWeight = 'normal'; 
+                    b.style.borderColor = '#cbd5e1';
                 });
-            }
-            html += `</optgroup>`;
-        }
-        selectEl.innerHTML = html;
+                // 현재 눌린 버튼 강조
+                btn.style.background = '#e0e7ff'; 
+                btn.style.color = '#1e40af'; 
+                btn.style.fontWeight = 'bold';
+                btn.style.borderColor = '#3b82f6';
+                
+                // 하위 성취기준 드롭다운 업데이트
+                let html = '<option value="">-- 세부 과목을 선택하세요 --</option>';
+                if (curriculumMap[groupId]) {
+                    for (const category in curriculumMap[groupId]) {
+                        html += `<optgroup label="📂 ${category}">`;
+                        curriculumMap[groupId][category].forEach(sub => {
+                            html += `<option value="${sub.id}">${sub.name}</option>`;
+                        });
+                        html += `</optgroup>`;
+                    }
+                }
+                selectEl.innerHTML = html;
+                
+                // 💡 드롭다운 값이 바뀌었음을 강제로 알려서 하위 목록도 갱신하게 만듦
+                selectEl.dispatchEvent(new Event('change')); 
+            };
+            btnGroup.appendChild(btn);
+        });
+        
+        // 기존 셀렉트박스 바로 위에 예쁜 버튼 그룹 삽입!
+        selectEl.parentNode.insertBefore(btnGroup, selectEl);
+        selectEl.innerHTML = '<option value="">-- 위 교과군 버튼을 먼저 선택하세요 --</option>';
     });
 }
 // ==========================================
