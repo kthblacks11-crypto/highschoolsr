@@ -1225,11 +1225,12 @@ async function startLevelMatching(code) {
                    </div>`;
         
             let imgHtml = data.image ? `<br><img src="${data.image}" style="max-width:100%; margin-top:15px; border-radius:8px; border:1px solid #cbd5e1; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">` : "";
-                   combinedQuestions.push({
+                combinedQuestions.push({
+                    id: doc.id,  // 💡 추가된 부분: 원본 문서의 고유 ID를 잊지 않고 챙깁니다.
                     q: sourceBadge + (data.question || data.q || "문제 내용이 없습니다."),
                     level: extractedLevel,
-                    reason: extractedReason, // 💡 수정됨!
-                    answer: data.answer || "정답 정보 없음" 
+                    reason: extractedReason,
+                    answer: data.answer || "정답 정보 없음"
                 });
             });
     } catch (error) { console.warn("DB 로드 실패"); }
@@ -5114,6 +5115,7 @@ async function submitSpecificFeedback() {
 
         const feedbackData = {
             type: "문항 매칭 이의 제기",
+            bank_doc_id: currentQuestions[currentLevelQ].id, // 💡 추가된 부분: AI와 관리자에게 원본 문서 ID를 전달합니다.
             question: questionText,
             original_standard: currentStandardCode,
             original_level: currentQuestions[currentLevelQ].level,
@@ -5221,18 +5223,22 @@ async function acceptFeedback(feedbackId) {
         const finalAns = document.getElementById(`admin-prop-ans-${feedbackId}`).value.trim();
         const finalReason = document.getElementById(`admin-prop-reason-${feedbackId}`).value.trim();
         
-        const snapshot = await db.collection('transformed_bank')
-                                 .where('question', '==', fbData.question)
-                                 .get();
-                                 
-        if (snapshot.empty) {
-            alert("원본 문항을 찾을 수 없습니다. (이미 삭제되었거나 내용이 변경되었을 수 있습니다.)");
+        // 💡 텍스트 검색 대신, 저장해둔 고유 ID로 원본 문항에 다이렉트 접근
+        if (!fbData.bank_doc_id) {
+            alert("오류: 원본 문항의 고유 식별 코드가 누락되었습니다. (이전 방식의 피드백일 수 있습니다.)");
+            return;
+        }
+
+        const targetDocRef = db.collection('transformed_bank').doc(fbData.bank_doc_id);
+        const targetDoc = await targetDocRef.get();
+
+        if (!targetDoc.exists) {
+            alert("원본 문항을 찾을 수 없습니다. (이미 삭제된 문항일 수 있습니다.)");
             return;
         }
         
         // ✨ 해당 문항의 4가지 필드를 완벽하게 덮어씁니다.
-        const targetDocId = snapshot.docs[0].id;
-        await db.collection('transformed_bank').doc(targetDocId).update({
+        await targetDocRef.update({
             standard_code: finalStd,
             level: finalLvl,
             answer: finalAns,
