@@ -1,3 +1,15 @@
+// ==========================================
+// 👑 시스템 관리자 및 권한 설정
+// ==========================================
+const ADMIN_EMAILS = [
+    'kthblacks11@gmail.com' // 선생님 아이디 (기본 관리자) 주의 이때, 콤마(,) 넣기
+    //'추가할선생님이메일@gmail.com' // 💡 필요시 이 란에 다른 선생님 이메일을 콤마로 연결하여 계속 추가하세요!
+];
+
+let currentUserRole = 'guest'; // 'admin'(관리자) 또는 'user'(일반 교사)
+let currentUserGroup = 'math'; // 기본 교과군
+// ==========================================
+
 let currentEditingAssessmentIndex = -1;
 
 const firebaseConfig = {
@@ -32,28 +44,35 @@ auth.onAuthStateChanged(async (user) => {
     const userInfo = document.getElementById('user-info');
     const adminFeedbackBtn = document.getElementById('admin-feedback-btn'); 
     const adminModeBtn = document.getElementById('admin-mode-btn'); 
+    const curriculumSelector = document.querySelector('.curriculum-selector'); // 상단 교과 탭
 
     if (user) {
-        loginBtn.style.display = 'none';
-        logoutBtn.style.display = 'inline-block';
+        // [공통 적용 UI]
+        if(loginBtn) loginBtn.style.display = 'none';
+        if(logoutBtn) logoutBtn.style.display = 'inline-block';
         if(deleteAccountBtn) deleteAccountBtn.style.display = 'inline-block'; 
-        userInfo.innerText = user.displayName + " 선생님 환영합니다.";
+        if(userInfo) userInfo.innerText = user.displayName + " 선생님 환영합니다.";
         
-        initChecklist(); 
         if (typeof renderSavedAssessments === "function") {
             renderSavedAssessments(); 
         }
-        
-        // 💡 관리자 권한 확인 및 실시간 '새 메시지' 뱃지 표시
-        if (user.email === "kthblacks11@gmail.com") {
+
+        // ✨ [핵심] 권한 분리: 관리자 vs 일반 교사
+        if (ADMIN_EMAILS.includes(user.email)) {
+            // ==========================================
+            // 👑 관리자 모드 (모든 과목 접근 가능 + 알림 뱃지)
+            // ==========================================
+            currentUserRole = 'admin';
+            if (curriculumSelector) curriculumSelector.style.display = 'flex'; // 상단 탭 켜기
+            if (adminModeBtn) adminModeBtn.style.display = 'inline-block';
+
+            // 선생님이 작성하신 실시간 새 메시지 뱃지 로직 (완벽 보존!)
             if(adminFeedbackBtn) {
                 adminFeedbackBtn.style.display = 'inline-block';
                 adminFeedbackBtn.style.position = 'relative';
                 
-                // 기존 감시기 해제 (중복 실행 방지)
                 if (feedbackUnsubscribe) feedbackUnsubscribe();
                 
-                // DB에서 의견(developer_feedback) 개수를 실시간 감시
                 feedbackUnsubscribe = db.collection('developer_feedback').onSnapshot(snapshot => {
                     let badge = document.getElementById('admin-fb-badge');
                     if (!badge) {
@@ -63,7 +82,6 @@ auth.onAuthStateChanged(async (user) => {
                         adminFeedbackBtn.appendChild(badge);
                     }
                     
-                    // 💡 [핵심] 선생님이 마지막으로 확인한 시간 이후에 등록된 새 글만 카운트
                     const lastChecked = parseInt(localStorage.getItem('admin_last_checked_feedback') || "0");
                     let newCount = 0;
                     
@@ -83,17 +101,58 @@ auth.onAuthStateChanged(async (user) => {
                     }
                 });
             }
-            if(adminModeBtn) adminModeBtn.style.display = 'inline-block';
+
+            // 관리자는 기본 설정대로 화면 그리기
+            initDashboard(); 
+            if (typeof initChecklist === 'function') initChecklist(); 
+            if (typeof loadBookmark === 'function') loadBookmark(); 
+            showSection('dashboard');
+
+        } else {
+            // ==========================================
+            // 👩‍🏫 일반 교사 모드 (본인 과목만 접근 가능)
+            // ==========================================
+            currentUserRole = 'user';
+            if (curriculumSelector) curriculumSelector.style.display = 'none'; // 상단 탭 투명 망토!
+            
+            // 일반 교사에게는 관리자 버튼 숨기기
+            if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'none';
+            if(adminModeBtn) adminModeBtn.style.display = 'none';
+
+            try {
+                const profileDoc = await db.collection('user_profiles').doc(user.uid).get();
+                if (profileDoc.exists && profileDoc.data().mainGroup) {
+                    // 1. 이미 과목을 선택한 기록이 있는 경우 -> 해당 과목으로 화면 고정
+                    currentUserGroup = profileDoc.data().mainGroup;
+                    changeGroup(currentUserGroup); 
+                    
+                    initDashboard();
+                    if (typeof initChecklist === 'function') initChecklist(); 
+                    if (typeof loadBookmark === 'function') loadBookmark(); 
+                    showSection('dashboard');
+                } else {
+                    // 2. 기록이 없는 최초 로그인인 경우 -> 과목 선택 팝업창 띄우기
+                    document.getElementById('subject-selection-modal').style.display = 'flex';
+                }
+            } catch (e) {
+                console.error("프로필 로딩 에러:", e);
+            }
         }
+        
     } else {
-        // 로그아웃 상태
-        loginBtn.style.display = 'inline-block';
-        logoutBtn.style.display = 'none';
+        // ==========================================
+        // 🚪 로그아웃 상태 처리
+        // ==========================================
+        if(loginBtn) loginBtn.style.display = 'inline-block';
+        if(logoutBtn) logoutBtn.style.display = 'none';
         if(deleteAccountBtn) deleteAccountBtn.style.display = 'none'; 
-        userInfo.innerText = "로그인이 필요합니다.";
+        if(userInfo) userInfo.innerText = "로그인이 필요합니다.";
+        
         if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'none';
         if(adminModeBtn) adminModeBtn.style.display = 'none';
-        // 로그아웃 시 감시기 끄기
+        
+        // 로그아웃 시 팝업창 닫기 및 뱃지 감시기 끄기
+        document.getElementById('subject-selection-modal').style.display = 'none';
         if (feedbackUnsubscribe) { feedbackUnsubscribe(); feedbackUnsubscribe = null; }
     }
 });
@@ -5586,18 +5645,39 @@ function showAiReason(qIdx) {
 // 📚 [2탄] 성취기준 사전 (아코디언 및 자동 닫힘 로직)
 // ==========================================
 
+// 💡 일반 교사용: 최초 로그인 시 선택한 교과군 DB에 저장하기
+async function saveUserSubjectGroup(group) {
+    try {
+        await db.collection('user_profiles').doc(auth.currentUser.uid).set({
+            mainGroup: group,
+            email: auth.currentUser.email
+        }, { merge: true }); // 기존 데이터 덮어쓰기
+
+        currentUserGroup = group;
+        document.getElementById('subject-selection-modal').style.display = 'none'; // 팝업 닫기
+        
+        // 해당 교과군으로 시스템 전체 강제 변환
+        changeGroup(group); 
+        initDashboard();
+        if (typeof initChecklist === 'function') initChecklist(); 
+        if (typeof loadBookmark === 'function') loadBookmark(); 
+        showSection('dashboard');
+        
+        alert("✅ 담당 교과 설정이 완료되었습니다!");
+    } catch(e) {
+        alert("설정 저장 실패: " + e.message);
+    }
+}
+
 // 1. 패널 열기/닫기
 function toggleDictionaryPanel() {
     const panel = document.getElementById('floating-dictionary-panel');
-    if (panel) {
-        panel.classList.toggle('open');
-        if (panel.classList.contains('open')) {
-            // 패널이 열렸을 때 드롭다운이 비어있으면 초기 세팅(수학) 실행
-            const select = document.getElementById('dict-subject-select');
-            if (select.options.length <= 1) {
-                changeDictGroup('math');
-            }
-        }
+    panel.classList.toggle('show');
+
+    // 일반 사용자라면 사전 안의 [수학/국어/영어/사회/과학] 탭 버튼도 싹 숨기고 본인 교과로 고정!
+    if (currentUserRole === 'user') {
+        document.querySelectorAll('.dict-group-btn').forEach(btn => btn.style.display = 'none');
+        changeDictGroup(currentUserGroup); 
     }
 }
 
@@ -6371,7 +6451,7 @@ const exposeToWindow = {
     toggleCommonPassageTray, handlePassageFiles, pastePassageFromClipboard, removePassage, 
     toggleExamRangeInputs, previewExamFile, executeExamAnalysis, resetAiLevels,
     prevLevelQuestion, skipLevelQuestion, saveAndClosePassageTray,   clearAllPassages,
-    resetChecklist, openJournalModal, closeJournalModal, saveJournalEntry, deleteJournalEntry
+    resetChecklist, openJournalModal, closeJournalModal, saveJournalEntry, deleteJournalEntry, saveUserSubjectGroup
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {

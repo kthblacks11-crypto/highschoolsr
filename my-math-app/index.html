@@ -799,7 +799,23 @@
             </div>
     </div>
 </div>
-
+<div class="modal" id="subject-selection-modal" style="display: none; z-index: 9999; background-color: rgba(0,0,0,0.8);">
+    <div class="modal-content" style="max-width: 450px; text-align: center; padding: 2rem; border-radius: 12px; background: white;">
+        <h2 style="color: #1e3a8a; margin-top: 0;">🎉 시스템 가입을 환영합니다!</h2>
+        <p style="color: #475569; margin-bottom: 20px; line-height: 1.5;">
+            선생님의 <strong>담당 교과군</strong>을 먼저 선택해 주세요.<br>
+            <span style="font-size:0.85rem; color:#ef4444; background: #fee2e2; padding: 2px 6px; border-radius: 4px;">(※ 최초 1회만 선택하며, 이후 해당 교과의 과목만 전용으로 표시됩니다.)</span>
+        </p>
+        
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button onclick="saveUserSubjectGroup('math')" class="save-btn" style="width: 100%; background:#3b82f6; font-size: 1.1rem; padding: 12px;">📐 수학</button>
+            <button onclick="saveUserSubjectGroup('korean')" class="save-btn" style="width: 100%; background:#3b82f6; font-size: 1.1rem; padding: 12px;">📖 국어</button>
+            <button onclick="saveUserSubjectGroup('english')" class="save-btn" style="width: 100%; background:#3b82f6; font-size: 1.1rem; padding: 12px;">🗣️ 영어</button>
+            <button onclick="saveUserSubjectGroup('social')" class="save-btn" style="width: 100%; background:#3b82f6; font-size: 1.1rem; padding: 12px;">🌍 사회</button>
+            <button onclick="saveUserSubjectGroup('science')" class="save-btn" style="width: 100%; background:#3b82f6; font-size: 1.1rem; padding: 12px;">🔬 과학</button>
+        </div>
+    </div>
+</div>
 <script type="module" src="./src/main.js"></script>
 <div class="modal" id="written-assessment-modal">
     <div class="modal-content" style="max-width: 500px;">
