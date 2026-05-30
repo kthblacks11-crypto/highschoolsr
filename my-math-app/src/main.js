@@ -3126,27 +3126,61 @@ async function createNewProject() {
     }
 }
 
-// 💡 [수정됨] 단계 이동 시 공통 지문 상태를 체크하는 기능이 추가된 goToStep
+let currentActiveStep = 1; // 현재 열려있는 탭 번호
+
 function goToStep(stepNum) {
-    // 1. 공통 지문 보관함 상태 확인 및 경고 로직 (새로 추가된 부분)
-    if (typeof commonPassages !== 'undefined' && commonPassages.length > 0) {
-        const isLeave = confirm("⚠️ 현재 공통 지문 보관함에 지문이 있습니다.\n\n다른 단계로 이동하면 보관된 지문이 모두 초기화됩니다. 계속 이동하시겠습니까?");
+    // 1. [핵심 업그레이드] 국어/영어(지문)뿐만 아니라 수학(이미지/텍스트) 작업 중인지 모두 검사합니다.
+    const hasPassages = typeof commonPassages !== 'undefined' && commonPassages.length > 0;
+    
+    // 문제 이미지가 업로드 되어 있는지 확인
+    const imageUpload = document.getElementById('question-image-upload');
+    const hasImage = imageUpload && imageUpload.value !== '';
+    
+    // 텍스트가 입력되어 있는지 확인
+    const textInput = document.getElementById('question-text');
+    const hasText = textInput && textInput.value.trim() !== '';
+
+    // 2. 작업 중인 내용이 단 하나라도 있다면 통합 경고창을 띄웁니다.
+    if (hasPassages || hasImage || hasText) {
+        const isLeave = confirm("⚠️ 현재 작업 중인 내용(지문, 이미지 또는 텍스트)이 있습니다.\n\n다른 메뉴로 이동하면 작업 내역이 모두 초기화됩니다. 계속하시겠습니까?");
         
         if (!isLeave) {
-            return; // 취소를 누르면 여기서 함수를 종료하여 이동을 막음
-        } else {
-            // 확인을 누르면 지문 배열 및 화면 초기화 후 아래 이동 로직 진행
-            commonPassages = [];
-            // ⚠️ HTML에 있는 지문 이미지 컨테이너 ID를 확인해 주세요 (예: common-passage-list)
-            const container = document.getElementById('common-passage-list'); 
-            if (container) container.innerHTML = '';
+            return; // 취소 시 하던 작업을 유지하며 이동을 막음
         }
     }
 
-    // 2. 기존 로직 (선생님 원래 코드 그대로 유지)
-    const projectDetail = document.getElementById('project-detail-view');
-    if(projectDetail) projectDetail.style.display = 'none';
+    // 3. 선생님이 원하신 "완전 초기화" 로직 (경고창에서 확인을 눌렀거나, 아예 빈 화면이었을 경우 실행)
+    
+    // (1) 지문 데이터 완벽 비우기
+    if (typeof commonPassages !== 'undefined') {
+        commonPassages = [];
+        const container = document.getElementById('common-passage-list'); 
+        if (container) container.innerHTML = '';
+    }
 
+    // (2) 분할점수 폴더 화면 초기화 (상세 화면 닫고 폴더 목록으로)
+    const projectDetail = document.getElementById('project-detail-view');
+    const projectList = document.getElementById('project-list-view'); 
+    if (projectDetail) projectDetail.style.display = 'none';
+    if (projectList) projectList.style.display = 'block';
+
+    // (3) 문항 매칭 화면 비우기 (업로드된 이미지, 미리보기 등 해제)
+    if (typeof resetAnalysis === 'function') {
+        resetAnalysis(); 
+    }
+
+    // (4) 잔여 텍스트 및 AI 분석 결과창 강제 청소
+    const textInputs = ['question-text', 'chat-input']; 
+    textInputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    
+    const resultAreas = document.querySelectorAll('.result-content, .analysis-result');
+    resultAreas.forEach(el => el.innerHTML = '');
+
+
+    // 4. 원래 목적이었던 '탭 화면 이동' 처리
     [1, 2, 3, 4].forEach(n => {
         const step = document.getElementById(`cut-score-step${n}`);
         if(step) step.style.display = 'none';
@@ -3154,9 +3188,14 @@ function goToStep(stepNum) {
         if(indicator) indicator.style.color = '#cbd5e1';
     });
     
-    document.getElementById(`cut-score-step${stepNum}`).style.display = 'block';
+    const targetStep = document.getElementById(`cut-score-step${stepNum}`);
+    if(targetStep) targetStep.style.display = 'block';
+    
     const indicatorTarget = document.getElementById(`step${stepNum}-indicator`);
     if(indicatorTarget) indicatorTarget.style.color = 'var(--primary)';
+    
+    currentActiveStep = stepNum; 
+    window.scrollTo(0, 0); // 화면 맨 위로 정렬
 }
 
 async function openProject(projectId, projectName) {
