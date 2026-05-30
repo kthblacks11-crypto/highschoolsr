@@ -3013,12 +3013,21 @@ async function loadProjects() {
             let cardHtml = '';
             projects.forEach(data => {
                 const dateStr = data.createdAt ? data.createdAt.toDate().toLocaleDateString() : "방금 전";
+                
+                // 💡 1. 평가명 길이에 따라 폰트 크기를 동적으로 줄이는 로직 (말줄임 제거, 한 줄 유지)
                 let badges = data.assessments && data.assessments.length > 0 
-                    ? [...data.assessments].sort((a,b)=> (a.type==='written'&&b.type!=='written')?-1:1).map(a => `<span style="display:inline-flex; align-items:center; justify-content:center; background:${a.type === 'written' ? '#3b82f6' : '#10b981'}; color:white; padding:4px 8px; border-radius:4px; font-size:0.8rem; font-weight:bold; white-space:normal; word-break:keep-all; line-height:1.2; text-align:center;">${a.name}</span>`).join('') 
+                    ? [...data.assessments].sort((a,b)=> (a.type==='written'&&b.type!=='written')?-1:1).map(a => {
+                        
+                        // 글자 수 확인 후 크기 조절 (길어질수록 작아짐)
+                        let nameLen = a.name.length;
+                        let fontSize = nameLen > 12 ? '0.6rem' : (nameLen > 8 ? '0.65rem' : '0.75rem');
+                        let padding = nameLen > 8 ? '3px 5px' : '4px 8px';
+                        
+                        return `<span style="display:inline-block; white-space:nowrap; background:${a.type === 'written' ? '#3b82f6' : '#10b981'}; color:white; padding:${padding}; border-radius:4px; font-size:${fontSize}; font-weight:bold; margin:2px; letter-spacing:-0.5px;">${a.name}</span>`;
+                    }).join('') 
                     : '<span style="font-size: 0.8rem; color: #94a3b8;">평가 내역 없음</span>';
-
+        
                 const deleteBtn = isOwnerList ? `<button onclick="deleteProject('${data.id}', event)" style="position: absolute; top: 15px; right: 15px; background: #fee2e2; color: #ef4444; border: none; padding: 2px 5px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.65rem; z-index: 10;">폴더 삭제</button>` : '';
-                // 💡 더 이상 '팀원 삭제' 버튼을 쓰지 않고 '팀원 초대'만 남겨 깔끔하게 만듭니다.
                 const memberManagementBtns = isOwnerList ? `
                     <div style="position: absolute; top: 42px; right: 15px; display: flex; gap: 4px; z-index: 10;">
                         <button onclick="inviteCollaborator('${data.id}', event)" style="background: #dbeafe; color: #1e40af; border: none; padding: 2px 5px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.65rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">🤝 팀원 초대</button>
@@ -3029,22 +3038,22 @@ async function loadProjects() {
                 
                 let memberHtml = `<div style="position: absolute; top: ${listTop}; right: 15px; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; z-index: 5;">`;
                 memberHtml += '<span style="font-size: 0.6rem; color: #64748b; font-weight: bold; margin-bottom: 2px;">👥 참여 명단:</span>';
-                const memberList = data.collaborators ? data.collaborators : [user.email];
+                const memberList = data.collaborators ? data.collaborators : [auth.currentUser.email];
                 
                 memberList.forEach(memberEmail => {
                     const memberName = memberEmail.split('@')[0];
                     let removeBtn = '';
                     
-                    // 💡 방장일 경우, 본인을 제외한 다른 멤버 배지 옆에만 X(삭제) 버튼을 작게 띄웁니다.
-                    if (isOwnerList && memberEmail !== user.email) {
+                    if (isOwnerList && memberEmail !== auth.currentUser.email) {
                         removeBtn = `<button onclick="kickFromProject('${data.id}', '${memberEmail}', event)" style="margin-left: 4px; background: transparent; color: #ef4444; border: none; cursor: pointer; font-size: 0.75rem; font-weight: bold; padding: 0;">✕</button>`;
                     }
                     memberHtml += `<span style="font-size: 0.6rem; color: #10b981; font-weight: bold; background: #ecfdf5; padding: 2px 6px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); white-space: nowrap; display: inline-flex; align-items: center;">👤 ${memberName} ${removeBtn}</span>`;
                 });
                 memberHtml += '</div>';
         
+                // 💡 2. 레이아웃 분할: 위쪽(폴더정보)은 우측 여백을 주고, 아래쪽(배지)은 폭을 100% 쓰도록 변경
                 cardHtml += `
-                <div style="position: relative; border: 1px solid #cbd5e1; border-radius: 8px; padding: 1.5rem; background: white; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05); min-height: 120px;" 
+                <div style="position: relative; border: 1px solid #cbd5e1; border-radius: 8px; padding: 1.5rem; background: white; cursor: pointer; display: flex; flex-direction: column; min-height: 140px; box-sizing: border-box; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05);" 
                      onmouseover="this.style.borderColor='#3b82f6'; this.style.transform='translateY(-3px)';" 
                      onmouseout="this.style.borderColor='#cbd5e1'; this.style.transform='none';">
                      
@@ -3052,11 +3061,14 @@ async function loadProjects() {
                     ${memberManagementBtns}
                     ${memberHtml}
                     
-                    <div onclick="openProject('${data.id}', '${data.name}')" style="padding-right: 110px;">
+                    <div onclick="openProject('${data.id}', '${data.name}')" style="padding-right: 90px; flex-grow: 1;">
                         <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📁</div>
                         <h4 style="margin: 0 0 0.5rem 0; color: #1e293b; font-size: 1.1rem; word-break: keep-all;">${data.name}</h4>
-                        <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; color: #64748b;">생성일: ${dateStr}</p>
-                        <div style="border: 2px dashed #cbd5e1; border-left: 5px solid #3b82f6; border-radius: 6px; padding: 12px 10px 6px 10px; margin-top: 15px; display: block; background: #f8fafc;">${badges}</div>
+                        <p style="margin: 0; font-size: 0.8rem; color: #64748b;">생성일: ${dateStr}</p>
+                    </div>
+                    
+                    <div onclick="openProject('${data.id}', '${data.name}')" style="margin-top: 15px; border: 2px dashed #cbd5e1; border-left: 5px solid #3b82f6; border-radius: 6px; padding: 8px; background: #f8fafc; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 4px; max-height: 75px; overflow-y: auto; width: 100%; box-sizing: border-box;">
+                        ${badges}
                     </div>
                 </div>`;
             });
@@ -5647,26 +5659,6 @@ function executeExamAnalysis() {
     startExamAiAnalysis(tempExamBase64);
 }
 
-// 4. "분석 시작하기" 버튼을 눌렀을 때 실행되는 함수
-function executeExamAnalysis() {
-    if (!tempExamBase64) {
-        alert("시험지 파일이 준비되지 않았습니다. 다시 선택해주세요.");
-        return;
-    }
-
-    // 💡 [수정1] AI 분석을 서버에 요청하기 '전'에 안내창을 띄우도록 변경!
-    if (typeof extractedQuestionsArray !== 'undefined' && extractedQuestionsArray.length > 0) {
-        const isAppend = confirm("기존에 추출된 문항이 있습니다. 설정하신 범위의 문항을 추가로 추출하여 아래에 덧붙이시겠습니까?\n\n[확인]: 기존 목록 뒤에 이어서 추가\n[취소]: 기존 내용 싹 지우고 새로 시작");
-        if (!isAppend) {
-            extractedQuestionsArray = []; 
-        }
-    } else {
-        extractedQuestionsArray = [];
-    }
-
-    document.getElementById('start-analysis-btn').style.display = 'none';
-    startExamAiAnalysis(tempExamBase64);
-}
 
 async function startExamAiAnalysis(base64Data) {
     if (!requireApiKey()) {
