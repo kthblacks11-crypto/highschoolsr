@@ -1503,6 +1503,7 @@ function getTodayDateString() {
 }
 
 // 3. 수업일지 팝업창 열기
+// 3. 수업일지 팝업창 열기 (과목별 맞춤 팁 적용)
 async function openJournalModal(code, desc) {
     currentJournalStdCode = code;
     document.getElementById('journal-std-code').innerText = code;
@@ -1511,6 +1512,27 @@ async function openJournalModal(code, desc) {
     document.getElementById('journal-date').value = getTodayDateString();
     document.getElementById('journal-title').value = '';
     document.getElementById('journal-content').value = '';
+
+    // ✨ 교과별 맞춤 팁 및 수식 입력기 가리기 로직
+    const mathTip = document.getElementById('journal-math-tip');
+    const tipText = document.getElementById('journal-tip-text');
+    
+    // 수학 과목군 배열 (선생님 시스템의 수학 코드들)
+    const mathSubjects = ['common1', 'common2', 'algebra', 'calculus1', 'calculus2', 'geometry', 'stats', 'ai-math'];
+    
+    if (mathSubjects.includes(currentSubject)) {
+        // 수학 과목일 때: 수식 안내 ON, 수학용 팁
+        mathTip.style.display = 'block';
+        tipText.innerHTML = "개념 설명 방식, 학생들의 자주 틀리는 오개념, 다음 시간 유의점 등을 기록하세요.";
+    } else if (currentSubject === 'science' || currentSubject.includes('sci')) {
+        // 과학 관련 과목일 때: 수식 안내 OFF, 심화/면접용 팁
+        mathTip.style.display = 'none';
+        tipText.innerHTML = "단백질 구조 예측, 유전체 의학, 의료 윤리 등 심화 주제에 대한 학생들의 질문이나 토론 내용을 기록해 두면 의약학계열 진학 지도 시 훌륭한 자료가 됩니다.";
+    } else {
+        // 그 외 과목일 때: 수식 안내 OFF, 기본 팁
+        mathTip.style.display = 'none';
+        tipText.innerHTML = "오늘 수업의 핵심, 학생들의 반응, 다음 시간 유의점 등을 기록하세요.";
+    }
 
     document.getElementById('journal-modal').style.display = 'flex';
     
