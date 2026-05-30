@@ -3126,8 +3126,24 @@ async function createNewProject() {
     }
 }
 
-// 🟢 [수정됨] 공통 단계 이동 함수 (프로젝트 뷰 끄기 기능 추가)
+// 💡 [수정됨] 단계 이동 시 공통 지문 상태를 체크하는 기능이 추가된 goToStep
 function goToStep(stepNum) {
+    // 1. 공통 지문 보관함 상태 확인 및 경고 로직 (새로 추가된 부분)
+    if (typeof commonPassages !== 'undefined' && commonPassages.length > 0) {
+        const isLeave = confirm("⚠️ 현재 공통 지문 보관함에 지문이 있습니다.\n\n다른 단계로 이동하면 보관된 지문이 모두 초기화됩니다. 계속 이동하시겠습니까?");
+        
+        if (!isLeave) {
+            return; // 취소를 누르면 여기서 함수를 종료하여 이동을 막음
+        } else {
+            // 확인을 누르면 지문 배열 및 화면 초기화 후 아래 이동 로직 진행
+            commonPassages = [];
+            // ⚠️ HTML에 있는 지문 이미지 컨테이너 ID를 확인해 주세요 (예: common-passage-list)
+            const container = document.getElementById('common-passage-list'); 
+            if (container) container.innerHTML = '';
+        }
+    }
+
+    // 2. 기존 로직 (선생님 원래 코드 그대로 유지)
     const projectDetail = document.getElementById('project-detail-view');
     if(projectDetail) projectDetail.style.display = 'none';
 
@@ -5358,6 +5374,35 @@ function toggleCommonPassageTray() {
     }
 }
 
+// 💡 [추가] 지문 보관함 저장 및 서랍 닫기
+function saveAndClosePassageTray() {
+    const tray = document.getElementById('common-passage-tray');
+    if (tray) {
+        tray.style.display = 'none'; // 서랍 닫기
+    }
+    // 알림창이 번거로우시면 아래 alert는 지우셔도 됩니다.
+    alert("✅ 지문이 안전하게 보관되었습니다. 이제 아래에서 문항을 계속 분석하세요!");
+}
+
+// 💡 [추가] 지문 보관함 전체 초기화
+function clearAllPassages() {
+    // ⚠️ 선생님 코드에 있는 실제 지문 배열 변수명이 commonPassages가 맞는지 확인해 주세요.
+    if (typeof commonPassages === 'undefined' || commonPassages.length === 0) {
+        alert("보관된 지문이 없습니다.");
+        return;
+    }
+    
+    if (confirm("보관된 모든 공통 지문을 삭제하시겠습니까?")) {
+        commonPassages = []; // 배열 싹 비우기
+        
+        // ⚠️ 지문 이미지가 담기는 HTML 컨테이너 ID를 선생님 코드에 맞게 수정해 주세요. (예: passage-list, common-passage-preview 등)
+        const container = document.getElementById('common-passage-list'); 
+        if (container) {
+            container.innerHTML = '';
+        }
+        alert("지문이 모두 초기화되었습니다.");
+    }
+}
 // 📁 파일 탐색기로 올리기
 function handlePassageFiles(event) {
     const files = event.target.files;
@@ -5895,7 +5940,7 @@ const exposeToWindow = {
     toggleDictionaryPanel, changeDictGroup, loadDictionaryStandards, toggleAccordion,
     toggleCommonPassageTray, handlePassageFiles, pastePassageFromClipboard, removePassage, 
     toggleExamRangeInputs, previewExamFile, executeExamAnalysis, resetAiLevels,
-    prevLevelQuestion, skipLevelQuestion 
+    prevLevelQuestion, skipLevelQuestion, saveAndClosePassageTray,   clearAllPassages
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {

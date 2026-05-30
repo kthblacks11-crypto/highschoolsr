@@ -565,6 +565,14 @@
                             <input type="file" id="passage-file-input" multiple accept="image/*" style="display: none;" onchange="handlePassageFiles(event)">
                             <button onclick="document.getElementById('passage-file-input').click()" style="padding: 6px 12px; background: #64748b; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">📁 이미지 파일 추가</button>
                             <button onclick="pastePassageFromClipboard()" style="padding: 6px 12px; background: #f1f5f9; border: 1px solid #cbd5e1; color: #334155; border-radius: 4px; cursor: pointer; font-size: 0.85rem; font-weight: bold;">📋 캡처 후 클릭(붙여넣기로 추가됨) </button>
+                            <div style="display: flex; gap: 10px; margin-top: 15px; margin-bottom: 10px;">
+                                <button onclick="saveAndClosePassageTray()" style="flex: 1; background: #3b82f6; color: white; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                    💾 지문 저장하고 서랍 닫기
+                                </button>
+                                <button onclick="clearAllPassages()" style="background: #ef4444; color: white; padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                    🗑️ 전체 초기화
+                                </button>
+                            </div>
                         </div>
                         <div id="passage-thumbnails" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; min-height: 20px;"></div>
                     </div>
