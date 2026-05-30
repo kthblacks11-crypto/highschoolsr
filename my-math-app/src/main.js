@@ -47,6 +47,10 @@ auth.onAuthStateChanged(async (user) => {
     const curriculumSelector = document.querySelector('.curriculum-selector'); // 상단 교과 탭
 
     if (user) {
+        if (!isDbLoaded && dbLoadPromise) {
+            await dbLoadPromise;
+        }
+      
         // [공통 적용 UI]
         if(loginBtn) loginBtn.style.display = 'none';
         if(logoutBtn) logoutBtn.style.display = 'inline-block';
@@ -1942,23 +1946,40 @@ async function syncPendingFeedback() {
 }
 
 let subjectData = {}; 
-
+let isDbLoaded = false;
+let dbLoadPromise = null; // 💡 DB 로딩 완료를 기다려줄 신호등
 
 async function loadStandardsFromDB() {
     try {
         console.log("⏳ DB에서 시스템 데이터를 불러옵니다...");
 
+        // 1. curriculumMap을 이용해 모든 과목의 뼈대를 먼저 구축합니다!
+        // (subjects 컬렉션에 등록되지 않은 과목도 성취기준만 있으면 무조건 뜨도록 보완)
+        for (const group in curriculumMap) {
+            for (const category in curriculumMap[group]) {
+                curriculumMap[group][category].forEach(sub => {
+                    subjectData[sub.id] = {
+                        title: sub.name,
+                        subtitle: "과목 정보가 등록되어 있습니다.",
+                        standards: [] 
+                    };
+                });
+            }
+        }
+        if (!subjectData['uncategorized']) {
+            subjectData['uncategorized'] = { title: '미분류 보관함', subtitle: '분류되지 않은 데이터', standards: [] };
+        }
+
+        // 2. subjects 컬렉션에 특별한 부제목 설정이 있다면 덮어쓰기
         const subjectSnapshot = await db.collection('subjects').get();
         subjectSnapshot.forEach(doc => {
             const data = doc.data();
-            subjectData[doc.id] = {
-                title: data.title,
-                subtitle: data.subtitle,
-                standards: [] 
-            };
+            if (!subjectData[doc.id]) subjectData[doc.id] = { standards: [] };
+            if (data.title) subjectData[doc.id].title = data.title;
+            if (data.subtitle) subjectData[doc.id].subtitle = data.subtitle;
         });
-        console.log("✅ 1/3: 과목 뼈대 로드 완료");
 
+        // 3. 성취기준 로드
         const standardsSnapshot = await db.collection('standards_2022').get();
         standardsSnapshot.forEach(doc => {
             const data = doc.data();
@@ -1978,13 +1999,18 @@ async function loadStandardsFromDB() {
                 subjectData[subj].standards.sort((a, b) => a.code.localeCompare(b.code));
             }
         }
-        console.log("✅ 2/3: 성취기준 및 문항 로드 완료");
-
-               
+        
+        isDbLoaded = true; // 완료 도장 쾅!
+        console.log("✅ 시스템 데이터 세팅 완료");
+        
     } catch(error) {
         console.error("DB 로딩 에러:", error);
+        isDbLoaded = true; // 에러가 나도 무한 대기하지 않도록 방어
     }
 }
+
+// 💡 스크립트가 읽히자마자 즉시 DB 다운로드를 시작하고, 그 약속(Promise)을 보관합니다.
+dbLoadPromise = loadStandardsFromDB();
 
 
 
@@ -3988,19 +4014,29 @@ async function saveAssessmentToProject() {
 }
 
 window.onload = async () => {
-    await loadStandardsFromDB(); // 1. DB에서 데이터 완벽하게 다운로드 완료 대기
-    changeGroup('math');         // 2. 다운로드 완료 직후 '수학' 탭 활성화 (준비중 에러 완벽 해결!)
+    // 1. DB 다운로드 대기 (이미 끝났으면 즉시 통과)
+    if (!isDbLoaded && dbLoadPromise) {
+        await dbLoadPromise; 
+    }
+    
+    // 2. ✨ 일반 교사는 onAuthStateChanged에서 이미 본인 과목을 띄웠으므로 건드리지 않습니다.
+    // 아직 로그인을 안 한 손님(guest)이거나 관리자(admin)일 때만 '수학'을 기본 탭으로 켭니다.
+    if (currentUserRole === 'guest' || currentUserRole === 'admin') {
+        changeGroup('math');         
+    }
     
     syncPendingFeedback();       
     initChatResizer(); 
     initCaptureEvents(); 
     initAdminDropdowns();
+    
     const uploadArea = document.getElementById('upload-area');
     if (uploadArea) {
         uploadArea.addEventListener('paste', handlePaste);
         uploadArea.setAttribute('tabindex', '0'); 
     }
 };
+
 async function saveWrittenAssessmentShell() {
     const name = document.getElementById('written-assess-name').value.trim();
     const weight = parseFloat(document.getElementById('written-assess-weight').value) || 0;
