@@ -1422,6 +1422,7 @@ function backToStandardSelection() {
     showSection('dashboard'); 
 }
 
+// 💡 체크리스트 목록을 렌더링하고 수업일지 버튼을 추가하는 함수
 async function initChecklist() {
     const container = document.getElementById('checklist-container');
     container.innerHTML = "";
@@ -1440,10 +1441,225 @@ async function initChecklist() {
     subjectData[currentSubject].standards.forEach(std => {
         const div = document.createElement('div');
         div.className = 'check-item';
-        div.innerHTML = `<input type="checkbox" id="c-${std.code}" ${saved[std.code]?'checked':''}>
-                         <label for="c-${std.code}"><strong>${std.code}</strong> ${std.desc}</label>`;
+        div.style.cssText = 'display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 1rem; margin-bottom: 0.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);';
+        
+        // 왼쪽: 체크박스와 성취기준 내용
+        const leftDiv = document.createElement('div');
+        leftDiv.style.cssText = 'display: flex; align-items: center; flex: 1; margin-right: 10px;';
+        const safeDesc = std.desc.replace(/'/g, "\\'").replace(/"/g, '&quot;'); // 따옴표 충돌 방지
+        leftDiv.innerHTML = `
+            <input type="checkbox" id="c-${std.code}" ${saved[std.code]?'checked':''} onchange="silentSaveChecklist()" style="margin-right: 1rem; transform: scale(1.5); cursor: pointer; flex-shrink: 0;">
+            <label for="c-${std.code}" style="cursor: pointer; line-height: 1.5;"><strong>${std.code}</strong> ${std.desc}</label>
+        `;
+        
+        // 오른쪽: 수업일지 버튼
+        const rightDiv = document.createElement('div');
+        rightDiv.innerHTML = `<button onclick="openJournalModal('${std.code}', '${safeDesc}')" style="background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; padding: 6px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: bold; cursor: pointer; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: 0.2s;" onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">📖 수업일지</button>`;
+
+        div.appendChild(leftDiv);
+        div.appendChild(rightDiv);
         container.appendChild(div);
     });
+}
+
+// ==========================================
+// 📖 수업일지 및 체크리스트 관리 로직
+// ==========================================
+
+// 1. 체크리스트 전체 초기화 함수 (수업일지는 보호됨)
+async function resetChecklist() {
+    const subjectName = document.getElementById('detail-subjects').options[document.getElementById('detail-subjects').selectedIndex]?.text || currentSubject;
+    
+    if(!confirm(`정말로 이번 학기 '${subjectName}' 과목의 체크리스트를 모두 초기화하시겠습니까?\n\n(※ 안심하세요! 작성해 둔 '수업일지' 기록은 초기화되지 않고 안전하게 유지됩니다.)`)) return;
+
+    document.querySelectorAll('#checklist-container input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+    });
+
+    if (auth.currentUser) {
+        try {
+            await db.collection('user_checklists').doc(auth.currentUser.uid).set({
+                [currentSubject]: {} 
+            }, { merge: true });
+            alert("✅ 체크리스트가 깨끗하게 초기화되었습니다. 새로운 학기를 힘차게 시작하세요!");
+        } catch(e) {
+            alert("초기화 중 오류 발생: " + e.message);
+        }
+    } else {
+        localStorage.setItem('check_' + currentSubject, JSON.stringify({}));
+        alert("✅ 체크리스트가 초기화되었습니다.");
+    }
+}
+
+// 2. 수업일지용 변수 및 날짜 헬퍼
+let currentJournalStdCode = '';
+
+function getTodayDateString() {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+// 3. 수업일지 팝업창 열기
+async function openJournalModal(code, desc) {
+    currentJournalStdCode = code;
+    document.getElementById('journal-std-code').innerText = code;
+    document.getElementById('journal-std-desc').innerText = desc;
+    
+    document.getElementById('journal-date').value = getTodayDateString();
+    document.getElementById('journal-title').value = '';
+    document.getElementById('journal-content').value = '';
+
+    document.getElementById('journal-modal').style.display = 'flex';
+    
+    await loadJournalEntries(code);
+}
+
+function closeJournalModal() {
+    document.getElementById('journal-modal').style.display = 'none';
+    currentJournalStdCode = '';
+}
+
+// 4. DB에서 누적된 수업일지 불러오기 (새로운 서랍: user_journals 사용)
+async function loadJournalEntries(code) {
+    const container = document.getElementById('journal-list-container');
+    container.innerHTML = '<p style="text-align:center; color:#64748b; font-size:0.9rem; padding: 1rem;">기록을 불러오는 중... ⏳</p>';
+
+    if (!auth.currentUser) {
+        container.innerHTML = '<p style="text-align:center; color:#ef4444; font-size:0.9rem; padding: 1rem;">로그인이 필요합니다.</p>';
+        return;
+    }
+
+    try {
+        const docRef = db.collection('user_journals').doc(auth.currentUser.uid);
+        const doc = await docRef.get();
+        
+        let entries = [];
+        if (doc.exists) {
+            const data = doc.data();
+            if (data[currentSubject] && data[currentSubject][code]) {
+                entries = data[currentSubject][code];
+            }
+        }
+
+        // 최신 날짜가 위로 오도록 정렬
+        entries.sort((a, b) => new Date(b.date) - new Date(a.date));
+        renderJournalEntries(entries);
+
+    } catch (e) {
+        container.innerHTML = '<p style="text-align:center; color:#ef4444; font-size:0.9rem;">기록을 불러오지 못했습니다.</p>';
+        console.error("일지 로드 에러:", e);
+    }
+}
+
+// 5. 화면에 일지 예쁘게 그리기 (수식 변환 포함)
+function renderJournalEntries(entries) {
+    const container = document.getElementById('journal-list-container');
+    container.innerHTML = '';
+
+    if (entries.length === 0) {
+        container.innerHTML = '<div style="text-align:center; padding: 2rem; background: white; border-radius: 8px; border: 1px dashed #cbd5e1; color: #94a3b8; font-size: 0.95rem;">아직 기록이 없습니다.<br>오늘 수업의 첫 일지를 작성해 보세요!</div>';
+        return;
+    }
+
+    entries.forEach(entry => {
+        const dayOfWeek = new Date(entry.date).toLocaleDateString('ko-KR', { weekday: 'short' }); 
+        const displayDate = `${entry.date} (${dayOfWeek})`;
+        const div = document.createElement('div');
+        div.style.cssText = 'background: white; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); position: relative;';
+        
+        const formattedContent = entry.content.replace(/\n/g, '<br>');
+
+        div.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px;">
+                <div>
+                    <span style="font-size: 0.8rem; background: #e0e7ff; color: #3730a3; padding: 3px 8px; border-radius: 4px; font-weight: bold; margin-right: 8px;">📅 ${displayDate}</span>
+                    <strong style="font-size: 1rem; color: #1e293b;">${entry.title || '제목 없음'}</strong>
+                </div>
+                <button onclick="deleteJournalEntry('${entry.id}')" style="background: #fee2e2; border: 1px solid #fca5a5; color: #ef4444; border-radius: 4px; cursor: pointer; font-size: 0.8rem; padding: 3px 8px; font-weight: bold; transition: 0.2s;" onmouseover="this.style.background='#fecaca'" onmouseout="this.style.background='#fee2e2'">🗑️ 삭제</button>
+            </div>
+            <div style="font-size: 0.95rem; color: #334155; line-height: 1.6;">
+                ${formattedContent}
+            </div>
+        `;
+        container.appendChild(div);
+    });
+
+    // 💡 화면에 그린 후 선생님이 쓴 달러($) 기호를 인식해서 수식으로 자동 변환!
+    if (window.MathJax) {
+        MathJax.typesetClear([container]);
+        MathJax.typesetPromise([container]).catch(err => console.error("수식 에러:", err));
+    }
+}
+
+// 6. 새로운 일지 등록하기
+async function saveJournalEntry() {
+    const date = document.getElementById('journal-date').value;
+    const title = document.getElementById('journal-title').value.trim();
+    const content = document.getElementById('journal-content').value.trim();
+
+    if (!date || !content) {
+        alert("날짜와 일지 내용을 모두 입력해 주세요.");
+        return;
+    }
+
+    const newEntry = {
+        id: 'jrn_' + Date.now() + Math.random().toString(36).substr(2, 5),
+        date: date,
+        title: title,
+        content: content,
+        timestamp: new Date().toISOString()
+    };
+
+    const btn = document.querySelector('#journal-modal .save-btn');
+    const originalText = btn.innerText;
+    btn.innerText = "⏳ 저장 중...";
+    btn.disabled = true;
+
+    try {
+        const docRef = db.collection('user_journals').doc(auth.currentUser.uid);
+        const doc = await docRef.get();
+        let data = doc.exists ? doc.data() : {};
+        
+        if (!data[currentSubject]) data[currentSubject] = {};
+        if (!data[currentSubject][currentJournalStdCode]) data[currentSubject][currentJournalStdCode] = [];
+        
+        data[currentSubject][currentJournalStdCode].push(newEntry);
+
+        await docRef.set(data, { merge: true });
+        
+        document.getElementById('journal-title').value = '';
+        document.getElementById('journal-content').value = '';
+        await loadJournalEntries(currentJournalStdCode); // 다시 불러와서 즉시 화면에 띄우기
+
+    } catch (e) {
+        alert("일지 저장 실패: " + e.message);
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+}
+
+// 7. 일지 삭제하기
+async function deleteJournalEntry(entryId) {
+    if (!confirm("이 수업일지를 삭제하시겠습니까? (삭제 후 복구할 수 없습니다.)")) return;
+
+    try {
+        const docRef = db.collection('user_journals').doc(auth.currentUser.uid);
+        const doc = await docRef.get();
+        if (!doc.exists) return;
+
+        let data = doc.data();
+        if (data[currentSubject] && data[currentSubject][currentJournalStdCode]) {
+            data[currentSubject][currentJournalStdCode] = data[currentSubject][currentJournalStdCode].filter(e => e.id !== entryId);
+            await docRef.set(data, { merge: true });
+            await loadJournalEntries(currentJournalStdCode); // 삭제 후 화면 즉시 갱신
+        }
+    } catch (e) {
+        alert("삭제 실패: " + e.message);
+    }
 }
 
 async function saveChecklist() {
@@ -6098,6 +6314,8 @@ async function loadStandardsForManage() {
         stdSelect.innerHTML = '<option value="">불러오기 오류 발생</option>';
     }
 }
+
+
 // ==========================================
 // 🌟 [최종 업데이트] Vite 모듈 환경에서 HTML 버튼들이 함수를 찾을 수 있도록 외부(window)로 연결해주는 마법의 다리
 // ==========================================
@@ -6130,7 +6348,8 @@ const exposeToWindow = {
     toggleDictionaryPanel, changeDictGroup, loadDictionaryStandards, toggleAccordion,
     toggleCommonPassageTray, handlePassageFiles, pastePassageFromClipboard, removePassage, 
     toggleExamRangeInputs, previewExamFile, executeExamAnalysis, resetAiLevels,
-    prevLevelQuestion, skipLevelQuestion, saveAndClosePassageTray,   clearAllPassages
+    prevLevelQuestion, skipLevelQuestion, saveAndClosePassageTray,   clearAllPassages,
+    resetChecklist, openJournalModal, closeJournalModal, saveJournalEntry, deleteJournalEntry
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
