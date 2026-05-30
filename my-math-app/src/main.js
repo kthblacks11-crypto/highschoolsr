@@ -113,16 +113,16 @@ auth.onAuthStateChanged(async (user) => {
             // 👩‍🏫 일반 교사 모드 (본인 과목만 접근 가능)
             // ==========================================
             currentUserRole = 'user';
-            if (curriculumSelector) curriculumSelector.style.display = 'none'; // 상단 탭 투명 망토!
             
-            // 일반 교사에게는 관리자 버튼 숨기기
+            // 💡 [수정됨] 겉포장지(curriculumSelector)는 건드리지 않고, 교과 버튼들만 숨깁니다!
+            document.querySelectorAll('.group-btn').forEach(btn => btn.style.display = 'none');
+            
             if(adminFeedbackBtn) adminFeedbackBtn.style.display = 'none';
             if(adminModeBtn) adminModeBtn.style.display = 'none';
 
             try {
                 const profileDoc = await db.collection('user_profiles').doc(user.uid).get();
                 if (profileDoc.exists && profileDoc.data().mainGroup) {
-                    // 1. 이미 과목을 선택한 기록이 있는 경우 -> 해당 과목으로 화면 고정
                     currentUserGroup = profileDoc.data().mainGroup;
                     changeGroup(currentUserGroup); 
                     
@@ -131,7 +131,6 @@ auth.onAuthStateChanged(async (user) => {
                     if (typeof loadBookmark === 'function') loadBookmark(); 
                     showSection('dashboard');
                 } else {
-                    // 2. 기록이 없는 최초 로그인인 경우 -> 과목 선택 팝업창 띄우기
                     document.getElementById('subject-selection-modal').style.display = 'flex';
                 }
             } catch (e) {
@@ -5683,17 +5682,17 @@ async function saveUserSubjectGroup(group) {
         await db.collection('user_profiles').doc(auth.currentUser.uid).set({
             mainGroup: group,
             email: auth.currentUser.email
-        }, { merge: true }); // 기존 데이터 덮어쓰기
+        }, { merge: true });
 
         currentUserGroup = group;
         document.getElementById('subject-selection-modal').style.display = 'none'; // 팝업 닫기
         
-        // 해당 교과군으로 시스템 전체 강제 변환
+        // 💡 [수정됨] 화면 꿀렁임(점프)을 막고, 버튼만 숨긴 뒤 데이터만 부드럽게 갈아끼웁니다.
+        document.querySelectorAll('.group-btn').forEach(btn => btn.style.display = 'none');
+        
         changeGroup(group); 
-        initDashboard();
         if (typeof initChecklist === 'function') initChecklist(); 
         if (typeof loadBookmark === 'function') loadBookmark(); 
-        showSection('dashboard');
         
         alert("✅ 담당 교과 설정이 완료되었습니다!");
     } catch(e) {
@@ -5706,24 +5705,20 @@ function toggleDictionaryPanel() {
     const panel = document.getElementById('floating-dictionary-panel');
     if (!panel) return;
 
-    // CSS 애니메이션을 위해 원래 쓰시던 'open' 클래스명 복구
     panel.classList.toggle('open'); 
 
-    // 패널이 열리는 순간, 드롭다운이 비어있다면 자동 셋팅 실행
     if (panel.classList.contains('open')) {
         const select = document.getElementById('dict-subject-select');
         
         if (currentUserRole === 'user') {
-            // [일반 교사용] 상단 과목 탭을 숨기고 본인 과목으로 자동 고정
+            // [일반 교사용] 상단 과목 탭 숨기기 + 본인 과목으로 드롭다운 무조건 강제 세팅!
             document.querySelectorAll('.dict-group-btn').forEach(btn => btn.style.display = 'none');
-            if (select.options.length <= 1) {
-                changeDictGroup(currentUserGroup);
-            }
+            changeDictGroup(currentUserGroup); 
         } else {
-            // [관리자용] 상단 5개 탭을 모두 보여주고, '수학'을 기본으로 띄움
+            // [관리자용] 상단 5개 탭을 모두 보여주고, 빈 화면일 때만 '수학'을 기본 셋팅
             document.querySelectorAll('.dict-group-btn').forEach(btn => btn.style.display = 'inline-block');
             if (select.options.length <= 1) {
-                changeDictGroup('math'); // 💡 이 줄이 빠져서 아코디언이 안 생겼던 것입니다!
+                changeDictGroup('math'); 
             }
         }
     }
