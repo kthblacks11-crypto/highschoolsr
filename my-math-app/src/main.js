@@ -5038,7 +5038,7 @@ function escapeCSV(str) {
     return `"${cleanStr.replace(/"/g, '""')}"`;
 }
 
-// ✨ [신규] 서랍을 선택하면 그에 맞는 하위 분류 드롭다운을 자동으로 세팅하는 함수
+// ✨ [수정됨] 서랍을 선택하면 그에 맞는 하위 분류(전 과목) 드롭다운을 자동으로 세팅하는 함수
 function updateUniversalFilter() {
     const drawerSelect = document.getElementById('universal-drawer-select').value;
     const drawerInput = document.getElementById('universal-drawer-input');
@@ -5055,20 +5055,30 @@ function updateUniversalFilter() {
         drawerInput.value = drawerSelect;
         drawerInput.readOnly = true;
         
-        // 문제 은행이나 성취기준 서랍이면 과목별 필터 제공!
+        // 문제 은행이나 성취기준 서랍이면 전 과목 필터 동적 생성!
         if (drawerSelect === 'transformed_bank' || drawerSelect === 'standards_2022') {
-            filterSelect.innerHTML = `
-                <option value="all">🌐 전체 과목 한 번에 보기</option>
-                <option value="common1">📘 공통수학1</option>
-                <option value="common2">📘 공통수학2</option>
-                <option value="algebra">📗 대수</option>
-                <option value="calculus1">📙 미적분Ⅰ</option>
-                <option value="probStat">📊 확률과 통계</option>
-                <option value="uncategorized">📦 미분류 보관함</option>
-            `;
+            let html = '<option value="all">🌐 전체 과목 한 번에 다운로드</option>';
+            
+            // 선생님이 만들어두신 curriculumMap을 순회하며 전 과목을 예쁘게 묶어줍니다.
+            const groupNames = { 'math': '수학', 'korean': '국어', 'english': '영어', 'social': '사회', 'science': '과학' };
+            
+            for (const groupId in curriculumMap) {
+                html += `<optgroup label="=== 📚 ${groupNames[groupId] || groupId} 교과군 ===">`;
+                for (const category in curriculumMap[groupId]) {
+                    curriculumMap[groupId][category].forEach(sub => {
+                        if (sub.id !== 'uncategorized') {
+                            html += `<option value="${sub.id}">- ${sub.name}</option>`;
+                        }
+                    });
+                }
+                html += `</optgroup>`;
+            }
+            html += `<option value="uncategorized">📦 미분류 보관함</option>`;
+            
+            filterSelect.innerHTML = html;
             filterSelect.style.background = '#fffbeb';
         } else {
-            // 다른 서랍은 기본적으로 전체 다운로드만 제공
+            // 다른 서랍(의견, 폴더 등)은 기본적으로 전체 다운로드만 제공
             filterSelect.innerHTML = '<option value="all">🌐 전체 다운로드 (세부 필터 미지원 서랍)</option>';
             filterSelect.style.background = '#f1f5f9';
         }
@@ -5669,15 +5679,31 @@ async function saveUserSubjectGroup(group) {
     }
 }
 
-// 1. 패널 열기/닫기
+// 💡 성취기준 사전 패널 통제 (관리자 vs 일반 완벽 통합)
 function toggleDictionaryPanel() {
     const panel = document.getElementById('floating-dictionary-panel');
-    panel.classList.toggle('show');
+    if (!panel) return;
 
-    // 일반 사용자라면 사전 안의 [수학/국어/영어/사회/과학] 탭 버튼도 싹 숨기고 본인 교과로 고정!
-    if (currentUserRole === 'user') {
-        document.querySelectorAll('.dict-group-btn').forEach(btn => btn.style.display = 'none');
-        changeDictGroup(currentUserGroup); 
+    // CSS 애니메이션을 위해 원래 쓰시던 'open' 클래스명 복구
+    panel.classList.toggle('open'); 
+
+    // 패널이 열리는 순간, 드롭다운이 비어있다면 자동 셋팅 실행
+    if (panel.classList.contains('open')) {
+        const select = document.getElementById('dict-subject-select');
+        
+        if (currentUserRole === 'user') {
+            // [일반 교사용] 상단 과목 탭을 숨기고 본인 과목으로 자동 고정
+            document.querySelectorAll('.dict-group-btn').forEach(btn => btn.style.display = 'none');
+            if (select.options.length <= 1) {
+                changeDictGroup(currentUserGroup);
+            }
+        } else {
+            // [관리자용] 상단 5개 탭을 모두 보여주고, '수학'을 기본으로 띄움
+            document.querySelectorAll('.dict-group-btn').forEach(btn => btn.style.display = 'inline-block');
+            if (select.options.length <= 1) {
+                changeDictGroup('math'); // 💡 이 줄이 빠져서 아코디언이 안 생겼던 것입니다!
+            }
+        }
     }
 }
 
