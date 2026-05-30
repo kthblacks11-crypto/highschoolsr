@@ -2931,44 +2931,6 @@ async function loadQuestionsForEdit() {
     }
 }
 
-async function loadQuestionsForEdit() {
-    const stdSelect = document.getElementById('admin-manage-q-standard');
-    const docId = stdSelect.value;
-    const fields = document.getElementById('question-edit-fields');
-    fields.style.display = 'none';
-
-    if (!docId) return;
-
-    // 선택된 성취기준의 코드 추출 (예: [10공수1-01-01])
-    const stdCode = stdSelect.options[stdSelect.selectedIndex].text.split(' ')[0];
-    const qSelect = document.getElementById('admin-manage-q-list');
-    qSelect.innerHTML = '<option value="">문항을 불러오는 중... ⏳</option>';
-
-    try {
-        // 🌟 통합 서랍(transformed_bank)에서 해당 코드의 문항들만 쿼리
-        let cleanInputCode = stdCode.replace(/[\[\]\s]/g, '');
-        let withBracketCode = `[${cleanInputCode}]`;
-        const snapshot = await db.collection('transformed_bank')
-                         .where('standard_code', 'in', [cleanInputCode, withBracketCode])
-                         .get();
-        
-        currentEditingAllQuestions = []; // 전역 변수 초기화
-        qSelect.innerHTML = '<option value="">-- 수정할 문항 선택 --</option>';
-
-        if (snapshot.empty) {
-            qSelect.innerHTML = '<option value="">등록된 문항이 없습니다.</option>';
-            return;
-        }
-
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            currentEditingAllQuestions.push({ id: doc.id, ...data }); // 문서 ID 포함 저장
-            qSelect.innerHTML += `<option value="${doc.id}">[${data.level}] ${data.question.substring(0, 30)}...</option>`;
-        });
-    } catch (error) {
-        qSelect.innerHTML = '<option value="">데이터 로드 실패</option>';
-    }
-}
 
 function populateQuestionEditFields() {
     const qDocId = document.getElementById('admin-manage-q-list').value;
