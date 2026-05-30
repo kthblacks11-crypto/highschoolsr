@@ -1481,17 +1481,27 @@ function backToStandardSelection() {
     showSection('dashboard'); 
 }
 
-// 💡 체크리스트 목록을 렌더링하고 수업일지 버튼을 추가하는 함수
+// 💡 체크리스트 목록 렌더링 및 수업일지 '개수 배지' 표시 함수
 async function initChecklist() {
     const container = document.getElementById('checklist-container');
     container.innerHTML = "";
     if (!subjectData[currentSubject]) return;
 
     let saved = {};
+    let journalData = {}; // ✨ 수업일지 데이터를 통째로 받아올 임시 보관소
+
     if (auth.currentUser) {
         try {
+            // 1. 체크박스 진행 상황 불러오기
             const doc = await db.collection('user_checklists').doc(auth.currentUser.uid).get();
             if (doc.exists) { saved = doc.data()[currentSubject] || {}; }
+
+            // ✨ 2. 수업일지 개수를 세기 위해 일지 데이터도 함께 불러오기
+            const journalDoc = await db.collection('user_journals').doc(auth.currentUser.uid).get();
+            if (journalDoc.exists) {
+                const allJournals = journalDoc.data();
+                journalData = allJournals[currentSubject] || {};
+            }
         } catch (e) { console.warn("DB 로드 실패"); }
     } else {
         saved = JSON.parse(localStorage.getItem('check_' + currentSubject)) || {};
@@ -1505,15 +1515,23 @@ async function initChecklist() {
         // 왼쪽: 체크박스와 성취기준 내용
         const leftDiv = document.createElement('div');
         leftDiv.style.cssText = 'display: flex; align-items: center; flex: 1; margin-right: 10px;';
-        const safeDesc = std.desc.replace(/'/g, "\\'").replace(/"/g, '&quot;'); // 따옴표 충돌 방지
+        const safeDesc = std.desc.replace(/'/g, "\\'").replace(/"/g, '&quot;'); 
         leftDiv.innerHTML = `
             <input type="checkbox" id="c-${std.code}" ${saved[std.code]?'checked':''} onchange="silentSaveChecklist()" style="margin-right: 1rem; transform: scale(1.5); cursor: pointer; flex-shrink: 0;">
             <label for="c-${std.code}" style="cursor: pointer; line-height: 1.5;"><strong>${std.code}</strong> ${std.desc}</label>
         `;
         
-        // 오른쪽: 수업일지 버튼
+        // ✨ 해당 성취기준의 일지 개수 카운팅 및 빨간 배지 만들기
+        const entries = journalData[std.code] || [];
+        const jCount = entries.length;
+        let badgeHtml = "";
+        if (jCount > 0) {
+            badgeHtml = `<span style="background: #ef4444; color: white; padding: 2px 6px; border-radius: 12px; font-size: 0.7rem; margin-left: 5px; box-shadow: 0 1px 2px rgba(0,0,0,0.2);">${jCount}</span>`;
+        }
+
+        // 오른쪽: 수업일지 버튼 (배지 포함)
         const rightDiv = document.createElement('div');
-        rightDiv.innerHTML = `<button onclick="openJournalModal('${std.code}', '${safeDesc}')" style="background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; padding: 6px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: bold; cursor: pointer; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: 0.2s;" onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">📖 수업일지</button>`;
+        rightDiv.innerHTML = `<button onclick="openJournalModal('${std.code}', '${safeDesc}')" style="background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; padding: 6px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: bold; cursor: pointer; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: 0.2s;" onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">📖 수업일지 ${badgeHtml}</button>`;
 
         div.appendChild(leftDiv);
         div.appendChild(rightDiv);
@@ -1715,6 +1733,8 @@ async function saveJournalEntry() {
         document.getElementById('journal-content').value = '';
         await loadJournalEntries(currentJournalStdCode); // 다시 불러와서 즉시 화면에 띄우기
 
+        initChecklist(); // ✨ 추가: 뒷배경의 체크리스트 숫자 배지도 즉시 갱신!
+
     } catch (e) {
         alert("일지 저장 실패: " + e.message);
     } finally {
@@ -1737,6 +1757,8 @@ async function deleteJournalEntry(entryId) {
             data[currentSubject][currentJournalStdCode] = data[currentSubject][currentJournalStdCode].filter(e => e.id !== entryId);
             await docRef.set(data, { merge: true });
             await loadJournalEntries(currentJournalStdCode); // 삭제 후 화면 즉시 갱신
+
+            initChecklist(); // ✨ 추가: 뒷배경의 체크리스트 숫자 배지도 즉시 갱신!
         }
     } catch (e) {
         alert("삭제 실패: " + e.message);
