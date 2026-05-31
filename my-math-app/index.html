@@ -246,13 +246,13 @@
             </div>
             
             <p style="font-size:0.85rem; color:#475569; margin-bottom: 8px;">1. 시험지 이미지(또는 PDF) 파일을 먼저 선택하세요.</p>
-            <input type="file" id="exam-file" accept="image/*,application/pdf" onchange="previewExamFile(event)">
-            
-            <div style="margin-top: 15px; text-align: right;">
-                <button id="start-analysis-btn" class="save-btn" onclick="executeExamAnalysis()" style="display: none; width: auto; background: #8b5cf6;">🚀 AI 분석 시작하기</button>
-            </div>
-            
-            <div id="exam-loading" style="display:none; color:#ea580c; font-weight:bold; margin-top:10px; text-align: center;">AI가 분석 중입니다. 잠시만 기다려주세요... ⏳</div>
+<input type="file" id="exam-file" accept="image/*,application/pdf" onchange="previewExamFile(event)">
+
+<div style="margin-top: 15px; text-align: right;">
+    <button id="start-analysis-btn" class="save-btn" onclick="executeExamAnalysis()" style="display: inline-block; width: auto; background: #8b5cf6;">🚀 AI 분석 시작하기</button>
+</div>
+
+<div id="exam-loading" style="display:none; color:#ea580c; font-weight:bold; margin-top:10px; text-align: center;">AI가 분석 중입니다. 잠시만 기다려주세요... ⏳</div>
         </div>
         <div id="action-btn-top-zone" style="text-align: right; margin-bottom: 10px; display: none;"></div>
         
@@ -935,9 +935,9 @@
 </button>
 
 <div id="floating-dictionary-panel" class="floating-panel">
-    <div class="panel-header" id="dict-header" title="여기를 잡고 드래그하여 이동하세요">
-        <h3>📚 과목별 성취기준 사전</h3>
-        <button onclick="toggleDictionaryPanel()" class="close-panel-btn">&times;</button>
+    <div class="panel-header" id="dict-header" style="cursor: move;">
+        <h3 style="margin: 0; pointer-events: none;">📚 과목별 성취기준 사전 <span style="font-size: 0.75rem; font-weight: normal; color: #cbd5e1; margin-left: 5px;">(드래그로 이동)</span></h3>
+        <button onclick="toggleDictionaryPanel()" class="close-panel-btn" style="pointer-events: auto;">&times;</button>
     </div>
     <div class="panel-content">
         <div style="display: flex; justify-content: space-between; margin-bottom: 10px; gap: 4px;">

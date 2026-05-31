@@ -5946,7 +5946,7 @@ function cancelSubjectSelection() {
 // 📚 [2탄] 성취기준 사전 (아코디언 및 드래그 로직)
 // ==========================================
 
-// 1️⃣ 사전을 드래그하기 위한 변수와 함수
+// 1️⃣ 사전을 드래그하기 위한 변수와 함수 (드래그 랙 완벽 해결)
 let isDraggingDict = false;
 let dictOffsetX = 0;
 let dictOffsetY = 0;
@@ -5957,14 +5957,15 @@ function initDictionaryDrag() {
 
     if (!panel || !header) return;
 
-    header.style.cursor = 'move'; // 마우스 커서를 십자 화살표로 변경
-
     header.addEventListener('mousedown', (e) => {
         isDraggingDict = true;
         const rect = panel.getBoundingClientRect();
         dictOffsetX = e.clientX - rect.left;
         dictOffsetY = e.clientY - rect.top;
-        document.body.style.userSelect = 'none'; // 글자 드래그 방지
+        document.body.style.userSelect = 'none'; 
+        
+        // 🚀 [핵심 수정] 드래그 중에는 뚝뚝 끊기는 애니메이션을 강제로 꺼서 마우스에 찰싹 붙게 만듭니다!
+        panel.style.transition = 'none'; 
     });
 
     document.addEventListener('mousemove', (e) => {
@@ -5976,12 +5977,17 @@ function initDictionaryDrag() {
     });
 
     document.addEventListener('mouseup', () => {
-        isDraggingDict = false;
-        document.body.style.userSelect = 'auto';
+        if(isDraggingDict) {
+            isDraggingDict = false;
+            document.body.style.userSelect = 'auto';
+            
+            // 🚀 드래그가 끝나면 다시 애니메이션을 원래대로 켭니다.
+            panel.style.transition = ''; 
+        }
     });
 }
 
-// 2️⃣ 창 열기/닫기 및 관리자/사용자 권한 분리 (선생님의 완벽한 원본 로직)
+// 2️⃣ 창 열기/닫기 (일반 사용자 오류 해결)
 function toggleDictionaryPanel() {
     const panel = document.getElementById('floating-dictionary-panel');
     if (!panel) return;
@@ -5991,10 +5997,10 @@ function toggleDictionaryPanel() {
     if (panel.classList.contains('open')) {
         const select = document.getElementById('dict-subject-select');
         
-        // 🛡️ 선생님이 만드신 완벽한 권한 분리 로직 유지!
         if (currentUserRole === 'user') {
             document.querySelectorAll('.dict-group-btn').forEach(btn => btn.style.display = 'none');
-            changeDictGroup(currentUserGroup); 
+            // 🛡️ 안전장치: currentUserGroup이 빈 값이면 기본으로 'math'를 줘서 에러를 막습니다.
+            changeDictGroup(currentUserGroup || 'math'); 
         } else {
             document.querySelectorAll('.dict-group-btn').forEach(btn => btn.style.display = 'inline-block');
             if (select.options.length <= 1) {
@@ -6002,7 +6008,7 @@ function toggleDictionaryPanel() {
             }
         }
     } else {
-        // ✨ 창을 닫을 때, 이리저리 옮겼던 위치를 싹 지워서 원래 자리(우측 하단)로 복구합니다.
+        // 창을 닫을 때 위치 복구
         panel.style.left = '';
         panel.style.top = '';
         panel.style.bottom = ''; 
@@ -6010,9 +6016,8 @@ function toggleDictionaryPanel() {
     }
 }
 
-// 3️⃣ 교과군 변경 시 드롭다운 처리 (🔥 기존 1번 코드로 완벽 원상복구!)
+// 3️⃣ 교과군 변경 (🔥 선생님의 오리지널 '준비중' 기능 100% 복구!)
 function changeDictGroup(groupId) {
-    // 탭 버튼 활성화 스타일 변경
     document.querySelectorAll('.dict-group-btn').forEach(btn => btn.classList.remove('active'));
     const targetBtn = document.querySelector(`button[onclick="changeDictGroup('${groupId}')"]`);
     if(targetBtn) targetBtn.classList.add('active');
@@ -6020,23 +6025,30 @@ function changeDictGroup(groupId) {
     const selectEl = document.getElementById('dict-subject-select');
     selectEl.innerHTML = '<option value="">-- 과목을 선택하세요 --</option>';
     
+    // 🛡️ 안전장치
+    if (!curriculumMap[groupId]) return;
     const map = curriculumMap[groupId];
     
     for (const category in map) {
         const optgroup = document.createElement('optgroup');
         optgroup.label = category;
         
-        // (준비중) 강제 처리 로직을 완전히 삭제하고, 모든 과목을 예전처럼 직접 선택할 수 있게 복구했습니다.
         map[category].forEach(sub => {
             const opt = document.createElement('option');
             opt.value = sub.id;
-            opt.innerText = sub.name;
+            
+            // 🌟 선생님의 원본 로직 복구: 데이터가 없으면 (준비중) 표시 후 비활성화!
+            if (!subjectData || !subjectData[sub.id] || !subjectData[sub.id].standards || subjectData[sub.id].standards.length === 0) {
+                opt.innerText = sub.name + " (준비중)";
+                opt.disabled = true;
+            } else {
+                opt.innerText = sub.name;
+            }
             optgroup.appendChild(opt);
         });
         selectEl.appendChild(optgroup);
     }
     
-    // 과목을 선택하라는 초기 안내 메시지 복구
     document.getElementById('dict-accordion-container').innerHTML = '<p style="text-align:center; color:#64748b; font-size:0.95rem; margin-top:2rem;">위에서 과목을 선택하면<br>성취기준과 수준(A~E)이 나타납니다.</p>';
 }
 
