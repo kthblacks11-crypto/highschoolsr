@@ -25,6 +25,34 @@ const firebaseConfig = {
 // ==========================================
 
 firebase.initializeApp(firebaseConfig);
+// ==========================================
+// 🛡️ 비로그인 사용자 전역 클릭 차단 (로그인 강제 유도 방어막)
+// ==========================================
+document.addEventListener('click', async (e) => {
+    // 1. 이미 로그인된 상태면 무사 통과
+    if (auth.currentUser) return;
+
+    // 2. 로그인 버튼 자체를 누른 거면 패스 (로그인 진행을 막으면 안 되니까요!)
+    if (e.target.closest('#login-btn')) return;
+
+    // 3. 클릭한 곳이 버튼, 입력창, 탭, 카드 등 '기능을 하는 요소'인지 감지
+    const isInteractive = e.target.closest('button, a, input, select, textarea, .card, .tab-btn, .group-btn, .check-item, .dict-accordion-header, .quiz-container');
+
+    if (isInteractive) {
+        // 원래 버튼이 하려던 동작(화면 이동 등)을 완벽하게 멈춤!
+        e.preventDefault();
+        e.stopPropagation(); 
+
+        // 안내창 띄우고 즉시 구글 로그인 연결
+        alert("구글로 로그인 후 이용할 수 있습니다.");
+        try {
+            await auth.signInWithPopup(provider);
+        } catch (error) {
+            console.error("로그인 실패 또는 취소:", error);
+        }
+    }
+}, true); // 💡 true (캡처링): HTML의 가장 바깥에서 먼저 이벤트를 낚아채도록 설정!
+
 const db = firebase.firestore();
 db.enablePersistence()
   .catch((err) => {
@@ -966,34 +994,58 @@ async function processAndSaveBackground(analysisText, apiKey) {
         if (qMatch) finalQuestion = qMatch[1].trim();
         if (aMatch) finalAnswer = aMatch[1].trim();
 
-        const stdCode = analysisText.match(/\[\d{2}[가-힣a-zA-Z0-9]+-\d{2}-\d{2}\]/g)?.[0] || "unknown";
-
-        let matchedSubject = currentSubject;
-        for (const key in subjectData) {
-            if (subjectData[key].standards && subjectData[key].standards.some(s => s.code === stdCode)) {
-                matchedSubject = key; break;
-            }
-        }
+        // 💡 융합 문항 처리를 위해 추출된 모든 성취기준 코드를 배열로 수집합니다.
+        // 💡 융합 문항 처리를 위해 추출된 모든 성취기준 코드를 배열로 수집합니다. 
+        // (AI가 띄어쓰기를 넣어서 출력할 경우를 대비해 \s 정규식 추가)
+        const stdCodes = analysisText.match(/\[\d{2}[가-힣a-zA-Z0-9\s]+-\d{2}-\d{2}\]/g) || ["unknown"];
 
         const levelMatch = analysisText.match(/성취수준:\s*(A\+|[A-E])/);
         let extractedLevel = levelMatch ? levelMatch[1] : "C";
-
-        if (extractedLevel === "A+") {
-            extractedLevel = "A"; 
-        }
+        if (extractedLevel === "A+") { extractedLevel = "A"; }
 
         const reasonMatch = analysisText.match(/판정 이유:\s*([\s\S]*?)(?=\[|$)/);
         let extractedReason = reasonMatch ? reasonMatch[1].trim() : "AI가 교육과정 루브릭을 바탕으로 분석한 문항입니다.";
 
-        await db.collection('transformed_bank').add({
-            answer: finalAnswer,
-            level: extractedLevel,
-            question: finalQuestion,
-            reason: extractedReason,
-            standard_code: stdCode,
-            subject: matchedSubject,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        // 💡 배열을 순회하며 각각의 성취기준 서랍에 별도로 저장합니다.
+        for (const code of stdCodes) {
+            // 1. 비교를 위해 AI 추출 코드에서 대괄호와 띄어쓰기를 모두 제거합니다.
+            let cleanCode = code.replace(/[\[\]\s]/g, '');
+            
+            // 2. 1차: AI 오타 방지용 자동 판별 함수를 최우선 적용
+            let matchedSubject = detectSubjectIdFromStandardCode(cleanCode);
+            
+            // 3. 2차: 판별 함수에서 못 찾았다면, 시스템 DB 전체를 순회하며 띄어쓰기를 무시하고 매칭합니다.
+            if (matchedSubject === 'uncategorized') {
+                for (const key in subjectData) {
+                    if (subjectData[key].standards) {
+                        // DB에 등록된 코드 역시 대괄호와 띄어쓰기를 제거한 후 완벽히 일치하는지 비교합니다.
+                        const isMatched = subjectData[key].standards.some(s => 
+                            s.code.replace(/[\[\]\s]/g, '') === cleanCode
+                        );
+                        if (isMatched) {
+                            matchedSubject = key; 
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // 4. 그래도 못 찾았다면 현재 탭으로 들어가지 않고 확실하게 '미분류(uncategorized)'로 보냅니다.
+            if (!matchedSubject) {
+                matchedSubject = 'uncategorized';
+            }
+
+            await db.collection('transformed_bank').add({
+                answer: finalAnswer,
+                level: extractedLevel,
+                question: finalQuestion,
+                reason: extractedReason,
+                standard_code: code.replace(/[\[\]]/g, '').trim(), // DB 저장 시에는 대괄호만 빼고 깔끔하게 저장
+                subject: matchedSubject,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        
+        }
 
         console.log("✅ 문항 분석 결과가 성공적으로 저장되었습니다.");
 
@@ -1333,7 +1385,8 @@ async function startLevelMatching(code) {
                     q: sourceBadge + (data.question || data.q || "문제 내용이 없습니다."),
                     level: extractedLevel,
                     reason: extractedReason,
-                    answer: data.answer || "정답 정보 없음"
+                    answer: data.answer || "정답 정보 없음",
+                    standard_code: data.standard_code || "unknown" // 💡 피드백 출력용 성취기준 저장
                 });
             });
     } catch (error) { console.warn("DB 로드 실패"); }
@@ -1425,8 +1478,14 @@ function checkLevelAnswer(selectedLevel, btn) {
     
     const answerHTML = question.answer ? `<br><br><div style="background: white; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;"><strong style="color: #475569;">[정답]</strong> ${question.answer}</div>` : '';
 
+    // 💡 융합 문항인 경우(코드에 쉼표가 있을 때) 안내 메시지 추가
+    let fusionNotice = '';
+    if (question.standard_code && question.standard_code.includes(',')) {
+        fusionNotice = `<div style="background: #eef2ff; color: #4338ca; padding: 8px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 10px; border-left: 4px solid #6366f1;"><strong>🧩 융합 문항 안내:</strong> 이 문항은 복수의 성취기준(${question.standard_code})이 유기적으로 결합된 문항입니다.</div>`;
+    }
+
     if (selectedLevel === question.level) {
-        fb.innerHTML = `🎉 <strong>정답입니다!</strong><br><br><strong>[이유]</strong> ${question.reason} ${answerHTML}`;
+        fb.innerHTML = `🎉 <strong>정답입니다!</strong><br><br>${fusionNotice}<strong>[이유]</strong> ${question.reason} ${answerHTML}`;
         fb.style.color = "#166534"; fb.style.backgroundColor = '#dcfce7';
         btn.style.border = '3px solid #166534'; btn.style.opacity = '1';
     } else {
@@ -1434,18 +1493,21 @@ function checkLevelAnswer(selectedLevel, btn) {
         let comparativeText = "";
         
         if (wrongLevelExample) {
+            // 💡 예시 문항도 본 문항과 똑같이 줄바꿈과 선지 정렬을 적용합니다.
+            let formattedWrongQ = wrongLevelExample.q.replace(/\n/g, '<br>').replace(/(①|②|③|④|⑤)/g, '<br>&nbsp;&nbsp;$1');
+
             comparativeText = `<hr style="margin: 1rem 0; border: 0; border-top: 1px solid #fca5a5;">
                                <div style="text-align: left; font-size: 0.9rem;">
                                <strong>💡 비교해 보세요:</strong><br>
                                선택하신 <strong>'${selectedLevel}'</strong> 수준은 보통 아래와 같은 문항입니다.<br><br>
-                               <div style="background: white; padding: 0.8rem; border-radius: 6px; border-left: 4px solid #f87171; margin-bottom: 0.5rem; font-size: 0.85rem; color: #1e293b;">
-                                   ${wrongLevelExample.q}
+                               <div style="background: white; padding: 0.8rem; border-radius: 6px; border-left: 4px solid #f87171; margin-bottom: 0.5rem; font-size: 0.85rem; color: #1e293b; line-height: 1.6;">
+                                   ${formattedWrongQ}
                                </div>
                                <em>* 현재 제시된 문항은 '${question.level}' 수준의 특징을 더 강하게 가지고 있습니다.</em>
                                </div>`;
         }
 
-        fb.innerHTML = `❌ <strong>오답입니다.</strong> 이 문항은 <strong>'${question.level}'</strong> 수준입니다.<br><br><strong>[이유]</strong> ${question.reason} ${answerHTML} ${comparativeText}`;
+        fb.innerHTML = `❌ <strong>오답입니다.</strong> 이 문항은 <strong>'${question.level}'</strong> 수준입니다.<br><br>${fusionNotice}<strong>[이유]</strong> ${question.reason} ${answerHTML} ${comparativeText}`;
         fb.style.color = "#991b1b"; fb.style.backgroundColor = '#fee2e2';
         btn.style.border = '3px solid #ef4444'; btn.style.opacity = '1';
         document.querySelectorAll('#level-options .option-btn').forEach(b => {
@@ -1464,7 +1526,6 @@ function checkLevelAnswer(selectedLevel, btn) {
         feedbackBtn.style.border = '1px dashed #94a3b8';
         feedbackBtn.innerHTML = '🙋 이 판정에 이의 있습니다! (의견 보내기)';
         
-        // 피드백 박스(정답해설) 바로 밑에 버튼을 쏙 넣습니다.
         document.getElementById('level-feedback').parentNode.appendChild(feedbackBtn);
     }
     feedbackBtn.style.display = 'block';
@@ -1487,8 +1548,13 @@ function backToStandardSelection() {
 // 💡 체크리스트 목록 렌더링 및 수업일지 '개수 배지' 표시 함수
 async function initChecklist() {
     const container = document.getElementById('checklist-container');
-    container.innerHTML = "";
+    const headerDiv = document.createElement('div');
+    headerDiv.style.cssText = "text-align: right; margin-bottom: 10px;";
+    headerDiv.innerHTML = `<button id="journal-excel-btn" onclick="downloadAllJournalsExcel()" style="background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.85rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: 0.2s;">📥 내 모든 수업일지 엑셀 다운로드</button>`;
+    container.appendChild(headerDiv);
+
     if (!subjectData[currentSubject]) return;
+    
 
     let saved = {};
     let journalData = {}; // ✨ 수업일지 데이터를 통째로 받아올 임시 보관소
@@ -1670,19 +1736,21 @@ function renderJournalEntries(entries) {
         const dayOfWeek = new Date(entry.date).toLocaleDateString('ko-KR', { weekday: 'short' }); 
         const displayDate = `${entry.date} (${dayOfWeek})`;
         const div = document.createElement('div');
-        div.style.cssText = 'background: white; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); position: relative;';
+        
+        // 💡 [핵심 수정] height를 220px로 고정하고, flex 레이아웃으로 변경
+        div.style.cssText = 'background: white; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); position: relative; height: 220px; display: flex; flex-direction: column; margin-bottom: 15px;';
         
         const formattedContent = entry.content.replace(/\n/g, '<br>');
 
         div.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; flex-shrink: 0;">
                 <div>
                     <span style="font-size: 0.8rem; background: #e0e7ff; color: #3730a3; padding: 3px 8px; border-radius: 4px; font-weight: bold; margin-right: 8px;">📅 ${displayDate}</span>
                     <strong style="font-size: 1rem; color: #1e293b;">${entry.title || '제목 없음'}</strong>
                 </div>
-                <button onclick="deleteJournalEntry('${entry.id}')" style="background: #fee2e2; border: 1px solid #fca5a5; color: #ef4444; border-radius: 4px; cursor: pointer; font-size: 0.8rem; padding: 3px 8px; font-weight: bold; transition: 0.2s;" onmouseover="this.style.background='#fecaca'" onmouseout="this.style.background='#fee2e2'">🗑️ 삭제</button>
+                <button onclick="deleteJournalEntry('${entry.id}')" style="background: #fee2e2; border: 1px solid #fca5a5; color: #ef4444; border-radius: 4px; cursor: pointer; font-size: 0.8rem; padding: 3px 8px; font-weight: bold; transition: 0.2s;">🗑️ 삭제</button>
             </div>
-            <div style="font-size: 0.95rem; color: #334155; line-height: 1.6;">
+            <div style="font-size: 0.95rem; color: #334155; line-height: 1.6; overflow-y: auto; flex-grow: 1; padding-right: 5px;">
                 ${formattedContent}
             </div>
         `;
@@ -1785,6 +1853,81 @@ async function saveChecklist() {
     } catch (e) {
         console.error("저장 실패:", e);
         alert("⚠️ 저장 중 오류가 발생했습니다.");
+    }
+}
+// [추가 1] 체크박스를 누를 때마다 조용히 DB에 저장하는 함수 (체크 증발 방지)
+async function silentSaveChecklist() {
+    if (!auth.currentUser) return;
+    const checks = {};
+    document.querySelectorAll('#checklist-container input[type="checkbox"]').forEach(input => {
+        checks[input.id.replace('c-', '')] = input.checked;
+    });
+    try {
+        await db.collection('user_checklists').doc(auth.currentUser.uid).set({
+            [currentSubject]: checks
+        }, { merge: true });
+    } catch (e) {
+        console.error("체크리스트 자동 저장 실패:", e);
+    }
+}
+
+// [추가 2] 내가 쓴 모든 수업일지를 엑셀로 한 번에 다운로드하는 마법의 함수
+async function downloadAllJournalsExcel() {
+    if (!auth.currentUser) {
+        alert("로그인이 필요합니다.");
+        return;
+    }
+    
+    const btn = document.getElementById('journal-excel-btn');
+    const originalText = btn.innerText;
+    btn.innerText = "⏳ 엑셀 파일 생성 중...";
+    btn.disabled = true;
+
+    try {
+        const docRef = db.collection('user_journals').doc(auth.currentUser.uid);
+        const doc = await docRef.get();
+        
+        if (!doc.exists || Object.keys(doc.data()).length === 0) {
+            alert("작성된 수업일지가 없습니다.");
+            return;
+        }
+        
+        const data = doc.data();
+        let excelData = [["과목(교과)", "성취기준", "작성 날짜", "일지 제목", "일지 내용"]];
+        
+        for (const subjectCode in data) {
+            // 과목명 한글로 예쁘게 변환
+            let subjectName = subjectData[subjectCode] ? subjectData[subjectCode].title : subjectCode;
+            
+            for (const stdCode in data[subjectCode]) {
+                const entries = data[subjectCode][stdCode];
+                entries.forEach(entry => {
+                    excelData.push([
+                        subjectName,
+                        stdCode,
+                        entry.date,
+                        entry.title || '제목 없음',
+                        entry.content || ''
+                    ]);
+                });
+            }
+        }
+        
+        if (excelData.length === 1) {
+            alert("작성된 수업일지 내용이 없습니다.");
+            return;
+        }
+        
+        const ws = XLSX.utils.aoa_to_sheet(excelData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "수업일지 전체 백업");
+        XLSX.writeFile(wb, `수업일지_전체백업_${new Date().toISOString().split('T')[0]}.xlsx`);
+        
+    } catch (e) {
+        alert("엑셀 다운로드 실패: " + e.message);
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
     }
 }
 
@@ -2983,7 +3126,7 @@ function renderQuestionCards() {
                 <p style="margin: 0 0 5px 0; font-size: 0.85rem; font-weight: bold; color: #92400e;">🖼️ 그림/도표 넣는 방법</p>
                 <p style="margin: 0 0 10px 0; font-size: 0.75rem; color: #b45309; line-height: 1.5;">
                     💡 <strong>자체 캡처:</strong> 지금 시스템의 왼쪽 화면에 띄워진 이미지를 마우스로 직접 드래그해서 찍습니다.<br>
-                    💡 <strong>복사한 그림 붙여넣기:</strong> 단축키(Win+Shift+S)나 알캡처로 <strong>미리 복사해 둔 이미지</strong>를 불러옵니다. PDF 파일인 경우 이 버튼을 사용하세요.
+                    💡 <strong>캡처 후 클릭(붙여넣기로 추가됨):</strong> 단축키(Win+Shift+S)나 알캡처로 <strong>미리 복사해 둔 이미지</strong>를 불러옵니다. PDF 파일인 경우 이 버튼을 사용하세요.
                 </p>
                 <div style="display: flex; gap: 5px; flex-wrap: wrap;">
                     <button onclick="startPartialCapture(${idx})" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:0.8rem;">📸 자체 캡처 (이미지용)</button>
@@ -4994,38 +5137,42 @@ async function transformAndSaveExamToBank(skipConfirm = false) {
 
             let finalQ = qMatch ? qMatch[1].trim() : originalData.text;
             let finalA = aMatch ? aMatch[1].trim() : "정답 정보 없음";
-            let finalCode = cMatch ? cMatch[1].replace(/[\[\]]/g, '').trim() : "코드없음"; 
+            // 💡 융합 문항일 경우 쉼표(,)로 구분된 코드를 분리하여 배열로 만듭니다.
+            let finalCodes = cMatch ? cMatch[1].replace(/[\[\]]/g, '').split(',').map(c => c.trim()).filter(c => c) : ["코드없음"]; 
             let finalReason = rMatch ? rMatch[1].trim() : "AI가 교육과정 루브릭을 바탕으로 분석한 문항입니다.";
 
             let levelMatch = originalData.text.match(/\[수준\]\s*(A\+|[A-E])/);
             let lvl = levelMatch ? levelMatch[1] : "C";
             if(lvl === "A+") lvl = "A";
 
-            // 💡 [핵심 수정] 과목 ID를 화면 탭에 의존하지 않고 성취기준 코드로 AI 자동 판별!
-            let autoSubject = detectSubjectIdFromStandardCode(finalCode);
-
-            const saveData = {
-                subject: autoSubject, // 🌟 자동으로 찾은 과목 서랍에 알아서 들어갑니다!
-                standard_code: finalCode, 
-                question: finalQ,
-                answer: finalA,          
-                level: lvl, 
-                reason: finalReason,     
-                source: "📄 시험지 일괄 변형 저장",
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            };
-
+            let compressedImage = null;
             if (originalData.image) {
                 await new Promise(resolve => {
                     compressCaptureImage(originalData.image, (compressed) => {
-                        saveData.image = compressed; 
+                        compressedImage = compressed; 
                         resolve();
                     });
                 });
             }
 
-            await db.collection('transformed_bank').add(saveData);
-            savedCount++;
+            // 💡 각각의 성취기준마다 독립된 문항으로 복제하여 저장합니다.
+            for (const code of finalCodes) {
+                let autoSubject = detectSubjectIdFromStandardCode(code);
+                const saveData = {
+                    subject: autoSubject, 
+                    standard_code: code, 
+                    question: finalQ,
+                    answer: finalA,          
+                    level: lvl, 
+                    reason: finalReason,     
+                    source: "📄 시험지 일괄 변형 저장",
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                if (compressedImage) saveData.image = compressedImage;
+
+                await db.collection('transformed_bank').add(saveData);
+                savedCount++;
+            }
         }
 
         alert(`🎉 완벽합니다! 총 ${savedCount}개의 시험지 문항이 변형되어 알맞은 과목 DB에 보관되었습니다.`);
@@ -6530,7 +6677,8 @@ const exposeToWindow = {
     toggleCommonPassageTray, handlePassageFiles, pastePassageFromClipboard, removePassage, 
     toggleExamRangeInputs, previewExamFile, executeExamAnalysis, resetAiLevels,
     prevLevelQuestion, skipLevelQuestion, saveAndClosePassageTray,   clearAllPassages,
-    resetChecklist, openJournalModal, closeJournalModal, saveJournalEntry, deleteJournalEntry, saveUserSubjectGroup
+    resetChecklist, openJournalModal, closeJournalModal, saveJournalEntry, deleteJournalEntry, saveUserSubjectGroup,
+    silentSaveChecklist, downloadAllJournalsExcel
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
