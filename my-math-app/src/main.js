@@ -202,7 +202,7 @@ function handleLogout() {
     if(confirm("로그아웃 하시겠습니까?")) { auth.signOut(); }
 }
 
-// ✨ 회원 탈퇴 기능을 수행하는 함수 추가
+// ✨ 진짜 데이터를 말끔히 지워주는 완벽한 회원 탈퇴 기능
 async function handleDeleteAccount() {
     const user = firebase.auth().currentUser;
     
@@ -211,16 +211,32 @@ async function handleDeleteAccount() {
         return;
     }
     
-    // 다시 한번 경고창을 띄워 실수를 방지합니다.
-    if (confirm("정말로 탈퇴하시겠습니까?\\n탈퇴하시면 시스템에 저장된 모든 선생님의 개인 데이터가 즉시 삭제되며 복구할 수 없습니다.")) {
+    if (confirm("정말로 탈퇴하시겠습니까?\n탈퇴하시면 시스템에 저장된 모든 선생님의 개인 데이터(프로필, 수업일지, 체크리스트, 내가 만든 폴더)가 즉시 삭제되며 복구할 수 없습니다.")) {
         try {
+            const uid = user.uid;
+            const email = user.email;
+
+            // 1. 내 개인 정보 데이터 삭제 (프로필, 체크리스트, 수업일지)
+            await db.collection('user_profiles').doc(uid).delete();
+            await db.collection('user_checklists').doc(uid).delete();
+            await db.collection('user_journals').doc(uid).delete();
+
+            // 2. 내가 방장(ownerEmail)으로 만든 폴더(프로젝트) 일괄 삭제
+            const projectsSnapshot = await db.collection('user_projects').where('ownerEmail', '==', email).get();
+            const batch = db.batch(); // 여러 개를 한 번에 지우는 마법의 빗자루
+            projectsSnapshot.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
+
+            // 3. 찌꺼기 데이터를 모두 비웠으니, 마지막으로 내 계정(Auth) 폭파!
             await user.delete();
-            alert("회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.");
-            window.location.reload(); // 성공 시 화면을 새로고침하여 초기화
+            
+            alert("회원 탈퇴 및 개인 데이터 삭제가 완벽하게 완료되었습니다. 이용해 주셔서 감사합니다.");
+            window.location.reload(); 
         } catch (error) {
-            // 보안을 위해 오랫동안 로그인 상태였던 사용자는 재로그인을 요구할 수 있습니다.
             if (error.code === 'auth/requires-recent-login') {
-                alert("안전한 탈퇴 처리를 위해 재로그인이 필요합니다.\\n로그아웃 후 다시 로그인하여 탈퇴를 진행해 주세요.");
+                alert("안전한 탈퇴 처리를 위해 재로그인이 필요합니다.\n로그아웃 후 다시 로그인하여 탈퇴를 진행해 주세요.");
             } else {
                 alert("탈퇴 처리 중 오류가 발생했습니다: " + error.message);
             }
@@ -1386,7 +1402,8 @@ async function startLevelMatching(code) {
                     level: extractedLevel,
                     reason: extractedReason,
                     answer: data.answer || "정답 정보 없음",
-                    standard_code: data.standard_code || "unknown" // 💡 피드백 출력용 성취기준 저장
+                    standard_code: data.standard_code || "unknown", // 💡 피드백 출력용 성취기준 저장
+                    image: data.image || data.imageUrl || data.img // ✨ 누락되었던 이미지 데이터를 챙겨줍니다!
                 });
             });
     } catch (error) { console.warn("DB 로드 실패"); }
