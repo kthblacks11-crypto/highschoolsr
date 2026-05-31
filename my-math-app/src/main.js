@@ -5912,6 +5912,16 @@ async function saveUserSubjectGroup(group) {
         alert("설정 저장 실패: " + e.message);
     }
 }
+// 💡 교과군 선택 창에서 X버튼이나 배경을 눌러 가입을 취소했을 때 실행되는 함수
+function cancelSubjectSelection() {
+    document.getElementById('subject-selection-modal').style.display = 'none';
+    
+    // 즉시 로그아웃 처리 후 화면을 새로고침하여 비로그인 상태로 깔끔하게 초기화합니다.
+    auth.signOut().then(() => {
+        alert("가입(로그인)이 취소되었습니다. 비로그인 상태로 돌아갑니다.");
+        window.location.reload(); 
+    }).catch(err => console.error("로그아웃 처리 중 에러 발생:", err));
+}
 
 // 💡 성취기준 사전 패널 통제 (관리자 vs 일반 완벽 통합)
 function toggleDictionaryPanel() {
@@ -6708,7 +6718,7 @@ const exposeToWindow = {
     toggleExamRangeInputs, previewExamFile, executeExamAnalysis, resetAiLevels,
     prevLevelQuestion, skipLevelQuestion, saveAndClosePassageTray,   clearAllPassages,
     resetChecklist, openJournalModal, closeJournalModal, saveJournalEntry, deleteJournalEntry, saveUserSubjectGroup,
-    silentSaveChecklist, downloadAllJournalsExcel
+    silentSaveChecklist, downloadAllJournalsExcel, cancelSubjectSelection
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
