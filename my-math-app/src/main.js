@@ -1454,8 +1454,11 @@ function loadLevelQuestion() {
         // Base64 문자열이 보통 "data:image/png;base64,..." 형태로 시작합니다.
         // 이미지가 너무 크면 곤란하므로 최대 너비(max-width)를 100%로 설정해 박스 안에 예쁘게 맞춥니다.
         imageHtml = `
-            <div style="margin: 20px 0; text-align: center;">
-                <img src="${questionImage}" alt="문항 첨부 이미지" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">
+            <div style="margin: 20px 0; text-align: center; background: #fffbeb; padding: 15px; border-radius: 8px; border: 1px dashed #f59e0b; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);">
+                <div style="color: #d97706; font-size: 0.9rem; font-weight: bold; margin-bottom: 12px; word-break: keep-all;">
+                    ⚠️ [원본 참고용 그림] AI가 문제의 조건을 변형했습니다.<br>그림 속 숫자는 무시하고 형태만 참고하세요.
+                </div>
+                <img src="${questionImage}" alt="문항 첨부 이미지" style="max-width: 100%; height: auto; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">
             </div>
         `;
     }
@@ -2411,14 +2414,29 @@ async function loadBookmark(level) {
             }
 
             // 2. 데이터베이스(AI가 등록한 문항) 담기
+            // 2. 데이터베이스(AI가 등록한 문항) 담기
             snapshot.forEach(doc => {
                 const d = doc.data();
                 let extractedLevel = d.level || d.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1];
                 
                 if (extractedLevel === level && d.standard_code !== "unknown" && d.standard_code !== "코드없음") {
+                    // ✨ [추가] 북마크에서도 이미지를 직관적인 경고문과 함께 보여주기 위한 로직
+                    let qImg = d.image || d.imageUrl || d.img;
+                    let bookmarkImgHtml = '';
+                    if (qImg) {
+                        bookmarkImgHtml = `
+                            <div style="margin-top: 15px; text-align: center; background: #fffbeb; padding: 12px; border-radius: 8px; border: 1px dashed #f59e0b;">
+                                <div style="color: #d97706; font-size: 0.85rem; font-weight: bold; margin-bottom: 10px; word-break: keep-all;">
+                                    ⚠️ [원본 참고용 그림] AI가 문제의 조건을 변형했습니다. 그림 속 숫자는 무시하세요.
+                                </div>
+                                <img src="${qImg}" style="max-width: 100%; border-radius: 6px;">
+                            </div>`;
+                    }
+
                     currentBookmarkQuestions.push({
                         code: d.standard_code, 
-                        q: d.question || d.q || "문제 내용이 없습니다.",
+                        // 문제 텍스트 바로 밑에 경고문+이미지를 붙여서 출력합니다.
+                        q: (d.question || d.q || "문제 내용이 없습니다.") + bookmarkImgHtml,
                         reason: d.reason || "AI가 원본을 분석하고 변형하며 판정한 문항입니다.",
                         answer: d.answer || "등록된 정답/풀이가 없습니다.", 
                         source: d.source || "✨ AI 추가 문항"
@@ -6764,7 +6782,7 @@ const exposeToWindow = {
     toggleExamRangeInputs, previewExamFile, executeExamAnalysis, resetAiLevels,
     prevLevelQuestion, skipLevelQuestion, saveAndClosePassageTray,   clearAllPassages,
     resetChecklist, openJournalModal, closeJournalModal, saveJournalEntry, deleteJournalEntry, saveUserSubjectGroup,
-    silentSaveChecklist, downloadAllJournalsExcel, cancelSubjectSelection
+    silentSaveChecklist, downloadAllJournalsExcel, cancelSubjectSelection, initDictionaryDrag
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
