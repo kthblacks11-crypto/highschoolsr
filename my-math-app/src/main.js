@@ -1287,7 +1287,6 @@ async function changeSubject() {
     if (typeof loadBookmark === 'function') loadBookmark(); 
 
     // 👇 [여기에 3줄 추가] 과목을 바꾸면 무조건 초기 화면으로 강제 이동 및 퀴즈 상자 닫기
-    showSection('dashboard'); 
     if (document.getElementById('quiz-standard-selection')) document.getElementById('quiz-standard-selection').style.display = 'block';
     if (document.getElementById('quiz-level-matching')) document.getElementById('quiz-level-matching').style.display = 'none';
 }
@@ -1562,19 +1561,23 @@ function backToStandardSelection() {
     showSection('dashboard'); 
 }
 
+// 💡 중복 실행 방지용 신호등 변수 (반드시 함수 바깥에 선언)
+let checklistAborter = 0;
+
 // 💡 체크리스트 목록 렌더링 및 수업일지 '개수 배지' 표시 함수
 async function initChecklist() {
+    // 함수가 호출될 때마다 번호표 발급
+    const currentCall = ++checklistAborter; 
+    
     const container = document.getElementById('checklist-container');
-    const headerDiv = document.createElement('div');
-    headerDiv.style.cssText = "text-align: right; margin-bottom: 10px;";
-    headerDiv.innerHTML = `<button id="journal-excel-btn" onclick="downloadAllJournalsExcel()" style="background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.85rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: 0.2s;">📥 내 모든 수업일지 엑셀 다운로드</button>`;
-    container.appendChild(headerDiv);
+    
+    // 데이터를 불러오는 동안 임시 문구를 띄워 화면 중첩 방지
+    container.innerHTML = '<p style="text-align:center; padding: 2rem; color:#64748b;">데이터 동기화 중입니다... ⏳</p>';
 
     if (!subjectData[currentSubject]) return;
-    
 
     let saved = {};
-    let journalData = {}; // ✨ 수업일지 데이터를 통째로 받아올 임시 보관소
+    let journalData = {}; 
 
     if (auth.currentUser) {
         try {
@@ -1582,7 +1585,7 @@ async function initChecklist() {
             const doc = await db.collection('user_checklists').doc(auth.currentUser.uid).get();
             if (doc.exists) { saved = doc.data()[currentSubject] || {}; }
 
-            // ✨ 2. 수업일지 개수를 세기 위해 일지 데이터도 함께 불러오기
+            // 2. 수업일지 데이터 불러오기
             const journalDoc = await db.collection('user_journals').doc(auth.currentUser.uid).get();
             if (journalDoc.exists) {
                 const allJournals = journalDoc.data();
@@ -1593,12 +1596,24 @@ async function initChecklist() {
         saved = JSON.parse(localStorage.getItem('check_' + currentSubject)) || {};
     }
 
+    // ✨ [핵심 방어막] 내가 가장 마지막에 불린 '최신 호출'이 아니면 렌더링을 멈추고 조용히 종료!
+    if (currentCall !== checklistAborter) return;
+
+    // 최신 호출임이 확인되었으니 안전하게 화면 비우기
+    container.innerHTML = "";
+
+    // 1. 엑셀 다운로드 버튼 생성 (이제 무조건 1개만 생성됩니다)
+    const headerDiv = document.createElement('div');
+    headerDiv.style.cssText = "text-align: right; margin-bottom: 10px;";
+    headerDiv.innerHTML = `<button id="journal-excel-btn" onclick="downloadAllJournalsExcel()" style="background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.85rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: 0.2s;">📥 내 모든 수업일지 엑셀 다운로드</button>`;
+    container.appendChild(headerDiv);
+
+    // 2. 체크리스트 목록 그리기
     subjectData[currentSubject].standards.forEach(std => {
         const div = document.createElement('div');
         div.className = 'check-item';
         div.style.cssText = 'display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 1rem; margin-bottom: 0.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);';
         
-        // 왼쪽: 체크박스와 성취기준 내용
         const leftDiv = document.createElement('div');
         leftDiv.style.cssText = 'display: flex; align-items: center; flex: 1; margin-right: 10px;';
         const safeDesc = std.desc.replace(/'/g, "\\'").replace(/"/g, '&quot;'); 
@@ -1607,7 +1622,6 @@ async function initChecklist() {
             <label for="c-${std.code}" style="cursor: pointer; line-height: 1.5;"><strong>${std.code}</strong> ${std.desc}</label>
         `;
         
-        // ✨ 해당 성취기준의 일지 개수 카운팅 및 빨간 배지 만들기
         const entries = journalData[std.code] || [];
         const jCount = entries.length;
         let badgeHtml = "";
@@ -1615,7 +1629,6 @@ async function initChecklist() {
             badgeHtml = `<span style="background: #ef4444; color: white; padding: 2px 6px; border-radius: 12px; font-size: 0.7rem; margin-left: 5px; box-shadow: 0 1px 2px rgba(0,0,0,0.2);">${jCount}</span>`;
         }
 
-        // 오른쪽: 수업일지 버튼 (배지 포함)
         const rightDiv = document.createElement('div');
         rightDiv.innerHTML = `<button onclick="openJournalModal('${std.code}', '${safeDesc}')" style="background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; padding: 6px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: bold; cursor: pointer; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: 0.2s;" onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">📖 수업일지 ${badgeHtml}</button>`;
 
