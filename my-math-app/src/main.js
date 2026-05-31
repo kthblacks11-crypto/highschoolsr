@@ -6000,7 +6000,7 @@ function initDictionaryDrag() {
     });
 }
 
-// 💡 성취기준 사전 패널 통제 (관리자 vs 일반 완벽 통합 - 선생님 원본 100%)
+// 💡 창 열기/닫기 (사용자 화면 과목과 100% 동기화 + 위치 리셋)
 function toggleDictionaryPanel() {
     const panel = document.getElementById('floating-dictionary-panel');
     if (!panel) return;
@@ -6008,21 +6008,19 @@ function toggleDictionaryPanel() {
     panel.classList.toggle('open'); 
 
     if (panel.classList.contains('open')) {
-        const select = document.getElementById('dict-subject-select');
+        // ✨ 핵심: 사전이 열릴 때, 메인 화면에서 보고 있는 그룹(currentGroup)과 과목(currentSubject)을 가져옵니다.
+        const activeGroup = currentGroup || currentUserGroup || 'math';
         
         if (currentUserRole === 'user') {
-            // [일반 교사용] 상단 과목 탭 숨기기 + 본인 과목으로 드롭다운 무조건 강제 세팅!
             document.querySelectorAll('.dict-group-btn').forEach(btn => btn.style.display = 'none');
-            changeDictGroup(currentUserGroup); 
+            // 일반 사용자도 메인 화면의 과목(currentSubject)을 그대로 전달받아 엽니다!
+            changeDictGroup(activeGroup, currentSubject); 
         } else {
-            // [관리자용] 상단 5개 탭을 모두 보여주고, 빈 화면일 때만 '수학'을 기본 셋팅
             document.querySelectorAll('.dict-group-btn').forEach(btn => btn.style.display = 'inline-block');
-            if (select.options.length <= 1) {
-                changeDictGroup('math'); 
-            }
+            changeDictGroup(activeGroup, currentSubject); 
         }
     } else {
-        // ✨ [유일하게 추가된 부분] 창을 닫을 때, 드래그로 삐뚤어진 좌표를 싹 지워서 원래 자리로 돌려보냅니다.
+        // 창을 닫을 때 이리저리 옮겼던 위치를 원래 자리로 복구
         panel.style.left = '';
         panel.style.top = '';
         panel.style.bottom = ''; 
@@ -6030,33 +6028,53 @@ function toggleDictionaryPanel() {
     }
 }
 
-// 💡 성취기준 사전 패널 통제 (관리자 vs 일반 완벽 통합 - 선생님 원본 100%)
-function toggleDictionaryPanel() {
-    const panel = document.getElementById('floating-dictionary-panel');
-    if (!panel) return;
-
-    panel.classList.toggle('open'); 
-
-    if (panel.classList.contains('open')) {
-        const select = document.getElementById('dict-subject-select');
+// 💡 교과군 변경 (선생님이 올려주신 완벽한 준비중 + 동기화 로직 100% 반영!)
+function changeDictGroup(groupId, targetSubject = null) {
+    document.querySelectorAll('.dict-group-btn').forEach(btn => btn.classList.remove('active'));
+    const targetBtn = document.querySelector(`button[onclick="changeDictGroup('${groupId}')"]`);
+    if(targetBtn) targetBtn.classList.add('active');
+    
+    const selectEl = document.getElementById('dict-subject-select');
+    selectEl.innerHTML = '<option value="">-- 과목을 선택하세요 --</option>';
+    
+    if (!curriculumMap[groupId]) return;
+    const map = curriculumMap[groupId];
+    
+    let firstEnabledSubject = null;
+    let isTargetAvailable = false; // 메인 화면에서 보던 과목이 활성화 상태인지 확인
+    
+    for (const category in map) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = category;
         
-        if (currentUserRole === 'user') {
-            // [일반 교사용] 상단 과목 탭 숨기기 + 본인 과목으로 드롭다운 무조건 강제 세팅!
-            document.querySelectorAll('.dict-group-btn').forEach(btn => btn.style.display = 'none');
-            changeDictGroup(currentUserGroup); 
-        } else {
-            // [관리자용] 상단 5개 탭을 모두 보여주고, 빈 화면일 때만 '수학'을 기본 셋팅
-            document.querySelectorAll('.dict-group-btn').forEach(btn => btn.style.display = 'inline-block');
-            if (select.options.length <= 1) {
-                changeDictGroup('math'); 
+        map[category].forEach(sub => {
+            const opt = document.createElement('option');
+            opt.value = sub.id;
+            
+            if (typeof subjectData !== 'undefined' && subjectData[sub.id] && subjectData[sub.id].standards && subjectData[sub.id].standards.length > 0) {
+                opt.innerText = sub.name;
+                if (!firstEnabledSubject) firstEnabledSubject = sub.id;
+                if (sub.id === targetSubject) isTargetAvailable = true; // 타겟 과목 찾음!
+            } else {
+                opt.innerText = sub.name + " (준비중)";
+                opt.disabled = true;
+                opt.style.color = "#94a3b8";
             }
-        }
+            optgroup.appendChild(opt);
+        });
+        selectEl.appendChild(optgroup);
+    }
+    
+    // ✨ 핵심: 메인 화면과 동일한 과목이 활성화되어 있다면 그것을 띄우고, 아니면 첫 번째 과목 띄우기
+    if (isTargetAvailable && targetSubject) {
+        selectEl.value = targetSubject;
+        loadDictionaryStandards();
+    } else if (firstEnabledSubject) {
+        selectEl.value = firstEnabledSubject;
+        loadDictionaryStandards();
     } else {
-        // ✨ [유일하게 추가된 부분] 창을 닫을 때, 드래그로 삐뚤어진 좌표를 싹 지워서 원래 자리로 돌려보냅니다.
-        panel.style.left = '';
-        panel.style.top = '';
-        panel.style.bottom = ''; 
-        panel.style.right = '';
+        selectEl.innerHTML = '<option value="">-- 등록된 과목이 없습니다 --</option>';
+        document.getElementById('dict-accordion-container').innerHTML = '<p style="text-align:center; color:#ef4444; font-size:0.95rem; margin-top:2rem;">이 교과군에는 아직 등록된 성취기준이 없습니다.</p>';
     }
 }
 
