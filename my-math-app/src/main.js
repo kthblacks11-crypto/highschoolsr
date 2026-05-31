@@ -5946,7 +5946,7 @@ function cancelSubjectSelection() {
 // 📚 [2탄] 성취기준 사전 (아코디언 및 드래그 로직)
 // ==========================================
 
-// 👇 [신규 추가] 사전을 드래그하기 위한 변수와 함수
+// 1️⃣ 사전을 드래그하기 위한 변수와 함수
 let isDraggingDict = false;
 let dictOffsetX = 0;
 let dictOffsetY = 0;
@@ -5957,21 +5957,20 @@ function initDictionaryDrag() {
 
     if (!panel || !header) return;
 
-    header.style.cursor = 'move'; // 마우스 커서를 이동 모양(십자 화살표)으로 변경
+    header.style.cursor = 'move'; // 마우스 커서를 십자 화살표로 변경
 
     header.addEventListener('mousedown', (e) => {
         isDraggingDict = true;
         const rect = panel.getBoundingClientRect();
         dictOffsetX = e.clientX - rect.left;
         dictOffsetY = e.clientY - rect.top;
-        document.body.style.userSelect = 'none'; // 드래그 중 글자 드래그 방지
+        document.body.style.userSelect = 'none'; // 글자 드래그 방지
     });
 
     document.addEventListener('mousemove', (e) => {
         if (!isDraggingDict) return;
         panel.style.left = (e.clientX - dictOffsetX) + 'px';
         panel.style.top = (e.clientY - dictOffsetY) + 'px';
-        // 기존 우측/하단 고정 속성을 풀어주어야 마우스를 따라다닙니다.
         panel.style.bottom = 'auto'; 
         panel.style.right = 'auto';  
     });
@@ -5982,7 +5981,7 @@ function initDictionaryDrag() {
     });
 }
 
-// 👇 [기존 코드 수정] 창을 닫을 때 원래 위치로 돌려놓는 로직 추가
+// 2️⃣ 창 열기/닫기 및 관리자/사용자 권한 분리 (선생님의 완벽한 원본 로직)
 function toggleDictionaryPanel() {
     const panel = document.getElementById('floating-dictionary-panel');
     if (!panel) return;
@@ -5992,6 +5991,7 @@ function toggleDictionaryPanel() {
     if (panel.classList.contains('open')) {
         const select = document.getElementById('dict-subject-select');
         
+        // 🛡️ 선생님이 만드신 완벽한 권한 분리 로직 유지!
         if (currentUserRole === 'user') {
             document.querySelectorAll('.dict-group-btn').forEach(btn => btn.style.display = 'none');
             changeDictGroup(currentUserGroup); 
@@ -6002,7 +6002,7 @@ function toggleDictionaryPanel() {
             }
         }
     } else {
-        // ✨ [핵심 추가] 창을 닫을 때, 드래그로 삐뚤어진 좌표를 싹 지워서 원래 자리(우측 하단)로 돌려보냅니다.
+        // ✨ 창을 닫을 때, 이리저리 옮겼던 위치를 싹 지워서 원래 자리(우측 하단)로 복구합니다.
         panel.style.left = '';
         panel.style.top = '';
         panel.style.bottom = ''; 
@@ -6010,53 +6010,37 @@ function toggleDictionaryPanel() {
     }
 }
 
-// ✨ [수정됨] 2. 교과군(수학, 국어 등) 버튼 클릭 시 작동하는 메인 화면과 동일한 (준비중) 로직
+// 3️⃣ 교과군 변경 시 드롭다운 처리 (🔥 기존 1번 코드로 완벽 원상복구!)
 function changeDictGroup(groupId) {
     // 탭 버튼 활성화 스타일 변경
     document.querySelectorAll('.dict-group-btn').forEach(btn => btn.classList.remove('active'));
     const targetBtn = document.querySelector(`button[onclick="changeDictGroup('${groupId}')"]`);
     if(targetBtn) targetBtn.classList.add('active');
     
-    // 해당 교과군에 맞춰 드롭다운 렌더링
     const selectEl = document.getElementById('dict-subject-select');
-    selectEl.innerHTML = '';
+    selectEl.innerHTML = '<option value="">-- 과목을 선택하세요 --</option>';
     
     const map = curriculumMap[groupId];
-    let firstEnabledSubject = null;
     
     for (const category in map) {
         const optgroup = document.createElement('optgroup');
         optgroup.label = category;
         
+        // (준비중) 강제 처리 로직을 완전히 삭제하고, 모든 과목을 예전처럼 직접 선택할 수 있게 복구했습니다.
         map[category].forEach(sub => {
             const opt = document.createElement('option');
             opt.value = sub.id;
-            
-            // 🌟 성취기준 데이터가 1개라도 있는지 확인하여 (준비중) 처리
-            if (typeof subjectData !== 'undefined' && subjectData[sub.id] && subjectData[sub.id].standards && subjectData[sub.id].standards.length > 0) {
-                opt.innerText = sub.name;
-                if (!firstEnabledSubject) firstEnabledSubject = sub.id; // 첫 번째 활성화 과목 기억
-            } else {
-                opt.innerText = sub.name + " (준비중)";
-                opt.disabled = true;           // 마우스 선택 불가
-                opt.style.color = "#94a3b8";   // 회색 처리
-            }
+            opt.innerText = sub.name;
             optgroup.appendChild(opt);
         });
         selectEl.appendChild(optgroup);
     }
     
-    // 첫 활성화 과목으로 자동 선택 후 아코디언 로드
-    if (firstEnabledSubject) {
-        selectEl.value = firstEnabledSubject;
-        loadDictionaryStandards();
-    } else {
-        selectEl.innerHTML = '<option value="">-- 등록된 과목이 없습니다 --</option>';
-        document.getElementById('dict-accordion-container').innerHTML = '<p style="text-align:center; color:#ef4444; font-size:0.95rem; margin-top:2rem;">이 교과군에는 아직 등록된 성취기준이 없습니다.</p>';
-    }
+    // 과목을 선택하라는 초기 안내 메시지 복구
+    document.getElementById('dict-accordion-container').innerHTML = '<p style="text-align:center; color:#64748b; font-size:0.95rem; margin-top:2rem;">위에서 과목을 선택하면<br>성취기준과 수준(A~E)이 나타납니다.</p>';
 }
 
-// 3. 과목을 선택하면 아코디언 목록 렌더링하기
+// 4️⃣ 과목을 선택하면 아코디언 목록 렌더링
 function loadDictionaryStandards() {
     const subject = document.getElementById('dict-subject-select').value;
     const container = document.getElementById('dict-accordion-container');
@@ -6067,11 +6051,13 @@ function loadDictionaryStandards() {
     }
 
     const data = subjectData[subject];
-    if (!data || !data.standards) return;
+    if (!data || !data.standards || data.standards.length === 0) {
+        container.innerHTML = '<p style="text-align:center; color:#ef4444; font-size:0.95rem; margin-top:2rem;">이 과목에는 아직 등록된 성취기준 데이터가 없습니다.</p>';
+        return;
+    }
 
     let html = '';
     data.standards.forEach((std, index) => {
-        // DB에 저장된 수준별 텍스트를 가져오되 없으면 안전하게 빈칸 처리
         const lvlA = std.levels?.high || "데이터 없음";
         const lvlB = std.levels?.b || (std.levels?.high ? std.levels.high.replace("이해하여 설명할 수 있으며", "설명할 수 있고") : "데이터 없음");
         const lvlC = std.levels?.mid || "데이터 없음";
@@ -6099,7 +6085,7 @@ function loadDictionaryStandards() {
     container.innerHTML = html;
 }
 
-// 4. ✨ 마법의 자동 닫힘 로직 (다른 걸 누르면 기존 건 닫힘!)
+// 5️⃣ 마법의 자동 닫힘 로직 (다른 걸 누르면 기존 건 닫힘)
 function toggleAccordion(index) {
     const allHeaders = document.querySelectorAll('.dict-accordion-header');
     const allBodies = document.querySelectorAll('.dict-accordion-body');
@@ -6111,19 +6097,14 @@ function toggleAccordion(index) {
 
     const isCurrentlyOpen = targetBody.classList.contains('open');
 
-    // 1단계: 조건 없이 무조건 모든 탭을 전부 닫아버립니다. (자동 닫힘)
     allBodies.forEach(body => body.classList.remove('open'));
     allHeaders.forEach(header => header.classList.remove('active'));
     allIcons.forEach(icon => icon.innerText = '▼');
 
-    // 2단계: 방금 누른 탭이 원래 '닫혀있던 상태'였다면 그것만 엽니다.
-    // (만약 이미 열려있던 걸 또 누른 거라면, 1단계에서 닫혔으므로 그대로 끝납니다.)
     if (!isCurrentlyOpen) {
         targetBody.classList.add('open');
         targetHeader.classList.add('active');
         targetIcon.innerText = '▲';
-        
-        // 열린 항목이 화면 가운데 오도록 스크롤 부드럽게 이동
         targetHeader.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 }
