@@ -217,40 +217,39 @@
         <div id="ai-helper-zone" style="display:none; background:#f8fafc; border:2px dashed #8b5cf6; border-radius:8px; padding:1.5rem; margin-bottom:1.5rem;">
             <h4 style="margin-top:0; color:#6d28d9;">🤖 AI 시험지 정밀 분석기</h4>
             
-            <div style="margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px; background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
-                
-                <!-- 🎯 객관식(선택형) 범위 지정 -->
-                <label style="font-size: 0.95rem; font-weight: bold; color: #334155; cursor: pointer;">
-                    <input type="checkbox" id="exam-check-choice" onchange="toggleExamRangeInputs()"> 🎯 선택형(객관식) 추출하기
+            <div style="margin-bottom: 15px; background: white; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                <label style="cursor: pointer; font-weight: bold; color: #1e40af;">
+                    <input type="radio" name="extractMode" value="all" checked onchange="toggleExamRangeInputs()"> 🌐 전체 추출 (문서 내 모든 문항 자동 추출)
                 </label>
-                <div id="exam-range-choice" style="display: none; padding-left: 25px; align-items: center; gap: 10px;">
+                <br>
+                <label style="cursor: pointer; margin-top: 8px; display: inline-block; font-weight: bold; color: #ea580c;">
+                    <input type="radio" name="extractMode" value="partial" onchange="toggleExamRangeInputs()"> 🎯 부분 추출 (원하는 문항 번호만 지정)
+                </label>
+            </div>
+            
+            <div id="partial-extract-options" style="display: none; margin-bottom: 15px; flex-direction: column; gap: 10px; background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                <label style="font-size: 0.95rem; font-weight: bold; color: #334155; cursor: pointer;">
+                    <input type="checkbox" id="exam-check-choice" checked> 🎯 선택형(객관식) 추출
+                </label>
+                <div style="padding-left: 25px; display: flex; align-items: center; gap: 10px;">
                     <input type="number" id="exam-start-num" value="1" style="width: 50px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;"> 번 부터
                     <input type="number" id="exam-end-num" value="10" style="width: 50px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;"> 번 까지
                 </div>
         
-                <!-- ✍️ 서답형 범위 지정 -->
                 <label style="font-size: 0.95rem; font-weight: bold; color: #334155; cursor: pointer; margin-top: 5px;">
-                    <input type="checkbox" id="exam-check-short" onchange="toggleExamRangeInputs()"> ✍️ 서답형(서술형) 추출하기
+                    <input type="checkbox" id="exam-check-short" checked> ✍️ 서답형(서술형) 추출
                 </label>
-                <div id="exam-range-short" style="display: none; padding-left: 25px; align-items: center; gap: 10px;">
+                <div style="padding-left: 25px; display: flex; align-items: center; gap: 10px;">
                     <input type="number" id="exam-short-start" value="1" style="width: 50px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;"> 번 부터
                     <input type="number" id="exam-short-end" value="5" style="width: 50px; padding: 4px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;"> 번 까지
                 </div>
-                
-                <!-- 🌟 전체 추출 안내 멘트 (체크박스 삭제) -->
-                <div style="background: #fff7ed; padding: 10px; border-radius: 6px; border: 1px solid #fed7aa; margin-top: 5px;">
-                    <p style="margin: 0; font-size: 0.85rem; color: #9a3412; font-weight: bold; line-height: 1.5;">
-                        🌟 위 두 옵션을 모두 선택하지 않으면 문서 내 <span style="text-decoration: underline;">모든 문항을 한 번에 자동 추출</span>합니다.<br>
-                        <span style="color: #c2410c; font-weight: normal;">(※ 지문이 길어 문항이 중간에 끊길 경우, 추출이 안 된 번호부터 범위를 지정하여 추가로 추출하세요.)</span>
-                    </p>
-                </div>
             </div>
-        
+            
             <p style="font-size:0.85rem; color:#475569; margin-bottom: 8px;">1. 시험지 이미지(또는 PDF) 파일을 먼저 선택하세요.</p>
             <input type="file" id="exam-file" accept="image/*,application/pdf" onchange="previewExamFile(event)">
             
             <div style="margin-top: 15px; text-align: right;">
-                <button id="start-analysis-btn" class="save-btn" onclick="executeExamAnalysis()" style="display: none; width: auto; display: inline-block; background: #8b5cf6;">🚀 AI 분석 시작하기</button>
+                <button id="start-analysis-btn" class="save-btn" onclick="executeExamAnalysis()" style="display: none; width: auto; background: #8b5cf6;">🚀 AI 분석 시작하기</button>
             </div>
             
             <div id="exam-loading" style="display:none; color:#ea580c; font-weight:bold; margin-top:10px; text-align: center;">AI가 분석 중입니다. 잠시만 기다려주세요... ⏳</div>
@@ -936,7 +935,7 @@
 </button>
 
 <div id="floating-dictionary-panel" class="floating-panel">
-    <div class="panel-header">
+    <div class="panel-header" id="dict-header" title="여기를 잡고 드래그하여 이동하세요">
         <h3>📚 과목별 성취기준 사전</h3>
         <button onclick="toggleDictionaryPanel()" class="close-panel-btn">&times;</button>
     </div>

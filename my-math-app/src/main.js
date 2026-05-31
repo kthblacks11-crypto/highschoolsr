@@ -4202,7 +4202,8 @@ window.onload = async () => {
     initChatResizer(); 
     initCaptureEvents(); 
     initAdminDropdowns();
-    
+    initDictionaryDrag();
+
     const uploadArea = document.getElementById('upload-area');
     if (uploadArea) {
         uploadArea.addEventListener('paste', handlePaste);
@@ -5923,7 +5924,47 @@ function cancelSubjectSelection() {
     }).catch(err => console.error("로그아웃 처리 중 에러 발생:", err));
 }
 
-// 💡 성취기준 사전 패널 통제 (관리자 vs 일반 완벽 통합)
+// ==========================================
+// 📚 [2탄] 성취기준 사전 (아코디언 및 드래그 로직)
+// ==========================================
+
+// 👇 [신규 추가] 사전을 드래그하기 위한 변수와 함수
+let isDraggingDict = false;
+let dictOffsetX = 0;
+let dictOffsetY = 0;
+
+function initDictionaryDrag() {
+    const panel = document.getElementById('floating-dictionary-panel');
+    const header = document.getElementById('dict-header'); 
+
+    if (!panel || !header) return;
+
+    header.style.cursor = 'move'; // 마우스 커서를 이동 모양(십자 화살표)으로 변경
+
+    header.addEventListener('mousedown', (e) => {
+        isDraggingDict = true;
+        const rect = panel.getBoundingClientRect();
+        dictOffsetX = e.clientX - rect.left;
+        dictOffsetY = e.clientY - rect.top;
+        document.body.style.userSelect = 'none'; // 드래그 중 글자 드래그 방지
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDraggingDict) return;
+        panel.style.left = (e.clientX - dictOffsetX) + 'px';
+        panel.style.top = (e.clientY - dictOffsetY) + 'px';
+        // 기존 우측/하단 고정 속성을 풀어주어야 마우스를 따라다닙니다.
+        panel.style.bottom = 'auto'; 
+        panel.style.right = 'auto';  
+    });
+
+    document.addEventListener('mouseup', () => {
+        isDraggingDict = false;
+        document.body.style.userSelect = 'auto';
+    });
+}
+
+// 👇 [기존 코드 수정] 창을 닫을 때 원래 위치로 돌려놓는 로직 추가
 function toggleDictionaryPanel() {
     const panel = document.getElementById('floating-dictionary-panel');
     if (!panel) return;
@@ -5934,16 +5975,20 @@ function toggleDictionaryPanel() {
         const select = document.getElementById('dict-subject-select');
         
         if (currentUserRole === 'user') {
-            // [일반 교사용] 상단 과목 탭 숨기기 + 본인 과목으로 드롭다운 무조건 강제 세팅!
             document.querySelectorAll('.dict-group-btn').forEach(btn => btn.style.display = 'none');
             changeDictGroup(currentUserGroup); 
         } else {
-            // [관리자용] 상단 5개 탭을 모두 보여주고, 빈 화면일 때만 '수학'을 기본 셋팅
             document.querySelectorAll('.dict-group-btn').forEach(btn => btn.style.display = 'inline-block');
             if (select.options.length <= 1) {
                 changeDictGroup('math'); 
             }
         }
+    } else {
+        // ✨ [핵심 추가] 창을 닫을 때, 드래그로 삐뚤어진 좌표를 싹 지워서 원래 자리(우측 하단)로 돌려보냅니다.
+        panel.style.left = '';
+        panel.style.top = '';
+        panel.style.bottom = ''; 
+        panel.style.right = '';
     }
 }
 
@@ -6328,16 +6373,15 @@ async function updateQuestionCount() {
     }
 }
 
-// 1. 체크박스 상태에 따라 번호 입력창을 켜고 끄는 함수 (전체 추출 체크박스 로직 삭제)
+// 1. 라디오 버튼 상태에 따라 부분 추출 설정창을 켜고 끄는 함수
 function toggleExamRangeInputs() {
-    const isChoiceChecked = document.getElementById('exam-check-choice')?.checked;
-    const isShortChecked = document.getElementById('exam-check-short')?.checked;
-
-    const choiceDiv = document.getElementById('exam-range-choice');
-    const shortDiv = document.getElementById('exam-range-short');
+    const extractMode = document.querySelector('input[name="extractMode"]:checked')?.value || 'all';
+    const partialOptionsDiv = document.getElementById('partial-extract-options');
     
-    if (choiceDiv) choiceDiv.style.display = isChoiceChecked ? 'flex' : 'none';
-    if (shortDiv) shortDiv.style.display = isShortChecked ? 'flex' : 'none';
+    // '부분 추출'이 선택되었을 때만 상세 설정창을 엽니다.
+    if (partialOptionsDiv) {
+        partialOptionsDiv.style.display = (extractMode === 'partial') ? 'flex' : 'none';
+    }
 }
 
 // 2. 임시로 이미지를 보관해둘 변수
@@ -6421,10 +6465,12 @@ async function startExamAiAnalysis(base64Data) {
     const loadingEl = document.getElementById('exam-loading');
     if (loadingEl) loadingEl.style.display = 'block';
 
+    const extractMode = document.querySelector('input[name="extractMode"]:checked')?.value || 'all';
+    const isExtractAll = (extractMode === 'all');
+    
     const isChoiceChecked = document.getElementById('exam-check-choice')?.checked || false;
     const isShortChecked = document.getElementById('exam-check-short')?.checked || false;
-    const isExtractAll = (!isChoiceChecked && !isShortChecked);
-    
+       
     const startNum = document.getElementById('exam-start-num')?.value || "1";
     const endNum = document.getElementById('exam-end-num')?.value || "10";
     const shortStartNum = document.getElementById('exam-short-start')?.value || "1";
