@@ -5987,7 +5987,7 @@ function initDictionaryDrag() {
     });
 }
 
-// 2️⃣ 창 열기/닫기 (일반 사용자 오류 해결)
+// 1. 창 열기/닫기 (사용자 화면 과목과 100% 동기화!)
 function toggleDictionaryPanel() {
     const panel = document.getElementById('floating-dictionary-panel');
     if (!panel) return;
@@ -5995,17 +5995,15 @@ function toggleDictionaryPanel() {
     panel.classList.toggle('open'); 
 
     if (panel.classList.contains('open')) {
-        const select = document.getElementById('dict-subject-select');
+        // ✨ 핵심: 사전이 열릴 때, 메인 화면에서 보고 있는 그룹(currentGroup)과 과목(currentSubject)을 그대로 넘겨줍니다!
+        const activeGroup = currentGroup || currentUserGroup || 'math';
         
         if (currentUserRole === 'user') {
             document.querySelectorAll('.dict-group-btn').forEach(btn => btn.style.display = 'none');
-            // 🛡️ 안전장치: currentUserGroup이 빈 값이면 기본으로 'math'를 줘서 에러를 막습니다.
-            changeDictGroup(currentUserGroup || 'math'); 
+            changeDictGroup(activeGroup, currentSubject); 
         } else {
             document.querySelectorAll('.dict-group-btn').forEach(btn => btn.style.display = 'inline-block');
-            if (select.options.length <= 1) {
-                changeDictGroup('math'); 
-            }
+            changeDictGroup(activeGroup, currentSubject); 
         }
     } else {
         // 창을 닫을 때 위치 복구
@@ -6016,8 +6014,8 @@ function toggleDictionaryPanel() {
     }
 }
 
-// 3️⃣ 교과군 변경 (🔥 선생님의 오리지널 '준비중' 기능 100% 복구!)
-function changeDictGroup(groupId) {
+// 2. 교과군 변경 (메인 화면에서 보던 과목을 자동으로 찾아 선택!)
+function changeDictGroup(groupId, targetSubject = null) {
     document.querySelectorAll('.dict-group-btn').forEach(btn => btn.classList.remove('active'));
     const targetBtn = document.querySelector(`button[onclick="changeDictGroup('${groupId}')"]`);
     if(targetBtn) targetBtn.classList.add('active');
@@ -6025,9 +6023,11 @@ function changeDictGroup(groupId) {
     const selectEl = document.getElementById('dict-subject-select');
     selectEl.innerHTML = '<option value="">-- 과목을 선택하세요 --</option>';
     
-    // 🛡️ 안전장치
     if (!curriculumMap[groupId]) return;
     const map = curriculumMap[groupId];
+    
+    let firstEnabledSubject = null;
+    let isTargetAvailable = false; // 메인 화면에서 보던 과목이 활성화 상태인지 확인
     
     for (const category in map) {
         const optgroup = document.createElement('optgroup');
@@ -6037,19 +6037,31 @@ function changeDictGroup(groupId) {
             const opt = document.createElement('option');
             opt.value = sub.id;
             
-            // 🌟 선생님의 원본 로직 복구: 데이터가 없으면 (준비중) 표시 후 비활성화!
-            if (!subjectData || !subjectData[sub.id] || !subjectData[sub.id].standards || subjectData[sub.id].standards.length === 0) {
+            if (typeof subjectData !== 'undefined' && subjectData[sub.id] && subjectData[sub.id].standards && subjectData[sub.id].standards.length > 0) {
+                opt.innerText = sub.name;
+                if (!firstEnabledSubject) firstEnabledSubject = sub.id;
+                if (sub.id === targetSubject) isTargetAvailable = true; // 타겟 과목 찾음!
+            } else {
                 opt.innerText = sub.name + " (준비중)";
                 opt.disabled = true;
-            } else {
-                opt.innerText = sub.name;
+                opt.style.color = "#94a3b8";
             }
             optgroup.appendChild(opt);
         });
         selectEl.appendChild(optgroup);
     }
     
-    document.getElementById('dict-accordion-container').innerHTML = '<p style="text-align:center; color:#64748b; font-size:0.95rem; margin-top:2rem;">위에서 과목을 선택하면<br>성취기준과 수준(A~E)이 나타납니다.</p>';
+    // ✨ 핵심: 메인 화면과 동일한 과목이 활성화되어 있다면 그것을 띄우고, 아니면 첫 번째 과목 띄우기
+    if (isTargetAvailable && targetSubject) {
+        selectEl.value = targetSubject;
+        loadDictionaryStandards();
+    } else if (firstEnabledSubject) {
+        selectEl.value = firstEnabledSubject;
+        loadDictionaryStandards();
+    } else {
+        selectEl.innerHTML = '<option value="">-- 등록된 과목이 없습니다 --</option>';
+        document.getElementById('dict-accordion-container').innerHTML = '<p style="text-align:center; color:#ef4444; font-size:0.95rem; margin-top:2rem;">이 교과군에는 아직 등록된 성취기준이 없습니다.</p>';
+    }
 }
 
 // 4️⃣ 과목을 선택하면 아코디언 목록 렌더링
