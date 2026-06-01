@@ -309,9 +309,13 @@ async function submitFeedback() {
     const submitBtn = document.querySelector('#feedback-modal .save-btn');
     submitBtn.disabled = true;
     submitBtn.innerText = "전송 중...";
+
+    const user = auth.currentUser;
+    const userEmail = user ? user.email : "이메일 정보 없음";
+
     try {
         await db.collection('developer_feedback').add({
-            text: text, timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            text: text, user_email: userEmail, timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
         alert("의견이 성공적으로 전송되었습니다. 감사합니다!");
         document.getElementById('feedback-message').value = "";
@@ -350,6 +354,8 @@ async function openAdminFeedback() {
         snapshot.forEach(doc => {
             const data = doc.data();
             const date = data.timestamp ? data.timestamp.toDate().toLocaleString() : "방금 전";
+
+            const senderEmail = data.user_email || "이메일 정보 없음";
             
             if (data.type === "문항 매칭 이의 제기") {
                 let aiReviewText = data.ai_review || "";
@@ -5844,6 +5850,7 @@ async function submitSpecificFeedback() {
             proposed_level: proposedLevel,
             teacher_reason: reason,
             ai_review: aiReviewText,
+            user_email: userEmail,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         };
 
