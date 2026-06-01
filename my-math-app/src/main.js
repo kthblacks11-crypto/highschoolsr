@@ -475,10 +475,28 @@ function openAnalysisMode(mode) {
 
     if (mode === 'single') {
         title.innerHTML = "🔍 한 문제 상세 분석";
-        summary.innerHTML = "<strong style='color: #2563eb;'>[상세 분석 제공 내용]</strong><br>과목, 단원명, 성취기준, 성취수준, 판정이유, 핵심개념, 단계별 문제풀이";
+        summary.innerHTML = `
+            <div style="padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 0.85rem; color: #334155;">
+                <div style="display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px;">
+                    <strong style="color: #2563eb; white-space: nowrap;">[상세 분석 제공 내용]</strong>
+                    <span style="line-height: 1.5;">과목, 단원명, 성취기준, 성취수준, 판정이유, 핵심개념, 단계별 문제풀이</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 4px; color: #e11d48; font-weight: bold; padding-top: 5px; border-top: 1px solid #e2e8f0;">
+                    <span>⚠️ AI 분석은 오류 가능성이 있으므로 교사의 최종 검토가 필수입니다.</span>
+                </div>
+            </div>`;
     } else {
         title.innerHTML = "📑 여러 문제 요약 분석";
-        summary.innerHTML = "<strong style='color: #8b5cf6;'>[요약 분석 제공 내용]</strong><br>문항별 과목, 단원명, 성취기준, 성취수준, 판정이유";
+        summary.innerHTML = `
+            <div style="padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 0.85rem; color: #334155;">
+                <div style="display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px;">
+                    <strong style="white-space: nowrap;">[요약 분석 제공 내용]</strong>
+                    <span>문항별 과목, 단원명, 성취기준, 성취수준, 판정이유</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 4px; color: #e11d48; font-weight: bold; padding-top: 5px; border-top: 1px solid #fbcfe8;">
+                    <span>⚠️ AI 분석은 오류 가능성이 있으므로 교사의 최종 검토가 필수입니다.</span>
+                </div>
+            </div>`;
     }
 }
 
