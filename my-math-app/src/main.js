@@ -1152,77 +1152,67 @@ async function processAndSaveBackground(analysisText, apiKey) {
 }
 
 function showSection(id) {
-    // 🟢 [버그 해결 핵심 1] 이미 이동하려는 화면(탭)에 있다면 
-    // 아래의 경고창 띄우기 및 탭 초기화 로직을 건너뛰고 조용히 종료합니다!
     const currentActive = document.querySelector('.section.active');
     if (currentActive && currentActive.id === id) {
         return; 
     }
 
-    // 🟢 [핵심 수정 부분] 현재 화면이 '문제 분석(problem-analysis)' 탭일 때만 경고창 띄우기 검사!
-    if (currentActive && currentActive.id === 'problem-analysis') {
+    // 1. 🟢 작업 중 이탈 방지 경고창 (문제 분석 관련 탭에서 나갈 때)
+    if (currentActive && currentActive.id.includes('analysis')) {
         const hasPassages = typeof commonPassages !== 'undefined' && commonPassages.length > 0;
         const previewContainer = document.getElementById('preview-container');
         const hasImage = previewContainer && previewContainer.style.display !== 'none';
         const textInput = document.getElementById('question-text');
         const hasText = textInput && textInput.value.trim() !== '';
 
-        // 지문, 이미지, 텍스트 중 하나라도 있다면 경고창 발생
         if (hasPassages || hasImage || hasText) {
             if (!confirm('현재 작업 중인 내용(지문, 이미지 또는 텍스트)이 있습니다. 다른 메뉴로 이동하면 작업 내역이 모두 초기화됩니다. 계속하시겠습니까?')) {
                 return; // 취소하면 이동 중단
             }
-            // 확인을 눌렀다면 작업 내역 깨끗하게 비우기
-            resetAnalysis(); 
         }
     }
-    // =======================================================
-    // 2. 조용히(알림창 없이) 모든 작업 내역 청소하기
-    // =======================================================
-    // (1) 지문 보관함 싹 비우기 (조용히 배열만 초기화)
+
+    // 2. 🟢 지문 보관함(바구니) 및 화면 완벽 초기화 
+    // 요약/상세 등 탭을 이동할 때는 '무조건' 깨끗하게 비워서 지문이 섞이는 것을 원천 차단합니다!
     if (typeof commonPassages !== 'undefined') {
         commonPassages = [];
         const thumbnailContainer = document.getElementById('passage-thumbnails');
         if (thumbnailContainer) thumbnailContainer.innerHTML = '';
-        
-        // 💡 [추가 1] 지문 보관함 UI(화면)도 확실하게 닫아줍니다. (탭 이동 시 지문 섞임 방지)
         const tray = document.getElementById('common-passage-tray');
         if (tray) tray.style.display = 'none';
     }
-
-    // (2) 텍스트 입력창 비우기
     const textInputs = ['question-text', 'chat-input']; 
     textInputs.forEach(inputId => {
         const el = document.getElementById(inputId);
         if (el) el.value = '';
     });
-
-    // (3) 분석 결과창 비우기
     document.querySelectorAll('.result-content, .analysis-result').forEach(el => el.innerHTML = '');
+    if (typeof resetAnalysis === 'function') resetAnalysis(false);
 
-    // (4) 만약 '문제 분석하기' 내부에 있었다면 추가 초기화
-    if (typeof resetAnalysis === 'function') resetAnalysis(false); 
-
-
-    // =======================================================
-    // 3. 원래 화면 이동 및 투명 망토 처리 로직
-    // =======================================================
+    // 3. 🟢 화면 전환 로직
     document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-    
-    // 💡 [추가 2] 파란색 버튼 복구: HTML에 적힌 따옴표가 홑따옴표(')인지 쌍따옴표(")인지 
-    // 상관없이 무조건 파란색 불이 들어오게 검사 조건을 강화했습니다.
-    const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => {
-        const oc = b.getAttribute('onclick') || '';
-        return oc.includes(`'${id}'`) || oc.includes(`"${id}"`);
+    const targetSection = document.getElementById(id);
+    if (targetSection) targetSection.classList.add('active');
+
+    // 4. 🟢 파란색 버튼 켜고 끄기 완벽 제어 (선생님 HTML 구조에 무조건 맞춰서 강제 작동!)
+    // 태그 이름이나 클래스가 무엇이든 상관없이 'showSection'을 실행하는 모든 버튼을 뒤져서 파란불을 관리합니다.
+    document.querySelectorAll('*').forEach(el => {
+        const oc = el.getAttribute('onclick');
+        if (oc && oc.includes('showSection')) {
+            el.classList.remove('active'); // 일단 메뉴판의 모든 파란불을 다 끕니다!
+            
+            // 방금 클릭한 메뉴(id)와 일치하는 버튼만 콕 집어서 다시 파란불을 켭니다.
+            if (oc.includes(`'${id}'`) || oc.includes(`"${id}"`)) {
+                el.classList.add('active');
+            }
+        }
     });
-    if (activeBtn) activeBtn.classList.add('active');
-    
+
+    // 5. 기타 UI 요소 설정
     const curriculumSelector = document.querySelector('.curriculum-selector');
     const subTitle = document.getElementById('main-subtitle'); 
-
-    if (id === 'problem-analysis' || id === 'cut-score') {
+    
+    if (id.includes('analysis') || id === 'cut-score') {
         if (curriculumSelector) curriculumSelector.style.visibility = 'hidden';
         if (subTitle) subTitle.style.visibility = 'hidden';
     } else {
@@ -1232,9 +1222,7 @@ function showSection(id) {
     
     history.pushState({ section: id }, "", "#" + id);
 
-    // =======================================================
-    // 4. 각 탭 진입 시 데이터 새로고침
-    // =======================================================
+    // 6. 각 탭 진입 시 데이터 새로고침
     if (id === 'cut-score') {
         currentProjectId = null;
         document.querySelectorAll('.cut-score-card').forEach(card => card.style.display = 'none');
@@ -1258,7 +1246,7 @@ function showSection(id) {
             }
         });
     } else if (id === 'checklist') { 
-        if (typeof initChecklist === 'function') initChecklist(); // 나의 체크리스트 복원!
+        if (typeof initChecklist === 'function') initChecklist(); 
     }
 }
 
