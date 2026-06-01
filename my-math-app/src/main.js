@@ -315,13 +315,15 @@ async function submitFeedback() {
 
     try {
         await db.collection('developer_feedback').add({
-            text: text, user_email: userEmail, timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            text: text, 
+            user_email: userEmail, 
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
         alert("의견이 성공적으로 전송되었습니다. 감사합니다!");
         document.getElementById('feedback-message').value = "";
     } catch(e) {
         let pending = JSON.parse(localStorage.getItem('pending_feedback')) || [];
-        pending.push({ text: text, time: new Date().toISOString() });
+        pending.push({ text: text, user_email: userEmail, time: new Date().toISOString() });
         localStorage.setItem('pending_feedback', JSON.stringify(pending));
         alert("현재 서버 통신이 원활하지 않아 의견이 임시 저장되었습니다.");
         document.getElementById('feedback-message').value = "";
@@ -2140,6 +2142,7 @@ async function syncPendingFeedback() {
         try {
             await db.collection('developer_feedback').add({
                 text: "[지연 전송됨] " + item.text,
+                user_email: item.user_email || "이메일 정보 없음",
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
         } catch (e) {
