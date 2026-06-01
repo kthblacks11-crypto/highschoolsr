@@ -1152,12 +1152,26 @@ async function processAndSaveBackground(analysisText, apiKey) {
 }
 
 function showSection(id) {
-    const currentActive = document.querySelector('.section.active');
-    if (currentActive && currentActive.id === id) {
-        return; 
+    // 1. 🟢 [핵심] 방금 마우스로 클릭한 '정확한 버튼' 추적하기
+    let clickedBtn = null;
+    if (typeof event !== 'undefined' && event.currentTarget) {
+        clickedBtn = event.currentTarget;
+    } else if (window.event && window.event.currentTarget) {
+        clickedBtn = window.event.currentTarget;
     }
 
-    // 1. 🟢 작업 중 이탈 방지 경고창 (문제 분석 관련 탭에서 나갈 때)
+    const currentActive = document.querySelector('.section.active');
+    
+    // 2. 🟢 [핵심] 완전히 '똑같은 버튼'을 연달아 누른 경우에만 무시하기!
+    // (한 문제 ↔ 여러 문제 이동 시에는 같은 id라도 청소하고 넘어가도록 수정)
+    if (currentActive && currentActive.id === id) {
+        if (clickedBtn && clickedBtn.classList.contains('active')) {
+            return; // 완전히 동일한 버튼을 또 누른 경우에만 조용히 종료
+        }
+        if (!clickedBtn) return; // 코드로 강제 실행되었을 때 방어
+    }
+
+    // 3. 작업 중 이탈 방지 경고창
     if (currentActive && currentActive.id.includes('analysis')) {
         const hasPassages = typeof commonPassages !== 'undefined' && commonPassages.length > 0;
         const previewContainer = document.getElementById('preview-container');
@@ -1172,14 +1186,13 @@ function showSection(id) {
         }
     }
 
-    // 2. 🟢 지문 보관함(바구니) 및 화면 완벽 초기화 
-    // 요약/상세 등 탭을 이동할 때는 '무조건' 깨끗하게 비워서 지문이 섞이는 것을 원천 차단합니다!
+    // 4. 🟢 [요약/상세 지문 완벽 분리] 탭을 이동할 때 '무조건' 지문 보관함 싹 비우기
     if (typeof commonPassages !== 'undefined') {
         commonPassages = [];
         const thumbnailContainer = document.getElementById('passage-thumbnails');
         if (thumbnailContainer) thumbnailContainer.innerHTML = '';
         const tray = document.getElementById('common-passage-tray');
-        if (tray) tray.style.display = 'none';
+        if (tray) tray.style.display = 'none'; // 지문 화면 닫기
     }
     const textInputs = ['question-text', 'chat-input']; 
     textInputs.forEach(inputId => {
@@ -1187,31 +1200,34 @@ function showSection(id) {
         if (el) el.value = '';
     });
     document.querySelectorAll('.result-content, .analysis-result').forEach(el => el.innerHTML = '');
-    if (typeof resetAnalysis === 'function') resetAnalysis(false);
+    
+    // resetAnalysis가 있으면 실행해서 이전 화면 잔여물 제거
+    if (typeof resetAnalysis === 'function') resetAnalysis(false); 
 
-    // 3. 🟢 화면 전환 로직
+
+    // 5. 화면(섹션) 전환
     document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
     const targetSection = document.getElementById(id);
     if (targetSection) targetSection.classList.add('active');
 
-    // 4. 🟢 파란색 버튼 켜고 끄기 완벽 제어 (선생님 HTML 구조에 무조건 맞춰서 강제 작동!)
-    // 태그 이름이나 클래스가 무엇이든 상관없이 'showSection'을 실행하는 모든 버튼을 뒤져서 파란불을 관리합니다.
-    document.querySelectorAll('*').forEach(el => {
-        const oc = el.getAttribute('onclick');
-        if (oc && oc.includes('showSection')) {
-            el.classList.remove('active'); // 일단 메뉴판의 모든 파란불을 다 끕니다!
-            
-            // 방금 클릭한 메뉴(id)와 일치하는 버튼만 콕 집어서 다시 파란불을 켭니다.
-            if (oc.includes(`'${id}'`) || oc.includes(`"${id}"`)) {
-                el.classList.add('active');
-            }
-        }
-    });
-
-    // 5. 기타 UI 요소 설정
+    // 6. 🟢 [파란불 완벽 제어] 클릭한 바로 그 버튼 하나만 파란색으로 만들기!
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    
+    if (clickedBtn && clickedBtn.classList.contains('tab-btn')) {
+        clickedBtn.classList.add('active'); // 사용자가 방금 클릭한 버튼만 켬!
+    } else {
+        // 새로고침 등 클릭 없이 넘어왔을 때의 예비 동작
+        const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => {
+            const oc = b.getAttribute('onclick') || '';
+            return oc.includes(`'${id}'`) || oc.includes(`"${id}"`);
+        });
+        if (activeBtn) activeBtn.classList.add('active');
+    }
+    
+    // 7. 기타 UI 제목 표시/숨기기
     const curriculumSelector = document.querySelector('.curriculum-selector');
     const subTitle = document.getElementById('main-subtitle'); 
-    
+
     if (id.includes('analysis') || id === 'cut-score') {
         if (curriculumSelector) curriculumSelector.style.visibility = 'hidden';
         if (subTitle) subTitle.style.visibility = 'hidden';
@@ -1222,7 +1238,7 @@ function showSection(id) {
     
     history.pushState({ section: id }, "", "#" + id);
 
-    // 6. 각 탭 진입 시 데이터 새로고침
+    // 8. 탭 진입 시 고유 데이터 로드
     if (id === 'cut-score') {
         currentProjectId = null;
         document.querySelectorAll('.cut-score-card').forEach(card => card.style.display = 'none');
