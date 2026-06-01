@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.0.0"; 
+const CURRENT_VERSION = "1.0.1"; 
 
 function startAppVersionCheck() {
     db.collection('system_config').doc('version_control')
@@ -483,7 +483,12 @@ function handlePaste(event) {
         if (item.kind === 'file' && item.type.startsWith('image/')) {
             selectedFile = item.getAsFile();
             displayPreview(selectedFile);
-            showSection('problem-analysis');
+            
+            // 🟢 [버그 해결 핵심 2] 현재 탭이 'problem-analysis'가 아닐 때만 탭 이동을 시도합니다.
+            const currentActive = document.querySelector('.section.active');
+            if (!currentActive || currentActive.id !== 'problem-analysis') {
+                showSection('problem-analysis');
+            }
             break;
         }
     }
@@ -522,7 +527,7 @@ function openAnalysisMode(mode) {
                     <strong style="white-space: nowrap;">[요약 분석 제공 내용]</strong>
                     <span>문항별 과목, 단원명, 성취기준, 성취수준, 판정이유</span>
                 </div>
-                <div style="display: flex; align-items: center; gap: 4px; color: #e11d48; font-weight: bold; padding-top: 5px; border-top: 1px solid #fbcfe8;">
+                <div style="display: flex; align-items: center; gap: 4px; color: #e11d48; font-weight: bold; padding-top: 5px; border-top: 1px solid #e2e8f0;">
                     <span>⚠️ AI 분석은 오류 가능성이 있으므로 교사의 최종 검토가 필수입니다.</span>
                 </div>
             </div>`;
@@ -755,6 +760,13 @@ function getCroppedBase64(boxObj) {
         0, 0, tempCanvas.width, tempCanvas.height
     );
     return tempCanvas.toDataURL('image/jpeg', 0.9).split(',')[1];
+}
+
+// 🟢 업로드된 문제 이미지를 삭제하는 함수
+function removePreviewImage(e) {
+    if(e) e.stopPropagation();
+    // true를 넘겨주어 지문 보관함(passages) 데이터는 보호하고 문제 이미지만 깔끔하게 지웁니다!
+    resetAnalysis(true);
 }
 
 function resetAnalysis(keepPassages = false) {
@@ -1140,11 +1152,18 @@ async function processAndSaveBackground(analysisText, apiKey) {
 }
 
 function showSection(id) {
+// 🟢 [버그 해결 핵심 1] 이미 이동하려는 화면(탭)에 있다면 
+    // 아래의 경고창 띄우기 및 탭 초기화 로직을 건너뛰고 조용히 종료합니다!
+    const currentActive = document.querySelector('.section.active');
+    if (currentActive && currentActive.id === id) {
+        return; 
+    }
+
     // =======================================================
     // 1. 작업 중인 데이터 검사 (지문, 이미지, 텍스트)
     // =======================================================
     const hasPassages = typeof commonPassages !== 'undefined' && commonPassages.length > 0;
-    const imageUpload = document.getElementById('question-image-upload');
+    const imageUpload = document.getElementById('preview-container');
     const hasImage = imageUpload && imageUpload.value !== '';
     const textInput = document.getElementById('question-text');
     const hasText = textInput && textInput.value.trim() !== '';
@@ -6986,7 +7005,7 @@ const exposeToWindow = {
     calculateTotalCutScores, openSpecificFeedbackPanel, updateStep2Total, markAsReady, goToStep, updateQuestionCount,
     
     deleteQuestion, mergeWithPrevious, removeQuestionImage, deleteTableQuestion, toggleAiVisibility,
-   
+    removePreviewImage,   
     changeGroup, openMemoBoard, closeMemoBoard, submitMemo, changeSubject, showAiReason,
     toggleDictionaryPanel, changeDictGroup, loadDictionaryStandards, toggleAccordion,
     toggleCommonPassageTray, handlePassageFiles, pastePassageFromClipboard, removePassage, 
