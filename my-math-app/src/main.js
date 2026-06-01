@@ -4286,9 +4286,36 @@ function toggleAiVisibility() {
         renderCollaborativeTable(cachedProjectData, cachedAsmData);
     }
 }
+
+function clearExamFile() {
+    // 1. 첨부파일 비우기
+    const fileInput = document.getElementById('exam-file-upload');
+    if (fileInput) fileInput.value = '';
+    
+    // 2. 화면에 떠있는 이미지 숨기기
+    const imgEl = document.getElementById('exam-img-display');
+    const pdfEl = document.getElementById('exam-pdf-display');
+    if (imgEl) { imgEl.src = ''; imgEl.style.display = 'none'; }
+    if (pdfEl) { pdfEl.src = ''; pdfEl.style.display = 'none'; }
+    
+    // 3. 추출된 문항 리스트 비우기
+    extractedQuestionsArray = [];
+    const listContainer = document.getElementById('extracted-questions-list');
+    if (listContainer) listContainer.innerHTML = '<p style="text-align:center; color:#94a3b8; margin-top:20px;">시험지를 초기화했습니다. 다시 업로드해주세요.</p>';
+    
+    alert('화면의 시험지가 초기화되었습니다. (DB에 저장된 데이터는 삭제되지 않습니다.)');
+}
+
 function startEditAssessment(index) {
     currentEditingAssessmentIndex = index;
     history.pushState({ section: 'cut-score', sub: 'step2' }, "", "#cut-score/step2");
+
+    // 💡 [추가된 청소 로직] 다른 회차로 이동할 때, 이전 회차의 파일과 추출 내역을 화면에서 비워줍니다.
+    const fileInput = document.getElementById('exam-file-upload');
+    if (fileInput) fileInput.value = ''; // 첨부파일 창 비우기
+    extractedQuestionsArray = []; // 추출된 문항 배열 초기화
+    const listContainer = document.getElementById('extracted-questions-list');
+    if (listContainer) listContainer.innerHTML = ''; // 추출된 텍스트 목록 화면 비우기
 
     document.getElementById('project-detail-view').style.display = 'none';
     document.getElementById('cut-score-step2').style.display = 'block';
@@ -6561,7 +6588,10 @@ async function startExamAiAnalysis(base64Data) {
         
         blocks.forEach((block, idx) => {
             // 💡 [수정2] 11번~20번 문항 번호 인식률을 100%로 끌어올린 무적의 정규식!
-            let numMatch = block.match(/\[번호\]\s*([가-힣a-zA-Z\s\d]+)/) || block.match(/\[(\d+)\]/) || block.match(/(?:문항)?\s*(\d+)\s*번/); 
+            let numMatch = block.match(/\[번호\]\s*([가-힣a-zA-Z\s\d]+)/) 
+                        || block.match(/\[([가-힣a-zA-Z\s]*\d+[가-힣a-zA-Z\s]*)\]/) 
+                        || block.match(/(?:문항)?\s*([가-힣a-zA-Z\s]*\d+)\s*번?/); 
+                        
             let scoreMatch = block.match(/\[배점\]\s*([\d.]+)점?/);
             let qNumRaw = numMatch ? numMatch[1].trim() : String(extractedQuestionsArray.length + 1);
             
@@ -6808,7 +6838,7 @@ const exposeToWindow = {
     toggleExamRangeInputs, previewExamFile, executeExamAnalysis, resetAiLevels,
     prevLevelQuestion, skipLevelQuestion, saveAndClosePassageTray,   clearAllPassages,
     resetChecklist, openJournalModal, closeJournalModal, saveJournalEntry, deleteJournalEntry, saveUserSubjectGroup,
-    silentSaveChecklist, downloadAllJournalsExcel, cancelSubjectSelection, initDictionaryDrag
+    silentSaveChecklist, downloadAllJournalsExcel, cancelSubjectSelection, initDictionaryDrag, clearExamFile
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
