@@ -65,28 +65,30 @@ const storage = firebase.storage();
 
 const CURRENT_VERSION = "1.0.2"; 
 
+// 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
-    db.collection('system_config').doc('version_control')
-      .onSnapshot(doc => {
+    db.collection('system_config').doc('version_control').get()
+      .then(doc => {
           if (doc.exists) {
               const serverVersion = doc.data().latest_version;
               
               if (serverVersion && CURRENT_VERSION !== serverVersion) {
-                  // 💡 alert 대신 confirm을 사용하여 사용자에게 선택권을 줍니다!
-                  const userWantsToUpdate = confirm(
-                      "🚀 시스템이 업데이트되었습니다!\n\n" +
-                      "지금 바로 최신 버전으로 새로고침 하시겠습니까?\n" +
-                      "(※ 만약 입력 중인 내용이 있다면 '취소'를 누르고 먼저 저장하신 후, 나중에 F5를 눌러주세요.)"
-                  );
-                  
-                  // 사용자가 '확인'을 눌렀을 때만 새로고침을 실행합니다.
-                  if (userWantsToUpdate) {
-                      window.location.reload(true); 
+                  const currentHour = new Date().getHours();
+                  const isDayTime = (currentHour >= 8 && currentHour <= 17);
+
+                  if (isDayTime) {
+                      const userWantsToUpdate = confirm(
+                          "🚀 시스템이 업데이트되었습니다!\n지금 바로 새로고침 하시겠습니까?"
+                      );
+                      if (userWantsToUpdate) window.location.reload(true); 
+                  } else {
+                      window.location.reload(true);
                   }
               }
           }
-      }, err => {
-          console.log("버전 체크 중 에러(무시해도 됨):", err);
+      })
+      .catch(err => {
+          console.log("버전 체크 중 에러:", err);
       });
 }
 
@@ -1380,15 +1382,15 @@ async function changeSubject() {
             });
         } catch(e) { console.warn("문항 수 계산 실패", e); }
     }
+        // 🌟 3. [핵심] 3가지 화면 모두 즉시 새로고침
+        initDashboard(); 
+        if (typeof initChecklist === 'function') initChecklist(); 
 
-    // 🌟 3. [핵심] 3가지 화면 모두 즉시 새로고침
-    initDashboard(); 
-    if (typeof initChecklist === 'function') initChecklist(); 
-    if (typeof loadBookmark === 'function') loadBookmark(); 
+        // 🚫 [핵심 수정 1] 여기서 loadBookmark()를 호출하던 것을 삭제했습니다.
 
-    // 👇 [여기에 3줄 추가] 과목을 바꾸면 무조건 초기 화면으로 강제 이동 및 퀴즈 상자 닫기
-    if (document.getElementById('quiz-standard-selection')) document.getElementById('quiz-standard-selection').style.display = 'block';
-    if (document.getElementById('quiz-level-matching')) document.getElementById('quiz-level-matching').style.display = 'none';
+        // 👇 [여기에 3줄 추가] 과목을 바꾸면 무조건 초기 화면으로 강제 이동 및 퀴즈 상자 닫기
+        if (document.getElementById('quiz-standard-selection')) document.getElementById('quiz-standard-selection').style.display = 'block';
+        if (document.getElementById('quiz-level-matching')) document.getElementById('quiz-level-matching').style.display = 'none';
 }
 
 function initDashboard() {
@@ -2437,9 +2439,9 @@ function resetBookmarkView() {
 // 🟢 이 변수는 반드시 함수 바깥(위에) 있어야 합니다! 기존에 없다면 꼭 같이 복사해주세요.
 let bookmarkSnapshotUnsubscribe = null;
 
-// 🟢 [수정됨] 새로고침 없이 실시간 반영되는 완벽한 북마크 로직
+// 🟢 [수정됨] 실시간 감시(onSnapshot)를 끄고 1회성 읽기(get)로 변경하여 데이터를 획기적으로 절약한 북마크 로직
 async function loadBookmark(level) {
-    // ✨ 1. 모든 버튼을 살짝 투명하게 만들고 크기를 원래대로 되돌림
+    // ✨ 1. 모든 버튼을 살짝 투명하게 만들고 크기를 원래대로 되돌림 (선생님 코드 100% 유지)
     ['A', 'B', 'C', 'D', 'E'].forEach(l => {
         const btn = document.getElementById(`bm-btn-${l}`);
         if (btn) {
@@ -2450,7 +2452,7 @@ async function loadBookmark(level) {
         }
     });
 
-    // ✨ 2. 방금 클릭한 버튼만 뚜렷하게, 크고, 진한 테두리로 강조
+    // ✨ 2. 방금 클릭한 버튼만 뚜렷하게, 크고, 진한 테두리로 강조 (선생님 코드 100% 유지)
     const activeBtn = document.getElementById(`bm-btn-${level}`);
     if (activeBtn) {
         activeBtn.style.opacity = '1';
@@ -2462,54 +2464,26 @@ async function loadBookmark(level) {
     // 선택된 과목이 없으면 기본값으로 uncategorized 설정
     const subject = currentSubject || "uncategorized"; 
     const listContainer = document.getElementById('bookmark-list');
-    listContainer.innerHTML = "<p style='text-align:center; color:var(--primary); font-weight:bold;'>데이터베이스에서 문항을 실시간으로 불러오는 중입니다... ⏳</p>";
+    listContainer.innerHTML = "<p style='text-align:center; color:var(--primary); font-weight:bold;'>데이터베이스에서 문항을 불러오는 중입니다... ⏳</p>";
 
-    // ✨ [핵심 1] 다른 탭을 누르면 기존 감시카메라를 끄고 새로 켭니다.
-    if (bookmarkSnapshotUnsubscribe) {
-        bookmarkSnapshotUnsubscribe();
-    }
+    try {
+        currentBookmarkQuestions = []; // 배열 초기화
 
-    // 🌟 [신규] '미분류 보관함'을 선택했을 때의 실시간 감시
-    if (subject === "uncategorized") {
-        bookmarkSnapshotUnsubscribe = db.collection('transformed_bank')
-            .onSnapshot(snapshot => {
-                currentBookmarkQuestions = []; // 💡 데이터가 변경될 때마다 비우고 다시 채움
-                
-                snapshot.forEach(doc => {
-                    const d = doc.data();
-                    let extractedLevel = d.level || d.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1];
-                    
-                    // 코드가 없거나 unknown인 문항만 쏙쏙 골라냅니다.
-                    if (extractedLevel === level && (d.standard_code === "unknown" || d.standard_code === "코드없음")) {
-                        // AI가 프롬프트에 따라 적어준 'AI 판단 과목' 추출 (없으면 분석 당시 탭 이름)
-                        const aiSubjectMatch = d.original_analysis?.match(/AI 판단 과목:\s*([^\n]+)/);
-                        const displaySubject = aiSubjectMatch ? aiSubjectMatch[1].trim() : d.subject;
+        // 🚨 [핵심 변경 1] 실시간 감시(.onSnapshot)를 지우고 1회성 읽기(.get)로 바꿨습니다.
+        let query;
+        if (subject === "uncategorized") {
+            // 미분류 탭일 때: 전체 문항을 딱 1번만 불러와서 선생님의 기존 로직으로 필터링합니다. (onSnapshot을 get으로만 바꿈)
+            query = db.collection('transformed_bank').get(); 
+        } else {
+            // 일반 과목일 때: 해당 과목 데이터만 딱 1번만 불러옵니다.
+            query = db.collection('transformed_bank').where('subject', '==', subject).get();
+        }
 
-                        currentBookmarkQuestions.push({
-                            code: `📦 미분류 (${displaySubject})`,
-                            q: d.question,
-                            reason: d.reason || d.original_analysis?.match(/판정 이유:[\s\S]*?(?=\[|$)/)?.[0] || "AI가 미분류 문항으로 판정하였습니다.",
-                            answer: d.answer,
-                            source: "✨ AI 분석 문항"
-                        });
-                    }
-                });
-                currentBookmarkQuestions.sort((a, b) => a.code.localeCompare(b.code));
-                renderBookmarkList(level); // 화면 새로 그리기
-            }, err => {
-                console.error("미분류 DB 로드 에러:", err);
-                renderBookmarkList(level);
-            });
-        return; // 미분류 처리가 끝났으므로 함수 종료
-    }
+        // DB에서 데이터를 1번만 싹 가져옵니다.
+        const snapshot = await query;
 
-    // 🌟 [기존 로직] 일반 과목(공통수학1 등)을 선택했을 때의 실시간 감시
-    bookmarkSnapshotUnsubscribe = db.collection('transformed_bank')
-        .where('subject', '==', subject)
-        .onSnapshot(snapshot => {
-            currentBookmarkQuestions = []; // 💡 데이터가 변경될 때마다 비우고 다시 채움
-
-            // 1. 선생님이 시스템 뼈대에 직접 등록한 수동 문항 먼저 담기
+        // 🌟 [선생님 로직 1] 선생님 수동 문항 담기 (일반 과목일 때만)
+        if (subject !== "uncategorized") {
             const data = subjectData[subject];
             if (data && data.standards) {
                 data.standards.forEach(std => {
@@ -2518,7 +2492,7 @@ async function loadBookmark(level) {
                             if (q.level === level) {
                                 currentBookmarkQuestions.push({
                                     code: std.code, q: q.q, 
-                                    imgHtml: "", // 💡 분리를 위해 빈 이미지 변수 추가
+                                    imgHtml: "", 
                                     reason: q.reason,
                                     answer: q.answer || "등록된 정답/풀이가 없습니다.",
                                     source: "선생님 등록 문항"
@@ -2528,15 +2502,31 @@ async function loadBookmark(level) {
                     }
                 });
             }
+        }
 
-            // 2. 데이터베이스(AI가 등록한 문항) 담기
-            // 2. 데이터베이스(AI가 등록한 문항) 담기
-            snapshot.forEach(doc => {
-                const d = doc.data();
-                let extractedLevel = d.level || d.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1];
-                
+        // 🌟 [선생님 로직 2] DB 데이터 분류해서 담기 (기존 코드 100% 동일)
+        snapshot.forEach(doc => {
+            const d = doc.data();
+            let extractedLevel = d.level || d.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1];
+            
+            // 미분류 탭 전용 로직
+            if (subject === "uncategorized") {
+                if (extractedLevel === level && (d.standard_code === "unknown" || d.standard_code === "코드없음")) {
+                    const aiSubjectMatch = d.original_analysis?.match(/AI 판단 과목:\s*([^\n]+)/);
+                    const displaySubject = aiSubjectMatch ? aiSubjectMatch[1].trim() : d.subject;
+
+                    currentBookmarkQuestions.push({
+                        code: `📦 미분류 (${displaySubject})`,
+                        q: d.question,
+                        reason: d.reason || d.original_analysis?.match(/판정 이유:[\s\S]*?(?=\[|$)/)?.[0] || "AI가 미분류 문항으로 판정하였습니다.",
+                        answer: d.answer,
+                        source: "✨ AI 분석 문항"
+                    });
+                }
+            } 
+            // 일반 과목 전용 로직 (이미지 경고문 포함)
+            else {
                 if (extractedLevel === level && d.standard_code !== "unknown" && d.standard_code !== "코드없음") {
-                    // ✨ [추가] 북마크에서도 이미지를 직관적인 경고문과 함께 보여주기 위한 로직
                     let qImg = d.image || d.imageUrl || d.img;
                     let bookmarkImgHtml = '';
                     if (qImg) {
@@ -2551,7 +2541,6 @@ async function loadBookmark(level) {
 
                     currentBookmarkQuestions.push({
                         code: d.standard_code, 
-                        // 문제 텍스트 바로 밑에 경고문+이미지를 붙여서 출력합니다.
                         q: d.question || d.q || "문제 내용이 없습니다.", 
                         imgHtml: bookmarkImgHtml,
                         reason: d.reason || "AI가 원본을 분석하고 변형하며 판정한 문항입니다.",
@@ -2559,14 +2548,17 @@ async function loadBookmark(level) {
                         source: d.source || "✨ AI 추가 문항"
                     });
                 }
-            });
-            
-            currentBookmarkQuestions.sort((a, b) => a.code.localeCompare(b.code));
-            renderBookmarkList(level); // 화면 새로 그리기
-        }, err => {
-            console.error("DB 로드 에러:", err);
-            renderBookmarkList(level); 
+            }
         });
+        
+        // 🌟 [선생님 로직 3] 정렬 및 화면 그리기
+        currentBookmarkQuestions.sort((a, b) => a.code.localeCompare(b.code));
+        renderBookmarkList(level); 
+
+    } catch (err) {
+        console.error("DB 로드 에러:", err);
+        listContainer.innerHTML = "<p style='color:red; text-align:center;'>문항 로딩에 실패했습니다.</p>";
+    }
 }
 
 function renderBookmarkList(level) {
