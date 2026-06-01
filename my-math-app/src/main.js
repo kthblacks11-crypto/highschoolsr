@@ -1,3 +1,4 @@
+
 // ==========================================
 // 👑 시스템 관리자 및 권한 설정
 // ==========================================
@@ -62,6 +63,34 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
+const CURRENT_VERSION = "1.0.0"; 
+
+function startAppVersionCheck() {
+    db.collection('system_config').doc('version_control')
+      .onSnapshot(doc => {
+          if (doc.exists) {
+              const serverVersion = doc.data().latest_version;
+              
+              if (serverVersion && CURRENT_VERSION !== serverVersion) {
+                  // 💡 alert 대신 confirm을 사용하여 사용자에게 선택권을 줍니다!
+                  const userWantsToUpdate = confirm(
+                      "🚀 시스템이 업데이트되었습니다!\n\n" +
+                      "지금 바로 최신 버전으로 새로고침 하시겠습니까?\n" +
+                      "(※ 만약 입력 중인 내용이 있다면 '취소'를 누르고 먼저 저장하신 후, 나중에 F5를 눌러주세요.)"
+                  );
+                  
+                  // 사용자가 '확인'을 눌렀을 때만 새로고침을 실행합니다.
+                  if (userWantsToUpdate) {
+                      window.location.reload(true); 
+                  }
+              }
+          }
+      }, err => {
+          console.log("버전 체크 중 에러(무시해도 됨):", err);
+      });
+}
+
+
 let currentUploadedImageUrl = null;
 let feedbackUnsubscribe = null; // 💡 멈춤 현상(메모리 누수)을 막기 위한 필수 변수 추가
 
@@ -84,7 +113,7 @@ auth.onAuthStateChanged(async (user) => {
         if(logoutBtn) logoutBtn.style.display = 'inline-block';
         if(deleteAccountBtn) deleteAccountBtn.style.display = 'inline-block'; 
         if(userInfo) userInfo.innerText = user.displayName + " 선생님 환영합니다.";
-        
+        startAppVersionCheck();
         if (typeof renderSavedAssessments === "function") {
             renderSavedAssessments(); 
         }
