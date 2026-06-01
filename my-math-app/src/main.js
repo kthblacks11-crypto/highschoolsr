@@ -2425,7 +2425,9 @@ async function loadBookmark(level) {
                         std.questions.forEach(q => {
                             if (q.level === level) {
                                 currentBookmarkQuestions.push({
-                                    code: std.code, q: q.q, reason: q.reason,
+                                    code: std.code, q: q.q, 
+                                    imgHtml: "", // 💡 분리를 위해 빈 이미지 변수 추가
+                                    reason: q.reason,
                                     answer: q.answer || "등록된 정답/풀이가 없습니다.",
                                     source: "선생님 등록 문항"
                                 });
@@ -2458,7 +2460,8 @@ async function loadBookmark(level) {
                     currentBookmarkQuestions.push({
                         code: d.standard_code, 
                         // 문제 텍스트 바로 밑에 경고문+이미지를 붙여서 출력합니다.
-                        q: (d.question || d.q || "문제 내용이 없습니다.") + bookmarkImgHtml,
+                        q: d.question || d.q || "문제 내용이 없습니다.", 
+                        imgHtml: bookmarkImgHtml,
                         reason: d.reason || "AI가 원본을 분석하고 변형하며 판정한 문항입니다.",
                         answer: d.answer || "등록된 정답/풀이가 없습니다.", 
                         source: d.source || "✨ AI 추가 문항"
@@ -2506,6 +2509,14 @@ function renderBookmarkList(level) {
 function openBookmarkModal(index) {
     const item = currentBookmarkQuestions[index];
     document.getElementById('bm-modal-title').innerText = `[${item.code}] 문항 상세`;
+    // 💡 문항매칭연습과 동일한 줄바꿈 및 선지 분리 로직 적용!
+    let formattedQ = item.q.replace(/\n/g, '<br>');
+    formattedQ = formattedQ.replace(/(①|②|③|④|⑤)/g, '<br>&nbsp;&nbsp;$1');
+    
+    // 분리해두었던 그림(이미지)이 있다면 텍스트 아래에 예쁘게 이어 붙입니다.
+    if (item.imgHtml) {
+        formattedQ += item.imgHtml;
+    }
     document.getElementById('bm-modal-q').innerHTML = item.q;
     document.getElementById('bm-modal-reason').innerHTML = item.reason;
     
