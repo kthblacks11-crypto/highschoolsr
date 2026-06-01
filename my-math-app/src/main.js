@@ -1152,7 +1152,7 @@ async function processAndSaveBackground(analysisText, apiKey) {
 }
 
 function showSection(id) {
-// 🟢 [버그 해결 핵심 1] 이미 이동하려는 화면(탭)에 있다면 
+    // 🟢 [버그 해결 핵심 1] 이미 이동하려는 화면(탭)에 있다면 
     // 아래의 경고창 띄우기 및 탭 초기화 로직을 건너뛰고 조용히 종료합니다!
     const currentActive = document.querySelector('.section.active');
     if (currentActive && currentActive.id === id) {
@@ -1184,6 +1184,10 @@ function showSection(id) {
         commonPassages = [];
         const thumbnailContainer = document.getElementById('passage-thumbnails');
         if (thumbnailContainer) thumbnailContainer.innerHTML = '';
+        
+        // 💡 [추가 1] 지문 보관함 UI(화면)도 확실하게 닫아줍니다. (탭 이동 시 지문 섞임 방지)
+        const tray = document.getElementById('common-passage-tray');
+        if (tray) tray.style.display = 'none';
     }
 
     // (2) 텍스트 입력창 비우기
@@ -1207,7 +1211,12 @@ function showSection(id) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById(id).classList.add('active');
     
-    const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(`'${id}'`));
+    // 💡 [추가 2] 파란색 버튼 복구: HTML에 적힌 따옴표가 홑따옴표(')인지 쌍따옴표(")인지 
+    // 상관없이 무조건 파란색 불이 들어오게 검사 조건을 강화했습니다.
+    const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => {
+        const oc = b.getAttribute('onclick') || '';
+        return oc.includes(`'${id}'`) || oc.includes(`"${id}"`);
+    });
     if (activeBtn) activeBtn.classList.add('active');
     
     const curriculumSelector = document.querySelector('.curriculum-selector');
