@@ -3143,13 +3143,36 @@ let extractedQuestionsArray = [];
 
 function renderQuestionCards() {
     const listContainer = document.getElementById('extracted-questions-list');
-    listContainer.innerHTML = "";
+    listContainer.innerHTML = `
+        <div style="background: #fff1f2; border-left: 4px solid #f43f5e; padding: 12px 16px; margin-bottom: 20px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+            <div style="display: flex; align-items: center; gap: 8px; color: #be123c; font-weight: bold; margin-bottom: 4px;">
+                <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                [AI 판정 유의사항] 인간(교사)의 최종 검토가 필수입니다!
+            </div>
+            <div style="font-size: 0.85rem; color: #881337; line-height: 1.5; padding-left: 28px;">
+                AI는 복합 개념을 오해하여 엉뚱한 성취기준을 잡거나 난이도를 착각(할루시네이션)할 수 있습니다. 반드시 <b>'판정 이유'</b>를 읽어보시고, 이상하다면 즉시 기준과 수준을 교사가 직접 수정해 주세요.
+            </div>
+        </div>
+    `;
+    
     
     extractedQuestionsArray.forEach((q, idx) => {
         const qCard = document.createElement('div');
         qCard.className = "quiz-container";
         qCard.style.marginBottom = "1rem";
         qCard.style.borderLeft = "4px solid #ea580c";
+        
+        let passageUI = "";
+        if (q.passageRange && q.passageContent) {
+            passageUI = `
+                <details style="margin-bottom: 10px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px;">
+                    <summary style="padding: 8px 12px; font-size: 0.85rem; font-weight: bold; color: #1e3a8a; cursor: pointer; list-style-position: inside;">
+                        📖 [${q.passageRange}] 공통 지문 확인하기
+                    </summary>
+                    <div style="padding: 10px; border-top: 1px solid #cbd5e1; font-size: 0.85rem; color: #475569; max-height: 150px; overflow-y: auto; white-space: pre-wrap;">${q.passageContent}</div>
+                </details>
+            `;
+        }
 
         qCard.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
@@ -6605,8 +6628,28 @@ async function startExamAiAnalysis(base64Data) {
             }
 
             let score = scoreMatch ? scoreMatch[1] : "0";
-            extractedQuestionsArray.push({ num: qNum, text: block, score: score, image: null });
-        });
+            
+            // 💡 [추가] 공통 지문 태그 분리 로직 (기존 정렬 번호 추출 로직은 건드리지 않아 안전합니다)
+            let pRange = "";
+            let pText = "";
+            let cleanText = block;
+            
+            const pMatch = block.match(/\[공통지문:\s*(.+?)\]([\s\S]*?)\[지문끝\]/);
+            if(pMatch) {
+                pRange = pMatch[1].trim();
+                pText = pMatch[2].trim();
+                cleanText = block.replace(pMatch[0], '').trim(); // 문항 텍스트에서 지문 부분 분리
+            }
+            
+            extractedQuestionsArray.push({ 
+                num: qNum, 
+                text: cleanText,  // 텍스트 수정 칸에는 찐 발문만 들어감
+                score: score, 
+                image: null,
+                passageRange: pRange,   // 공통 지문 범위 (예: 3번~서답형2번)
+                passageContent: pText   // 공통 지문 내용
+            });
+        })
 
         extractedQuestionsArray.sort((a, b) => {
             const aIsShort = String(a.num).startsWith('서');
