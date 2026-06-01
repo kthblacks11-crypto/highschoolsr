@@ -3028,6 +3028,7 @@ function renderGroupedCutScoreTable(mergedData) {
 
     tbody.innerHTML = html;
     calculateTotalCutScores();
+    showModificationNotice();
 }
 
 function calculateTotalCutScores() {
@@ -3144,7 +3145,29 @@ function markAsModified(element) {
     element.style.borderColor = '#ef4444';
     element.style.borderWidth = '2px';
 }
-
+// 💡 [추가] 표 위에 빗금 수정 기능 안내 배너를 띄워주는 함수
+function showModificationNotice() {
+    const table = document.getElementById('cut-score-result-table').parentElement; // 테이블 태그 찾기
+    
+    // 이미 안내문이 있으면 중복 생성 방지
+    if (!document.getElementById('mod-notice-banner')) {
+        const notice = document.createElement('div');
+        notice.id = 'mod-notice-banner';
+        notice.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 1.2rem;">💡</span>
+                <div>
+                    <strong style="color: #1e3a8a;">[수정 알림 기능]</strong> 
+                    표 안의 비율(%) 숫자를 선생님 재량으로 수정하시면, 해당 칸에 <span style="background: repeating-linear-gradient(-45deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.15) 5px, transparent 5px, transparent 10px); border: 2px solid #ef4444; padding: 2px 6px; border-radius: 4px; font-weight: bold; color: #ef4444;">붉은 빗금</span>이 표시되어 수정 여부를 쉽게 확인할 수 있습니다.
+                </div>
+            </div>
+        `;
+        notice.style.cssText = "background: #eff6ff; border: 1px solid #bfdbfe; padding: 12px 16px; border-radius: 8px; font-size: 0.9rem; margin-bottom: 15px; border-left: 4px solid #3b82f6; text-align: left; line-height: 1.5;";
+        
+        // 테이블 바로 위에 배너 삽입
+        table.parentNode.insertBefore(notice, table);
+    }
+}
 
 // 🌟 길 1, 2 공통: 뒤로 가기 흐름 제어 함수 (수정됨)
 function goBackStep(currentStep) {
@@ -6906,7 +6929,7 @@ const exposeToWindow = {
     toggleExamRangeInputs, previewExamFile, executeExamAnalysis, resetAiLevels,
     prevLevelQuestion, skipLevelQuestion, saveAndClosePassageTray,   clearAllPassages,
     resetChecklist, openJournalModal, closeJournalModal, saveJournalEntry, deleteJournalEntry, saveUserSubjectGroup,
-    silentSaveChecklist, downloadAllJournalsExcel, cancelSubjectSelection, initDictionaryDrag, clearExamFile
+    silentSaveChecklist, downloadAllJournalsExcel, cancelSubjectSelection, initDictionaryDrag, clearExamFile, markAsModified
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
