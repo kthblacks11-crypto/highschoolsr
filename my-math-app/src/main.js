@@ -1159,23 +1159,23 @@ function showSection(id) {
         return; 
     }
 
-    // =======================================================
-    // 1. 작업 중인 데이터 검사 (지문, 이미지, 텍스트)
-    // =======================================================
-    const hasPassages = typeof commonPassages !== 'undefined' && commonPassages.length > 0;
-    const imageUpload = document.getElementById('preview-container');
-    const hasImage = imageUpload && imageUpload.value !== '';
-    const textInput = document.getElementById('question-text');
-    const hasText = textInput && textInput.value.trim() !== '';
+    // 🟢 [핵심 수정 부분] 현재 화면이 '문제 분석(problem-analysis)' 탭일 때만 경고창 띄우기 검사!
+    if (currentActive && currentActive.id === 'problem-analysis') {
+        const hasPassages = typeof commonPassages !== 'undefined' && commonPassages.length > 0;
+        const previewContainer = document.getElementById('preview-container');
+        const hasImage = previewContainer && previewContainer.style.display !== 'none';
+        const textInput = document.getElementById('question-text');
+        const hasText = textInput && textInput.value.trim() !== '';
 
-    // 현재 다른 작업을 하고 있었다면 경고창 띄우기
-    if (hasPassages || hasImage || hasText) {
-        const isLeave = confirm("⚠️ 현재 작업 중인 내용(지문, 이미지 또는 텍스트)이 있습니다.\n\n다른 메뉴로 이동하면 작업 내역이 모두 초기화됩니다. 계속하시겠습니까?");
-        if (!isLeave) {
-            return; // 취소 시 화면 이동 중단
+        // 지문, 이미지, 텍스트 중 하나라도 있다면 경고창 발생
+        if (hasPassages || hasImage || hasText) {
+            if (!confirm('현재 작업 중인 내용(지문, 이미지 또는 텍스트)이 있습니다. 다른 메뉴로 이동하면 작업 내역이 모두 초기화됩니다. 계속하시겠습니까?')) {
+                return; // 취소하면 이동 중단
+            }
+            // 확인을 눌렀다면 작업 내역 깨끗하게 비우기
+            resetAnalysis(); 
         }
     }
-
     // =======================================================
     // 2. 조용히(알림창 없이) 모든 작업 내역 청소하기
     // =======================================================
