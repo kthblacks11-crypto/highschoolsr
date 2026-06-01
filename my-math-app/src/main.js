@@ -3004,7 +3004,7 @@ function renderGroupedCutScoreTable(mergedData) {
                 borderStyle = 'border: 2px solid #eab308;'; 
             }
             
-            return `<input type="number" class="pct-${lvl} pct-input" value="${isEmpty ? '' : val}" ${disabledAttr} oninput="calculateTotalCutScores()" style="width: 60px; padding: 4px; text-align: center; border-radius: 4px; font-weight: bold; color: #1e293b; ${bgStyle} ${borderStyle} transition: 0.2s;">`;
+            return `<input type="number" class="pct-${lvl} pct-input" value="${isEmpty ? '' : val}" ${disabledAttr} oninput="markAsModified(this); calculateTotalCutScores()" style="width: 60px; padding: 4px; text-align: center; border-radius: 4px; font-weight: bold; color: #1e293b; ${bgStyle} ${borderStyle} transition: 0.2s;">`;
         };
 
         html += `
@@ -3123,11 +3123,11 @@ function renderFinalCutScoreTable(aiResults) {
             <td>
                 <span style="background:${levelColor}; color:white; padding: 4px 10px; border-radius: 4px; font-weight: bold;">${g.level}</span>
             </td>
-            <td><input type="number" class="pct-A score-input" value="${g.basePct.A}" oninput="calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-B score-input" value="${g.basePct.B}" oninput="calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-C score-input" value="${g.basePct.C}" oninput="calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-D score-input" value="${g.basePct.D}" oninput="calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-E score-input" value="${g.basePct.E}" oninput="calculateTotalCutScores()"></td>
+            <td><input type="number" class="pct-A score-input" value="${g.basePct.A}" oninput="markAsModified(this); calculateTotalCutScores()"></td>
+            <td><input type="number" class="pct-B score-input" value="${g.basePct.B}" oninput="markAsModified(this); calculateTotalCutScores()"></td>
+            <td><input type="number" class="pct-C score-input" value="${g.basePct.C}" oninput="markAsModified(this); calculateTotalCutScores()"></td>
+            <td><input type="number" class="pct-D score-input" value="${g.basePct.D}" oninput="markAsModified(this); calculateTotalCutScores()"></td>
+            <td><input type="number" class="pct-E score-input" value="${g.basePct.E}" oninput="markAsModified(this); calculateTotalCutScores()"></td>
         </tr>
         `;
     });
@@ -3137,7 +3137,13 @@ function renderFinalCutScoreTable(aiResults) {
 }
 
 
-
+// 💡 [추가] 사용자가 값을 수정했을 때 빗금 패턴을 입혀주는 함수
+function markAsModified(element) {
+    // 빨간색(투명도 15%)의 사선 빗금 패턴을 배경 위에 덧씌우고 테두리를 강조합니다.
+    element.style.backgroundImage = 'repeating-linear-gradient(-45deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.15) 5px, transparent 5px, transparent 10px)';
+    element.style.borderColor = '#ef4444';
+    element.style.borderWidth = '2px';
+}
 
 
 // 🌟 길 1, 2 공통: 뒤로 가기 흐름 제어 함수 (수정됨)
@@ -3276,22 +3282,30 @@ function renderQuestionCards() {
 
 
 
-// 🟢 (추가) 텍스트를 수정할 때마다 수식을 다시 그려주는 함수
+// 💡 함수 바깥에 타이머 변수를 하나 만들어 둡니다.
+let mathJaxTimer = null;
+
 function updateMathPreview(idx, newText) {
+    // 1. 원본 데이터 배열에 즉시 저장 (데이터 유실 방지)
     extractedQuestionsArray[idx].text = newText;
+    
     const previewEl = document.getElementById(`math-preview-${idx}`);
     if (previewEl) {
+        // 2. 화면에 글자는 딜레이 없이 즉각적으로 보여줍니다.
         previewEl.innerHTML = newText.replace(/\n/g, '<br>');
-        if (window.MathJax && window.MathJax.typesetPromise) {
-            MathJax.typesetClear([previewEl]);
-            MathJax.typesetPromise([previewEl]).catch(err => console.error(err));
-        }
+        
+        // 3. 타이머 초기화 (연속으로 타자를 치고 있으면 아래 4번이 대기함)
+        clearTimeout(mathJaxTimer);
+        
+        // 4. 타자를 멈추고 0.5초(500ms)가 지나면, 그때 딱 한 번만 무거운 수식 변환을 실행합니다.
+        mathJaxTimer = setTimeout(() => {
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                MathJax.typesetClear([previewEl]);
+                MathJax.typesetPromise([previewEl]).catch(err => console.error('수식 변환 에러:', err));
+            }
+        }, 500);
     }
 }
-
-
-
-
 
 // ✨ [복구] 캡처 관련 변수 및 이벤트 리스너
 let isCapturing = false;
@@ -4092,10 +4106,10 @@ function openManualAssessmentModal() {
     document.getElementById('manual-assess-name').value = '';
     document.getElementById('manual-assess-weight').value = '';
     // ✨ 입력하지 않아도 0점이 되지 않도록 실제 값을 꽂아줍니다.
-    document.getElementById('manual-a').value = '80';
-    document.getElementById('manual-b').value = '70';
-    document.getElementById('manual-c').value = '60';
-    document.getElementById('manual-d').value = '50';
+    document.getElementById('manual-a').value = '90';
+    document.getElementById('manual-b').value = '80';
+    document.getElementById('manual-c').value = '70';
+    document.getElementById('manual-d').value = '60';
     document.getElementById('manual-e').value = '40';
     
     document.getElementById('sub-factors-list').innerHTML = '';
@@ -4153,10 +4167,10 @@ async function saveManualAssessment() {
     const weight = parseFloat(document.getElementById('manual-assess-weight').value) || 0;
     
     // ✨ 빈칸일 경우 0이 아니라 최소한의 기본값을 잡도록 방어코드 추가
-    const valA = parseFloat(document.getElementById('manual-a').value) || 80;
-    const valB = parseFloat(document.getElementById('manual-b').value) || 70;
-    const valC = parseFloat(document.getElementById('manual-c').value) || 60;
-    const valD = parseFloat(document.getElementById('manual-d').value) || 50;
+    const valA = parseFloat(document.getElementById('manual-a').value) || 90;
+    const valB = parseFloat(document.getElementById('manual-b').value) || 80;
+    const valC = parseFloat(document.getElementById('manual-c').value) || 70;
+    const valD = parseFloat(document.getElementById('manual-d').value) || 60;
     const valE = parseFloat(document.getElementById('manual-e').value) || 40;
 
     const a = valA * (weight / 100);
