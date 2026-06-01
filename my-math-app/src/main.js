@@ -853,7 +853,16 @@ async function executeAnalysis() {
         
         const data = await response.json();
         if (data.error) {
-            throw new Error(data.error.message || "구글 AI가 응답을 거부했습니다. API 키를 확인해주세요.");
+            let errMsg = data.error.message || "";
+            let koreanError = "구글 AI가 응답을 거부했습니다.";
+            
+            if (errMsg.includes("API key not valid")) koreanError = "입력하신 API 키가 유효하지 않습니다. 키를 다시 확인해주세요.";
+            else if (errMsg.includes("models/") || errMsg.includes("not found")) koreanError = "AI 모델 버전을 찾을 수 없습니다. 백엔드의 모델명을 확인해주세요.";
+            else if (errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED")) koreanError = "무료 사용량(할당량) 한도를 초과했습니다! API 키를 새로 발급받아 갱신해주세요.";
+            else if (errMsg.includes("high demand") || errMsg.includes("overloaded")) koreanError = "현재 구글 서버에 접속자가 많아 지연되고 있습니다. 잠시 후 다시 시도해주세요.";
+            else koreanError = "AI 분석 오류: " + errMsg;
+
+            throw new Error(koreanError);
         }
         const analysisText = data.candidates[0].content.parts[0].text;
         
@@ -6535,7 +6544,16 @@ async function startExamAiAnalysis(base64Data) {
         const data = await response.json();
         
         if (data.error) {
-            throw new Error(data.error.message || "구글 AI 응답 에러");
+            let errMsg = data.error.message || "";
+            let koreanError = "구글 AI 처리 중 알 수 없는 오류가 발생했습니다.";
+            
+            if (errMsg.includes("API key not valid")) koreanError = "입력하신 API 키가 유효하지 않습니다. 키를 다시 확인해주세요.";
+            else if (errMsg.includes("models/") || errMsg.includes("not found")) koreanError = "AI 모델 버전을 찾을 수 없습니다. 백엔드의 모델명을 확인해주세요.";
+            else if (errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED")) koreanError = "무료 사용량(할당량) 한도를 초과했습니다! API 키를 갱신해주세요.";
+            else if (errMsg.includes("high demand") || errMsg.includes("overloaded")) koreanError = "현재 구글 서버에 접속자가 많아 지연되고 있습니다. 잠시 후 다시 시도해주세요.";
+            else koreanError = "AI 시험지 추출 오류: " + errMsg;
+            
+            throw new Error(koreanError);
         }
         
         const fullText = data.candidates[0].content.parts[0].text;
