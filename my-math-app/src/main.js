@@ -372,6 +372,8 @@ async function openAdminFeedback() {
                 html += `<div style="background: white; padding: 1.2rem; border-radius: 8px; margin-bottom: 1.2rem; border-left: 4px solid #ea580c; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
                             <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
                                 <span style="background: #ffedd5; color: #c2410c; padding: 3px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">🙋 판정 이의 제기</span>
+                                <span style="background: #f1f5f9; color: #475569; padding: 3px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">👤 ${senderEmail}</span>
+                                </div>
                                 <span style="font-size:0.8rem; color:var(--text-light); font-weight:bold;">🕒 ${date}</span>
                             </div>
                             <div style="background: #f8fafc; padding: 10px; border-radius: 6px; font-size: 0.9rem; margin-bottom: 10px; border: 1px solid #e2e8f0; line-height: 1.5;">
@@ -420,6 +422,8 @@ async function openAdminFeedback() {
                 html += `<div style="background: white; padding: 1.2rem; border-radius: 8px; margin-bottom: 1.2rem; border-left: 4px solid var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                             <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
                                 <span style="background: #e0e7ff; color: #1e40af; padding: 3px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">💡 일반 의견</span>
+                                <span style="background: #f1f5f9; color: #475569; padding: 3px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">👤 ${senderEmail}</span>
+                                </div>
                                 <span style="font-size:0.8rem; color:var(--text-light); font-weight:bold;">🕒 ${date}</span>
                             </div>
                             <p style="margin:0; font-size:0.95rem; white-space:pre-wrap; line-height:1.5;">${data.text || "내용 없음"}</p>
@@ -5842,6 +5846,9 @@ async function submitSpecificFeedback() {
         if (!response.ok) throw new Error("백엔드 서버 통신 실패");
         const data = await response.json();
         const aiReviewText = data.candidates[0].content.parts[0].text;
+
+        const user = auth.currentUser;
+        const userEmail = user ? user.email : "이메일 정보 없음";
 
         const feedbackData = {
             type: "문항 매칭 이의 제기",
