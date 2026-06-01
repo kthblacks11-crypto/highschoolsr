@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.0.1"; 
+const CURRENT_VERSION = "1.0.2"; 
 
 function startAppVersionCheck() {
     db.collection('system_config').doc('version_control')
