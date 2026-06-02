@@ -5444,17 +5444,6 @@ async function resetAiLevels() {
     }
 }
 
-function resetMCutScores() {
-    if(!confirm("입력된 모든 비율(%) 내용을 삭제하고 0점으로 초기화하시겠습니까?")) return;
-    
-    document.querySelectorAll('.pct-input').forEach(input => {
-        input.value = ''; // 빈칸으로 만듦
-        input.style.backgroundImage = 'none'; // 수정 빗금 제거
-        input.style.border = '1px solid #cbd5e1'; // 테두리 복구
-    });
-    
-    calculateTotalCutScores(); // 0점 상태로 하단 상자 재계산
-}
 
 async function deleteTableQuestion(qIdx) {
     if(!confirm("이 문항을 전체 협업 표에서 영구 삭제하시겠습니까?\n삭제 후 문항 번호 자동 조정 및 합계 점수가 실시간으로 동기화됩니다.")) return;
@@ -7412,7 +7401,7 @@ const exposeToWindow = {
     prevLevelQuestion, skipLevelQuestion, saveAndClosePassageTray,   clearAllPassages,
     resetChecklist, openJournalModal, closeJournalModal, saveJournalEntry, deleteJournalEntry, saveUserSubjectGroup,
     silentSaveChecklist, downloadAllJournalsExcel, cancelSubjectSelection, initDictionaryDrag, clearExamFile, markAsModified,
-    openCompareModal, resetMCutScores, enableMEditMode, resetMCutScores
+    openCompareModal, resetMCutScores, enableMEditMode
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
