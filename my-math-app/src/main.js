@@ -4450,12 +4450,11 @@ async function saveAssessmentToProject() {
     const boxes = document.getElementById('final-cut-score-boxes').querySelectorAll('span');
     if (boxes.length < 5) { alert("점수 산출이 먼저 완료되어야 합니다."); return; }
 
-    // 💡 왼쪽 안내창과 저장 버튼 요소를 가져옵니다.
+    // 💡 왼쪽 정보창(선생님이 체크하신 부분)과 저장 버튼 가져오기
     const infoZone = document.getElementById('current-assessment-info');
-    const saveBtn = document.querySelector('#save-to-project-zone .save-btn');
+    const saveBtn = document.querySelector('#save-to-project-zone .save-btn:last-child'); // 오른쪽 끝 저장버튼
     
-    // 버튼을 로딩 상태로 변경하여 중복 클릭을 방지합니다.
-    const originalBtnText = saveBtn.innerHTML;
+    // 버튼을 로딩 상태로 변경하여 중복 클릭 방지
     saveBtn.innerHTML = "⏳ 저장 중...";
     saveBtn.style.background = "#94a3b8";
     saveBtn.style.cursor = "not-allowed";
@@ -4494,19 +4493,15 @@ async function saveAssessmentToProject() {
             };
 
             let allMembers = projectData.collaborators || [];
-            if (projectData.ownerEmail && !allMembers.includes(projectData.ownerEmail)) {
-                allMembers.unshift(projectData.ownerEmail); 
-            }
+            if (projectData.ownerEmail && !allMembers.includes(projectData.ownerEmail)) allMembers.unshift(projectData.ownerEmail); 
             const currentUserEmail = auth.currentUser.email;
-            if (!allMembers.includes(currentUserEmail)) {
-                allMembers.push(currentUserEmail); 
-            }
+            if (!allMembers.includes(currentUserEmail)) allMembers.push(currentUserEmail); 
             const collaborators = [...new Set(allMembers)];
 
             if (!asm.teacherCutScores) asm.teacherCutScores = {};
             asm.teacherCutScores[currentUserEmail] = myCut100;
 
-            // 🚦 신호등 UI 생성 및 미완료 교사 체크
+            // 🚦 신호등 UI (선생님이 사진에 체크한 영역에 들어갈 내용)
             let missingTeachers = [];
             let statusHTML = `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">`;
 
@@ -4524,80 +4519,53 @@ async function saveAssessmentToProject() {
             let isFinal = (missingTeachers.length === 0);
 
             if (isFinal) {
-                // 모두 완료 시 평균 내어 최종 반영
+                // 🟢 모두 완료되었을 때 (최종 산출 및 비교하기 버튼 활성화)
                 let avgCut100 = { A: 0, B: 0, C: 0, D: 0, E: 0 };
                 let teacherCount = collaborators.length;
                 for (let email in asm.teacherCutScores) {
-                    avgCut100.A += asm.teacherCutScores[email].A;
-                    avgCut100.B += asm.teacherCutScores[email].B;
-                    avgCut100.C += asm.teacherCutScores[email].C;
-                    avgCut100.D += asm.teacherCutScores[email].D;
+                    avgCut100.A += asm.teacherCutScores[email].A; avgCut100.B += asm.teacherCutScores[email].B;
+                    avgCut100.C += asm.teacherCutScores[email].C; avgCut100.D += asm.teacherCutScores[email].D;
                     avgCut100.E += asm.teacherCutScores[email].E;
                 }
-                avgCut100.A /= teacherCount; avgCut100.B /= teacherCount;
-                avgCut100.C /= teacherCount; avgCut100.D /= teacherCount; avgCut100.E /= teacherCount;
+                avgCut100.A /= teacherCount; avgCut100.B /= teacherCount; avgCut100.C /= teacherCount; avgCut100.D /= teacherCount; avgCut100.E /= teacherCount;
 
-                const weightedScores = {
-                    A: avgCut100.A * (weight / 100), B: avgCut100.B * (weight / 100),
-                    C: avgCut100.C * (weight / 100), D: avgCut100.D * (weight / 100), E: avgCut100.E * (weight / 100)
-                };
-                asm.scores = weightedScores; 
+                asm.scores = { A: avgCut100.A * (weight / 100), B: avgCut100.B * (weight / 100), C: avgCut100.C * (weight / 100), D: avgCut100.D * (weight / 100), E: avgCut100.E * (weight / 100) }; 
+                
+                // 안내창 내용 변경 (사진에 체크된 부분)
+                infoZone.style.background = "#f0fdf4"; infoZone.style.border = "2px solid #22c55e";
+                infoZone.innerHTML = `<div style="color:#166534; font-size:0.9rem;">🎉 <strong>모든 교사 산출 완료!</strong> 최종 점수가 반영되었습니다.</div>` + statusHTML;
+                
+                // 오른쪽 끝 저장 버튼
+                saveBtn.innerHTML = "✅ 최종 확정 완료";
+                saveBtn.style.background = "#10b981";
+
+                // 💡 [핵심] 비교하기 버튼 활성화!
+                const compareBtn = document.getElementById('btn-compare-m');
+                if (compareBtn) {
+                    compareBtn.disabled = false;
+                    compareBtn.style.background = "#8b5cf6"; // 보라색으로 짠!
+                    compareBtn.style.cursor = "pointer";
+                    compareBtn.innerHTML = "📊 비교하기 (활성)";
+                }
+
+            } else {
+                // 🟠 아직 내 것만 저장되었을 때 (대기 상태 유지)
+                infoZone.style.background = "#fffbeb"; infoZone.style.border = "2px solid #f59e0b";
+                infoZone.innerHTML = `<div style="color:#92400e; font-size:0.9rem;">💾 <strong>내 점수 저장 완료!</strong> (다른 선생님 대기 중)</div>` + statusHTML;
+                
+                saveBtn.innerHTML = "✅ 내 판정 저장됨";
+                saveBtn.style.background = "#10b981";
+                // ❌ 강제 이동(setTimeout) 삭제! 화면에 그대로 머뭅니다.
             }
 
             asm.savedAt = new Date();
             asm.parsedScores = parsedScores;
             await docRef.update({ assessments: assessments });
             
-            // 💡 팝업창 대신 안내 영역 색상 변화 및 신호등 표시
-            infoZone.style.transition = "0.3s";
-            if (isFinal) {
-                infoZone.style.background = "#f0fdf4";
-                infoZone.style.border = "2px solid #22c55e";
-                infoZone.innerHTML = `<div style="color:#166534; font-size:0.9rem;">🎉 <strong>모든 교사 산출 완료!</strong> 최종 점수가 반영되었습니다.</div>` + statusHTML;
-                
-                saveBtn.innerHTML = "✅ 최종 확정 완료";
-                saveBtn.style.background = "#10b981";
-
-                // 💡 [추가] 모든 교사 저장 완료 시 '비교하기' 버튼 활성화!
-                const compareBtn = document.getElementById('btn-compare-m');
-                if (compareBtn) {
-                    compareBtn.disabled = false;
-                    compareBtn.style.background = "#8b5cf6"; // 보라색으로 강조
-                    compareBtn.style.cursor = "pointer";
-                    compareBtn.innerHTML = "📊 비교하기 (활성)";
-                }
-            } else {
-                infoZone.style.background = "#fffbeb";
-                infoZone.style.border = "2px solid #f59e0b";
-                infoZone.innerHTML = `<div style="color:#92400e; font-size:0.9rem;">💾 <strong>내 점수 저장 완료!</strong> (다른 선생님 대기 중)</div>` + statusHTML;
-                
-                saveBtn.innerHTML = "✅ 임시 저장됨";
-                saveBtn.style.background = "#10b981";
-            }
-
-            // 2.5초 대기 후 자동으로 폴더로 이동 (선생님이 신호등을 볼 수 있도록)
-            setTimeout(() => {
-                [1, 2, 3, 4].forEach(n => {
-                    const step = document.getElementById(`cut-score-step${n}`);
-                    if(step) step.style.display = 'none';
-                });
-                document.getElementById('project-detail-view').style.display = 'block'; 
-                currentEditingAssessmentIndex = -1; 
-                
-                // UI 초기화 (다음 번 접속 시 원래 상태로 보이기 위함)
-                saveBtn.innerHTML = originalBtnText;
-                saveBtn.style.background = "#ea580c";
-                saveBtn.style.cursor = "pointer";
-                saveBtn.disabled = false;
-                
-                infoZone.style.background = "white";
-                infoZone.style.border = "1px solid #cbd5e1";
-                infoZone.innerHTML = "평가 정보 불러오는 중...";
-            }, 2500);
+            // 👉 이제 팝업도 안 뜨고, 화면 밖으로 튕기지도 않고 현재 상태를 그대로 보여줍니다!
         }
     } catch(e) { 
         alert("업데이트 실패: " + e.message); 
-        const saveBtn = document.querySelector('#save-to-project-zone .save-btn');
         saveBtn.innerHTML = "💾 결과 저장하기";
         saveBtn.style.background = "#ea580c";
         saveBtn.style.cursor = "pointer";
