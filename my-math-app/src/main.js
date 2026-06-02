@@ -7412,7 +7412,7 @@ const exposeToWindow = {
     prevLevelQuestion, skipLevelQuestion, saveAndClosePassageTray,   clearAllPassages,
     resetChecklist, openJournalModal, closeJournalModal, saveJournalEntry, deleteJournalEntry, saveUserSubjectGroup,
     silentSaveChecklist, downloadAllJournalsExcel, cancelSubjectSelection, initDictionaryDrag, clearExamFile, markAsModified,
-    openCompareModal, resetMCutScores
+    openCompareModal, resetMCutScores, enableMEditMode, resetMCutScores
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
