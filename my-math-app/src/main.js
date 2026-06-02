@@ -4702,8 +4702,9 @@ function enableMEditMode() {
 
 // 💡 [초기화] 화면 내용 삭제 + DB 삭제하여 완벽한 '대기 중' 상태로 복귀
 async function resetMCutScores() {
-    if(!confirm("입력된 모든 비율(%) 내용을 삭제하고 초기화하시겠습니까?\n(저장된 내 판정 상태도 '대기 중'으로 돌아갑니다.)")) return;
+    if(!confirm("입력된 모든 비율(%) 내용을 삭제하고 초기화하시겠습니까?\n(폴더 내 최종 산출 점수도 지워지며 '대기 중' 상태로 돌아갑니다.)")) return;
     
+    // 1. 화면의 모든 입력칸 완전히 비우기 (기본 세팅 숫자 없음) 및 잠금 해제
     document.querySelectorAll('.pct-input').forEach(input => {
         input.value = ''; 
         input.style.backgroundImage = 'none'; 
@@ -4711,9 +4712,20 @@ async function resetMCutScores() {
         input.disabled = false; 
         input.style.background = "white";
     });
+    
+    // 화면 하단의 점수 박스를 0점으로 초기화
     calculateTotalCutScores(); 
     
-    // DB 업데이트: 내 저장 기록 삭제
+    // 2. 결과 저장하기 버튼을 다시 '빨간색' 기본 상태로 되돌리기
+    const saveBtn = document.getElementById('btn-save-m');
+    if (saveBtn) {
+        saveBtn.innerHTML = "💾 결과 저장하기";
+        saveBtn.style.background = "#ef4444"; // 빨간색
+        saveBtn.disabled = false;
+        saveBtn.style.cursor = "pointer";
+    }
+    
+    // 3. DB에서 내 데이터 및 폴더의 최종 산출 결과(asm.scores) 완전히 삭제
     if (!currentProjectId || currentEditingAssessmentIndex === -1) return;
     try {
         const docRef = db.collection('user_projects').doc(currentProjectId);
@@ -4723,12 +4735,18 @@ async function resetMCutScores() {
             let asm = assessments[currentEditingAssessmentIndex];
             const myEmail = auth.currentUser.email;
             
+            // 내 판정 데이터 삭제
             if (asm.teacherCutScores && asm.teacherCutScores[myEmail]) delete asm.teacherCutScores[myEmail];
             if (asm.teacherMTable && asm.teacherMTable[myEmail]) delete asm.teacherMTable[myEmail];
             
+            // 💡 [핵심] 폴더에 표시되던 최종 분할점수(asm.scores)도 아예 지워버림 -> 산출 전 상태로 복귀
+            if (asm.scores) {
+                delete asm.scores;
+            }
+            
             await docRef.update({ assessments: assessments });
             
-            // 신호등 화면을 다시 그리기 위해 새로고침 효과
+            // 화면 갱신하여 신호등을 '대기 중'으로 변경
             handleNextToPath1Result();
         }
     } catch(e) {
