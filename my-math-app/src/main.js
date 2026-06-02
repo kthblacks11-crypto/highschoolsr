@@ -2945,6 +2945,11 @@ function getBasePct(isShortAnswer, difficulty) {
 // ==========================================
 
 
+// ==========================================
+// 🚀 최종 산출: 데이터 통합 및 M자 묶어치기 (길1/길2 공통 활용)
+// ==========================================
+
+// 💡 [수정 완료] 다른 교사의 평균을 내지 않고, '오직 나의 판정'만으로 M자 표를 생성하도록 변경됨
 async function handleNextToPath1Result() {
     if (!currentProjectId) return;
 
@@ -2955,58 +2960,40 @@ async function handleNextToPath1Result() {
 
         const projectData = doc.data();
         const asm = projectData.assessments[currentEditingAssessmentIndex];
-        const collaborators = projectData.collaborators || [];
+        // const collaborators = projectData.collaborators || []; // 💡 더 이상 전체 교사 목록을 순회하지 않습니다.
         const teacherInputs = asm.teacherInputs || {};
         let baseQuestions = asm.parsedScores || [];
 
-        let missingList = [];
-        collaborators.forEach(email => {
-            const inputs = teacherInputs[email] || [];
-            const filledCount = inputs.filter(i => i && i.level).length;
-            if(filledCount < baseQuestions.length) missingList.push(email.split('@')[0]);
-        });
+        // 💡 1. 현재 로그인한 '나의 이메일'과 '나의 판정 데이터'만 콕 집어옵니다.
+        const myEmail = auth.currentUser.email;
+        const myInputs = teacherInputs[myEmail] || [];
 
-        if(missingList.length > 0) {
-            if(!confirm(`⚠️ 아직 입력을 완료하지 않은 선생님이 있습니다.\n(미완료: ${missingList.join(', ')} 선생님)\n\n이대로 최종 합산을 진행하시겠습니까?\n(입력되지 않은 분의 값은 무시하고, 입력된 분들의 평균으로 산출합니다.)`)) {
+        // 💡 2. 내가 모든 문항을 판정했는지만 검사합니다. (다른 교사가 안 했어도 나는 넘어갈 수 있음!)
+        const filledCount = myInputs.filter(i => i && i.level).length;
+        if(filledCount < baseQuestions.length) {
+            if(!confirm(`⚠️ 아직 선생님의 문항 판정이 모두 완료되지 않았습니다.\n(이대로 선생님만의 분할점수 산출을 진행하시겠습니까?)`)) {
                 return; 
             }
         }
 
-        // 💡 핵심: A+ 를 6점으로, 평균 5.5 이상이면 A+ 로 취합되도록 역산 로직 추가!
-        const levelToNum = { 'A+': 6, 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'E': 1 };
-        const numToLevel = { 6: 'A+', 5: 'A', 4: 'B', 3: 'C', 2: 'D', 1: 'E' };
-
-        let mergedData = baseQuestions.map((q, qIdx) => {
-            let sum = 0;
-            let count = 0;
+        // 💡 3. 평균 내는 복잡한 수식 제거! 오직 '내가 입력한 레벨(myLevel)' 기준으로 데이터를 묶습니다.
+        let myMergedData = baseQuestions.map((q, qIdx) => {
+            let myLevel = myInputs[qIdx]?.level; // 내가 해당 문항에 매긴 A~E 등급
             
-            collaborators.forEach(email => {
-                const level = teacherInputs[email]?.[qIdx]?.level;
-                if(level) {
-                    sum += levelToNum[level];
-                    count++;
-                }
-            });
-
-            let finalLevel = q.level; 
-            if(count > 0) {
-                let avg = Math.round(sum / count); 
-                finalLevel = numToLevel[avg] || 'C';
-            }
-
             return {
                 num: q.num,
                 score: q.score,
-                difficulty: q.difficulty || '중',
-                level: finalLevel, 
+                difficulty: q.difficulty || '중', // 엑셀에서 정한 난이도
+                level: myLevel || q.level || 'C', // 🛡️ 내 판정이 비어있다면 기존 AI 판정이나 C로 보호
                 isShortAnswer: q.isShortAnswer,
                 pcts: getBasePct(q.isShortAnswer, q.difficulty || '중')
             };
         });
 
-        parsedScores = mergedData; 
+        // 💡 4. 나의 판정 결과로 조립된 데이터를 다음 단계(M자 표)로 넘깁니다.
+        parsedScores = myMergedData; 
         goToStep(4);
-        renderGroupedCutScoreTable(mergedData);
+        renderGroupedCutScoreTable(myMergedData);
 
     } catch (e) {
         alert("최종 산출 중 오류가 발생했습니다: " + e.message);
@@ -4344,6 +4331,17 @@ async function saveAssessmentToProject() {
     const boxes = document.getElementById('final-cut-score-boxes').querySelectorAll('span');
     if (boxes.length < 5) { alert("점수 산출이 먼저 완료되어야 합니다."); return; }
 
+    // 💡 왼쪽 안내창과 저장 버튼 요소를 가져옵니다.
+    const infoZone = document.getElementById('current-assessment-info');
+    const saveBtn = document.querySelector('#save-to-project-zone .save-btn');
+    
+    // 버튼을 로딩 상태로 변경하여 중복 클릭을 방지합니다.
+    const originalBtnText = saveBtn.innerHTML;
+    saveBtn.innerHTML = "⏳ 저장 중...";
+    saveBtn.style.background = "#94a3b8";
+    saveBtn.style.cursor = "not-allowed";
+    saveBtn.disabled = true;
+
     let latestScores = [];
     document.querySelectorAll('.score-input').forEach((input, idx) => {
         const selects = document.querySelectorAll('.level-select');
@@ -4363,34 +4361,120 @@ async function saveAssessmentToProject() {
         const doc = await docRef.get();
         
         if(doc.exists) {
-            let assessments = doc.data().assessments || [];
-            const weight = assessments[currentEditingAssessmentIndex].weight || 0; 
+            let projectData = doc.data(); 
+            let assessments = projectData.assessments || [];
+            let asm = assessments[currentEditingAssessmentIndex];
+            const weight = asm.weight || 0; 
             
-            const weightedScores = {
-                A: parseFloat(boxes[0].innerText.replace('점','')) * (weight / 100),
-                B: parseFloat(boxes[1].innerText.replace('점','')) * (weight / 100),
-                C: parseFloat(boxes[2].innerText.replace('점','')) * (weight / 100),
-                D: parseFloat(boxes[3].innerText.replace('점','')) * (weight / 100),
-                E: parseFloat(boxes[4].innerText.replace('점','')) * (weight / 100)
+            const myCut100 = {
+                A: parseFloat(boxes[0].innerText.replace('점','')),
+                B: parseFloat(boxes[1].innerText.replace('점','')),
+                C: parseFloat(boxes[2].innerText.replace('점','')),
+                D: parseFloat(boxes[3].innerText.replace('점','')),
+                E: parseFloat(boxes[4].innerText.replace('점',''))
             };
 
-            assessments[currentEditingAssessmentIndex].scores = weightedScores;
-            assessments[currentEditingAssessmentIndex].savedAt = new Date();
-            assessments[currentEditingAssessmentIndex].parsedScores = parsedScores;
-            
-            await docRef.update({ assessments: assessments });
-            alert(`✅ 산출된 분할점수가 반영비율(${weight}%)에 맞게 환산되어 저장되었습니다!`);
-            
-            [1, 2, 3, 4].forEach(n => {
-                const step = document.getElementById(`cut-score-step${n}`);
-                if(step) step.style.display = 'none';
+            let allMembers = projectData.collaborators || [];
+            if (projectData.ownerEmail && !allMembers.includes(projectData.ownerEmail)) {
+                allMembers.unshift(projectData.ownerEmail); 
+            }
+            const currentUserEmail = auth.currentUser.email;
+            if (!allMembers.includes(currentUserEmail)) {
+                allMembers.push(currentUserEmail); 
+            }
+            const collaborators = [...new Set(allMembers)];
+
+            if (!asm.teacherCutScores) asm.teacherCutScores = {};
+            asm.teacherCutScores[currentUserEmail] = myCut100;
+
+            // 🚦 신호등 UI 생성 및 미완료 교사 체크
+            let missingTeachers = [];
+            let statusHTML = `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">`;
+
+            collaborators.forEach(email => {
+                const name = email.split('@')[0];
+                if (asm.teacherCutScores[email]) {
+                    statusHTML += `<span style="background: #dcfce7; color: #166534; padding: 4px 8px; border-radius: 4px; border: 1px solid #86efac; font-size: 0.8rem; font-weight: bold;">✅ ${name}: 완료</span>`;
+                } else {
+                    missingTeachers.push(name);
+                    statusHTML += `<span style="background: #f1f5f9; color: #64748b; padding: 4px 8px; border-radius: 4px; border: 1px solid #e2e8f0; font-size: 0.8rem; font-weight: bold;">⏳ ${name}: 대기</span>`;
+                }
             });
+            statusHTML += `</div>`;
+
+            let isFinal = (missingTeachers.length === 0);
+
+            if (isFinal) {
+                // 모두 완료 시 평균 내어 최종 반영
+                let avgCut100 = { A: 0, B: 0, C: 0, D: 0, E: 0 };
+                let teacherCount = collaborators.length;
+                for (let email in asm.teacherCutScores) {
+                    avgCut100.A += asm.teacherCutScores[email].A;
+                    avgCut100.B += asm.teacherCutScores[email].B;
+                    avgCut100.C += asm.teacherCutScores[email].C;
+                    avgCut100.D += asm.teacherCutScores[email].D;
+                    avgCut100.E += asm.teacherCutScores[email].E;
+                }
+                avgCut100.A /= teacherCount; avgCut100.B /= teacherCount;
+                avgCut100.C /= teacherCount; avgCut100.D /= teacherCount; avgCut100.E /= teacherCount;
+
+                const weightedScores = {
+                    A: avgCut100.A * (weight / 100), B: avgCut100.B * (weight / 100),
+                    C: avgCut100.C * (weight / 100), D: avgCut100.D * (weight / 100), E: avgCut100.E * (weight / 100)
+                };
+                asm.scores = weightedScores; 
+            }
+
+            asm.savedAt = new Date();
+            asm.parsedScores = parsedScores;
+            await docRef.update({ assessments: assessments });
             
-            // ✨ 메인 대시보드가 아닌 '프로젝트 상세(폴더) 뷰'로 돌아가게 변경
-            document.getElementById('project-detail-view').style.display = 'block'; 
-            currentEditingAssessmentIndex = -1; 
+            // 💡 팝업창 대신 안내 영역 색상 변화 및 신호등 표시
+            infoZone.style.transition = "0.3s";
+            if (isFinal) {
+                infoZone.style.background = "#f0fdf4";
+                infoZone.style.border = "2px solid #22c55e";
+                infoZone.innerHTML = `<div style="color:#166534; font-size:0.9rem;">🎉 <strong>모든 교사 산출 완료!</strong> 최종 점수가 반영되었습니다.</div>` + statusHTML;
+                
+                saveBtn.innerHTML = "✅ 최종 확정 완료";
+                saveBtn.style.background = "#10b981";
+            } else {
+                infoZone.style.background = "#fffbeb";
+                infoZone.style.border = "2px solid #f59e0b";
+                infoZone.innerHTML = `<div style="color:#92400e; font-size:0.9rem;">💾 <strong>내 점수 저장 완료!</strong> (다른 선생님 대기 중)</div>` + statusHTML;
+                
+                saveBtn.innerHTML = "✅ 임시 저장됨";
+                saveBtn.style.background = "#10b981";
+            }
+
+            // 2.5초 대기 후 자동으로 폴더로 이동 (선생님이 신호등을 볼 수 있도록)
+            setTimeout(() => {
+                [1, 2, 3, 4].forEach(n => {
+                    const step = document.getElementById(`cut-score-step${n}`);
+                    if(step) step.style.display = 'none';
+                });
+                document.getElementById('project-detail-view').style.display = 'block'; 
+                currentEditingAssessmentIndex = -1; 
+                
+                // UI 초기화 (다음 번 접속 시 원래 상태로 보이기 위함)
+                saveBtn.innerHTML = originalBtnText;
+                saveBtn.style.background = "#ea580c";
+                saveBtn.style.cursor = "pointer";
+                saveBtn.disabled = false;
+                
+                infoZone.style.background = "white";
+                infoZone.style.border = "1px solid #cbd5e1";
+                infoZone.innerHTML = "평가 정보 불러오는 중...";
+            }, 2500);
         }
-    } catch(e) { alert("업데이트 실패: " + e.message); }
+    } catch(e) { 
+        alert("업데이트 실패: " + e.message); 
+        const saveBtn = document.querySelector('#save-to-project-zone .save-btn');
+        saveBtn.innerHTML = "💾 결과 저장하기";
+        saveBtn.style.background = "#ea580c";
+        saveBtn.style.cursor = "pointer";
+        saveBtn.disabled = false;
+    }
 }
 
 window.onload = async () => {
@@ -4936,23 +5020,18 @@ function renderCollaborativeTable(projectData, asm) {
             }
         });
 
-        // 🌟 [수정된 부분] 선생님들의 판정 차이에 따라 3단계로 색상과 아이콘을 다르게 부여합니다!
-        let trStyle = isShort ? 'background:#fff7ed;' : ''; // 기본 스타일 (서답형은 옅은 주황색)
-        let statusIcon = ''; // 번호 옆에 띄울 아이콘
+        let trStyle = isShort ? 'background:#fff7ed;' : '';
+        let statusIcon = '';
 
         if (minNum !== null && maxNum !== null) {
-            const diffLevel = maxNum - minNum; // 최대값과 최소값의 차이 계산
-            
+            const diffLevel = maxNum - minNum;
             if (diffLevel === 0) {
-                // 🟢 1. 모두 일치할 때 (녹색 배경과 테두리, 체크 아이콘)
                 trStyle = 'background:#f0fdf4; border: 2px solid #22c55e;';
                 statusIcon = ' ✅'; 
             } else if (diffLevel === 1) {
-                // 🟠 2. 1단계 차이 날 때 (옅은 분홍 배경, 주의 아이콘)
                 trStyle = 'background:#fff1f2; border: 2px solid #fca5a5;';
                 statusIcon = ' ⚠️'; 
             } else if (diffLevel >= 2) {
-                // 🔴 3. 2단계 이상 차이 날 때 (진한 빨강 배경, 경고 아이콘)
                 trStyle = 'background:#fee2e2; border: 2px solid #ef4444;';
                 statusIcon = ' 🚨';
             }
@@ -4968,7 +5047,6 @@ function renderCollaborativeTable(projectData, asm) {
                 <button disabled style="margin-top: 6px; background: #f8fafc; color: #cbd5e1; border: 1px solid #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; cursor: not-allowed;">🔒 가려짐</button>
             `;
         } else {
-            // 판정필요 상태일 때는 회색 배경 적용
             const badgeColor = q.level === 'A+' ? '#ef4444' : (q.level === '판정필요' ? '#94a3b8' : '#8b5cf6');
             aiCellContentHtml = `
                 <span style="background:${badgeColor}; color:white; padding:2px 6px; border-radius:4px; font-weight:bold;">${q.level || 'C'}</span>
@@ -4977,7 +5055,6 @@ function renderCollaborativeTable(projectData, asm) {
             `;
         }
 
-        // 🌟 테이블 행(tr) 생성 시작 부분
         html += `<tr style="${trStyle}">
             <td style="font-size: 0.9rem; font-weight:bold; text-align:center;">${q.num}${statusIcon}</td>
             <td style="width: 120px; vertical-align: middle;">
@@ -5028,10 +5105,9 @@ function renderCollaborativeTable(projectData, asm) {
     let statusHtml = `<div style="padding: 15px; background: #f8fafc; border-radius: 8px; border: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">`;
 
     statusHtml += `<div><strong style="color:#334155; display:block; margin-bottom:5px;">👥 공동 작업 진행 상황:</strong>`;
-    let allReady = true;
+    
     collaborators.forEach(email => {
         const status = readyStatus[email] || '대기 중';
-        if (status !== '완료') allReady = false; 
         const name = email.split('@')[0]; 
         
         const isReady = status === '완료';
@@ -5047,7 +5123,8 @@ function renderCollaborativeTable(projectData, asm) {
     statusHtml += `</div>`;
 
     const myStatus = readyStatus[currentUserEmail] || '대기 중';
-    const amIReady = myStatus === '완료';
+    const amIReady = myStatus === '완료'; // 💡 내 상태가 완료인지 확인
+    
     statusHtml += `<div>
         <button onclick="markAsReady()" style="background: ${amIReady ? '#10b981' : '#ea580c'}; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.95rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
             ${amIReady ? '✅ 내 판정 저장 완료' : '💾 내 판정 최종 저장하기'}
@@ -5059,15 +5136,17 @@ function renderCollaborativeTable(projectData, asm) {
     if(externalContainer) externalContainer.innerHTML = externalHtml;
 
     updateStep2Total();
+    
+    // 💡 [핵심 변경 포인트] allReady를 지우고 오직 amIReady 조건으로 버튼 활성화
     const nextBtn = document.getElementById('btn-next-to-step3');
     if (nextBtn) {
         nextBtn.style.display = 'inline-block';
-        if (allReady) {
+        if (amIReady) {
             nextBtn.style.opacity = '1'; nextBtn.style.cursor = 'pointer'; nextBtn.onclick = handleNextToPath1Result;
-            nextBtn.innerHTML = "분할점수 산출하기 (M자 그룹화) ➡️"; nextBtn.style.background = "#ea580c";
+            nextBtn.innerHTML = "내 판정으로 분할점수 산출 ➡️"; nextBtn.style.background = "#ea580c";
         } else {
             nextBtn.style.opacity = '0.5'; nextBtn.style.cursor = 'not-allowed';
-            nextBtn.innerHTML = "🔒 모두 '저장 완료' 시 산출 가능"; nextBtn.style.background = "#64748b";
+            nextBtn.innerHTML = "🔒 '내 판정 저장 완료' 시 산출 가능"; nextBtn.style.background = "#64748b";
         }
     }
     parsedScores = baseQuestions;
