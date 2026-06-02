@@ -2950,15 +2950,6 @@ function getBasePct(isShortAnswer, difficulty) {
     }
 }
 
-// ==========================================
-// 🚀 최종 산출: 데이터 통합 및 M자 묶어치기 (길1/길2 공통 활용)
-// ==========================================
-
-
-// ==========================================
-// 🚀 최종 산출: 데이터 통합 및 M자 묶어치기 (길1/길2 공통 활용)
-// ==========================================
-
 // 💡 [수정 완료] 다른 교사의 평균을 내지 않고, '오직 나의 판정'만으로 M자 표를 생성하도록 변경됨
 async function handleNextToPath1Result() {
     if (!currentProjectId) return;
@@ -2995,88 +2986,55 @@ async function handleNextToPath1Result() {
         goToStep(4);
         renderGroupedCutScoreTable(myMergedData);
 
-        const infoZone = document.getElementById('current-assessment-info');
-        const compareBtn = document.getElementById('btn-compare-m');
         const saveBtn = document.getElementById('btn-save-m'); 
 
-        if (infoZone) {
-            let allMembers = projectData.collaborators || [];
-            if (projectData.ownerEmail && !allMembers.includes(projectData.ownerEmail)) allMembers.unshift(projectData.ownerEmail);
-            if (!allMembers.includes(myEmail)) allMembers.push(myEmail);
-            const collaborators = [...new Set(allMembers)];
+        // 🛡️ [데이터 보존 1] 선생님이 만드신 입력창 잠금 및 저장 버튼 상태 유지 로직 (원형 100% 보존)
+        if (asm.teacherCutScores && asm.teacherCutScores[myEmail]) {
+            if (saveBtn) {
+                saveBtn.innerHTML = "✅ 저장 완료"; // 👈 저장완료로 다시 바꿈
+                saveBtn.style.background = "#10b981"; 
+                saveBtn.disabled = true;
+                saveBtn.style.cursor = "not-allowed";
+            }
+            document.querySelectorAll('.pct-input').forEach(input => {
+                input.disabled = true;
+                input.style.background = "#f1f5f9";
+            });
+        } else {
+            if (saveBtn) {
+                saveBtn.innerHTML = "💾 결과 저장하기";
+                saveBtn.style.background = "#ef4444"; 
+                saveBtn.disabled = false;
+                saveBtn.style.cursor = "pointer";
+            }
+            document.querySelectorAll('.pct-input').forEach(input => {
+                input.disabled = false;
+                input.style.background = "white";
+            });
+        }
 
-            const examTitle = `${asm.name || '평가명 없음'} (${asm.weight || 0}%)`;
-
-            let missingTeachers = [];
-            let statusHTML = `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">`;
-            
-            collaborators.forEach(email => {
-                const name = email.split('@')[0];
-                if (asm.teacherCutScores && asm.teacherCutScores[email]) {
-                    statusHTML += `<span style="background: #dcfce7; color: #166534; padding: 4px 8px; border-radius: 4px; border: 1px solid #86efac; font-size: 0.8rem; font-weight: bold;">✅ ${name}: 완료</span>`;
-                } else {
-                    missingTeachers.push(name);
-                    statusHTML += `<span style="background: #f1f5f9; color: #64748b; padding: 4px 8px; border-radius: 4px; border: 1px solid #e2e8f0; font-size: 0.8rem; font-weight: bold;">⏳ ${name}: 대기</span>`;
+        // 🛡️ [데이터 보존 2] 선생님이 만드신 M자 테이블 빈칸 유지 기술 (원형 100% 보존)
+        if (asm.teacherMTable && asm.teacherMTable[myEmail]) {
+            const myMTable = asm.teacherMTable[myEmail];
+            const rows = document.querySelectorAll('#cut-score-result-table .cut-score-row');
+            rows.forEach((row, idx) => {
+                if (myMTable[idx]) {
+                    row.querySelector('.pct-A').value = myMTable[idx].A;
+                    row.querySelector('.pct-B').value = myMTable[idx].B;
+                    row.querySelector('.pct-C').value = myMTable[idx].C;
+                    row.querySelector('.pct-D').value = myMTable[idx].D;
+                    row.querySelector('.pct-E').value = myMTable[idx].E;
                 }
             });
-            statusHTML += `</div>`;
-
-            let isFinal = (missingTeachers.length === 0);
-
-            if (asm.teacherCutScores && asm.teacherCutScores[myEmail]) {
-                if (saveBtn) {
-                    saveBtn.innerHTML = "✅ 저장 완료"; // 👈 저장완료로 다시 바꿈
-                    saveBtn.style.background = "#10b981"; 
-                    saveBtn.disabled = true;
-                    saveBtn.style.cursor = "not-allowed";
-                }
-                document.querySelectorAll('.pct-input').forEach(input => {
-                    input.disabled = true;
-                    input.style.background = "#f1f5f9";
-                });
-            } else {
-                if (saveBtn) {
-                    saveBtn.innerHTML = "💾 결과 저장하기";
-                    saveBtn.style.background = "#ef4444"; 
-                    saveBtn.disabled = false;
-                    saveBtn.style.cursor = "pointer";
-                }
-                document.querySelectorAll('.pct-input').forEach(input => {
-                    input.disabled = false;
-                    input.style.background = "white";
-                });
-            }
-
-            // 💡 [핵심] 잠금 여부와 상관없이 무조건 저장된 M자 테이블을 덮어씌움 (빈칸 유지 기술)
-            if (asm.teacherMTable && asm.teacherMTable[myEmail]) {
-                const myMTable = asm.teacherMTable[myEmail];
-                const rows = document.querySelectorAll('#cut-score-result-table .cut-score-row');
-                rows.forEach((row, idx) => {
-                    if (myMTable[idx]) {
-                        row.querySelector('.pct-A').value = myMTable[idx].A;
-                        row.querySelector('.pct-B').value = myMTable[idx].B;
-                        row.querySelector('.pct-C').value = myMTable[idx].C;
-                        row.querySelector('.pct-D').value = myMTable[idx].D;
-                        row.querySelector('.pct-E').value = myMTable[idx].E;
-                    }
-                });
-                calculateTotalCutScores(); 
-            }
-
-            if (isFinal) {
-                infoZone.innerHTML = `<div style="color:#1e3a8a; font-size:1.1rem; font-weight:900; margin-bottom:5px;">📌 ${examTitle}</div>` + 
-                                     `<div style="color:#334155; font-size:0.9rem; font-weight:bold;">👥 교사별 산출 저장 현황</div>` + statusHTML;
-                infoZone.style.background = "#f0fdf4"; infoZone.style.border = "2px solid #22c55e";
-                
-                if (compareBtn) { compareBtn.disabled = false; compareBtn.style.background = "#8b5cf6"; compareBtn.style.cursor = "pointer"; compareBtn.innerHTML = "📊 비교하기 (활성)"; }
-            } else {
-                infoZone.innerHTML = `<div style="color:#1e3a8a; font-size:1.1rem; font-weight:900; margin-bottom:5px;">📌 ${examTitle}</div>` + 
-                                     `<div style="color:#334155; font-size:0.9rem; font-weight:bold;">👥 교사별 산출 저장 현황</div>` + statusHTML;
-                infoZone.style.background = "#f8fafc"; infoZone.style.border = "1px solid #cbd5e1";
-                
-                if (compareBtn) { compareBtn.disabled = true; compareBtn.style.background = "#94a3b8"; compareBtn.style.cursor = "not-allowed"; compareBtn.innerHTML = "📊 비교하기 (대기)"; }
-            }
+            calculateTotalCutScores(); 
         }
+
+        // 🚀 [다이어트 성공!] 길고 복잡했던 상태창 HTML 그리기 코드를 단 3줄로 완벽 압축
+        // (선생님의 원래 기획대로 모두 완료 시에만 '비교하기'가 활성화 되도록 내부적으로 처리됩니다)
+        if (typeof updateMTableStatus === 'function') {
+            updateMTableStatus(asm, projectData);
+        }
+
     } catch (e) {
         alert("최종 산출 중 오류가 발생했습니다: " + e.message);
     }
@@ -4689,17 +4647,34 @@ async function saveAssessmentToProject() {
 
 // 💡 [수정하기] 입력칸 잠금 해제 및 저장 버튼 빨간색으로 변경
 function enableMEditMode() {
+    // 1. 기존 기능: 입력칸 활성화
     document.querySelectorAll('.pct-input').forEach(input => {
         input.disabled = false;
         input.style.background = "white"; // 흰색 배경 복구
     });
     
+    // 2. 기존 기능: 저장 버튼 활성화
     const saveBtn = document.getElementById('btn-save-m');
     if (saveBtn) {
         saveBtn.innerHTML = "💾 결과 저장하기";
         saveBtn.style.background = "#ef4444"; // 빨간색으로 돌아옴
         saveBtn.disabled = false;
         saveBtn.style.cursor = "pointer";
+    }
+
+    // 3. 🟢 추가된 기능: 누르자마자 즉시 '대기' 상태창으로 변경
+    if (typeof cachedAsmData !== 'undefined' && typeof cachedProjectData !== 'undefined') {
+        const myEmail = auth.currentUser.email;
+        
+        // 내 점수 데이터를 화면 갱신용으로만 임시 삭제 (DB 삭제 아님)
+        if (cachedAsmData.teacherCutScores && cachedAsmData.teacherCutScores[myEmail]) {
+            delete cachedAsmData.teacherCutScores[myEmail]; 
+        }
+        
+        // 새로 만든 통합 함수를 불러와서 상태창 업데이트
+        if (typeof updateMTableStatus === 'function') {
+            updateMTableStatus(cachedAsmData, cachedProjectData);
+        }
     }
 }
 
@@ -4882,7 +4857,11 @@ function startEditAssessment(index) {
         if(doc.exists) {
             const projectData = doc.data();
             const asm = projectData.assessments[index];
-            document.getElementById('current-assessment-info').innerText = `📌 ${asm.name} (반영 비율: ${asm.weight}%)`;
+            if (currentActiveStep !== 4) {
+                document.getElementById('current-assessment-info').innerText = `📌 ${asm.name} (반영 비율: ${asm.weight}%)`;
+            } else if (typeof updateMTableStatus === 'function') {
+                updateMTableStatus(asm, projectData); // 실시간 상태 즉시 갱신
+            }
             const parsedScores = asm.parsedScores || [];
             if (parsedScores.length > 0) {
                 let cCount = 0, sCount = 0;
@@ -5733,6 +5712,56 @@ async function applyBatchDifficulty() {
         }
     } catch(e) { 
         alert("일괄 적용 실패: " + e.message); 
+    }
+}
+
+// 🌟 통합 상태창 렌더링 함수
+// 🌟 통합 상태창 렌더링 함수 (모두 완료 시에만 비교하기 활성화)
+function updateMTableStatus(asm, projectData) {
+    const infoZone = document.getElementById('current-assessment-info');
+    const compareBtn = document.getElementById('btn-compare-m');
+    const myEmail = auth.currentUser.email;
+
+    if (!infoZone || !asm) return;
+
+    const examTitle = `${asm.name || '평가명 없음'} (${asm.weight || 0}%)`;
+    let allMembers = projectData.collaborators || [];
+    if (projectData.ownerEmail && !allMembers.includes(projectData.ownerEmail)) allMembers.unshift(projectData.ownerEmail);
+    if (!allMembers.includes(myEmail)) allMembers.push(myEmail);
+    const collaborators = [...new Set(allMembers)];
+
+    let missingTeachers = [];
+    let statusHTML = `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">`;
+
+    collaborators.forEach(email => {
+        const name = email.split('@')[0];
+        if (asm.teacherCutScores && asm.teacherCutScores[email]) {
+            statusHTML += `<span style="background: #dcfce7; color: #166534; padding: 4px 8px; border-radius: 4px; border: 1px solid #86efac; font-size: 0.8rem; font-weight: bold;">✅ ${name}: 완료</span>`;
+        } else {
+            missingTeachers.push(name);
+            statusHTML += `<span style="background: #f1f5f9; color: #64748b; padding: 4px 8px; border-radius: 4px; border: 1px solid #e2e8f0; font-size: 0.8rem; font-weight: bold;">⏳ ${name}: 대기</span>`;
+        }
+    });
+    statusHTML += `</div>`;
+
+    const isFinal = (missingTeachers.length === 0);
+    const amIComplete = (asm.teacherCutScores && asm.teacherCutScores[myEmail]);
+
+    let titleHtml = `<div style="color:#1e3a8a; font-size:1.1rem; font-weight:900; margin-bottom:5px;">📌 ${examTitle}</div>`;
+
+    // 💡 선생님의 기획대로 상태에 따라 버튼을 엄격하게 제어합니다.
+    if (isFinal) {
+        infoZone.innerHTML = titleHtml + `<div style="color:#166534; font-size:0.9rem; font-weight:bold;">🎉 모든 교사 산출 완료!</div>` + statusHTML;
+        infoZone.style.background = "#f0fdf4"; infoZone.style.border = "2px solid #22c55e";
+        if (compareBtn) { compareBtn.disabled = false; compareBtn.style.background = "#8b5cf6"; compareBtn.style.cursor = "pointer"; compareBtn.innerHTML = "📊 비교하기 (활성)"; }
+    } else if (amIComplete) {
+        infoZone.innerHTML = titleHtml + `<div style="color:#92400e; font-size:0.9rem; font-weight:bold;">💾 내 점수 저장 완료! (다른 교사 대기중)</div>` + statusHTML;
+        infoZone.style.background = "#fffbeb"; infoZone.style.border = "2px solid #f59e0b";
+        if (compareBtn) { compareBtn.disabled = true; compareBtn.style.background = "#94a3b8"; compareBtn.style.cursor = "not-allowed"; compareBtn.innerHTML = "📊 비교하기 (대기)"; }
+    } else {
+        infoZone.innerHTML = titleHtml + `<div style="color:#334155; font-size:0.9rem; font-weight:bold;">👥 교사별 산출 저장 현황</div>` + statusHTML;
+        infoZone.style.background = "#f8fafc"; infoZone.style.border = "1px solid #cbd5e1";
+        if (compareBtn) { compareBtn.disabled = true; compareBtn.style.background = "#94a3b8"; compareBtn.style.cursor = "not-allowed"; compareBtn.innerHTML = "📊 비교하기 (대기)"; }
     }
 }
 
