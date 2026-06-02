@@ -4529,23 +4529,28 @@ async function saveAssessmentToProject() {
     if (boxes.length < 5) { alert("점수 산출이 먼저 완료되어야 합니다."); return; }
 
     const infoZone = document.getElementById('current-assessment-info');
-    const saveBtn = document.querySelector('#save-to-project-zone .save-btn:last-child');
-    
-    // 버튼 로딩 상태
-    saveBtn.innerHTML = "⏳ 저장 중...";
-    saveBtn.style.background = "#94a3b8";
-    saveBtn.style.cursor = "not-allowed";
-    saveBtn.disabled = true;
+    infoZone.innerHTML = `<div style="color:#1e3a8a; font-weight:bold;">⏳ 데이터를 안전하게 저장하는 중입니다...</div>`;
 
-    // 💡 [추가됨] 나중에 완벽한 비교 표를 그리기 위해, 표 안의 % 입력값들도 싹 긁어모읍니다.
+    let latestScores = [];
+    document.querySelectorAll('.score-input').forEach((input, idx) => {
+        const selects = document.querySelectorAll('.level-select');
+        const diffs = document.querySelectorAll('.diff-select');
+        latestScores.push({
+            num: input.getAttribute('data-num') || String(idx + 1),
+            score: parseFloat(input.value) || 0,
+            level: selects[idx] ? selects[idx].value : 'C',
+            difficulty: diffs[idx] ? diffs[idx].value : '중',
+            isShortAnswer: String(input.getAttribute('data-num')).includes('서')
+        });
+    });
+    if(latestScores.length > 0) parsedScores = latestScores;
+
+    // 💡 비교 표를 그리기 위해, 표 안의 % 입력값들을 싹 긁어모읍니다.
     let myMTable = [];
     document.querySelectorAll('#cut-score-result-table .cut-score-row').forEach(row => {
         myMTable.push({
-            A: row.querySelector('.pct-A').value,
-            B: row.querySelector('.pct-B').value,
-            C: row.querySelector('.pct-C').value,
-            D: row.querySelector('.pct-D').value,
-            E: row.querySelector('.pct-E').value
+            A: row.querySelector('.pct-A').value, B: row.querySelector('.pct-B').value,
+            C: row.querySelector('.pct-C').value, D: row.querySelector('.pct-D').value, E: row.querySelector('.pct-E').value
         });
     });
 
@@ -4557,14 +4562,14 @@ async function saveAssessmentToProject() {
             let projectData = doc.data(); 
             let assessments = projectData.assessments || [];
             let asm = assessments[currentEditingAssessmentIndex];
+            
+            // 💡 고정된 고사명과 반영비율 추출
             const weight = asm.weight || 0; 
+            const examTitle = `${asm.name || '평가명 없음'} (${weight}%)`; 
             
             const myCut100 = {
-                A: parseFloat(boxes[0].innerText.replace('점','')),
-                B: parseFloat(boxes[1].innerText.replace('점','')),
-                C: parseFloat(boxes[2].innerText.replace('점','')),
-                D: parseFloat(boxes[3].innerText.replace('점','')),
-                E: parseFloat(boxes[4].innerText.replace('점',''))
+                A: parseFloat(boxes[0].innerText.replace('점','')), B: parseFloat(boxes[1].innerText.replace('점','')),
+                C: parseFloat(boxes[2].innerText.replace('점','')), D: parseFloat(boxes[3].innerText.replace('점','')), E: parseFloat(boxes[4].innerText.replace('점',''))
             };
 
             let allMembers = projectData.collaborators || [];
@@ -4576,7 +4581,6 @@ async function saveAssessmentToProject() {
             if (!asm.teacherCutScores) asm.teacherCutScores = {};
             asm.teacherCutScores[currentUserEmail] = myCut100;
             
-            // 💡 [추가됨] 내 % 입력값 DB에 저장
             if (!asm.teacherMTable) asm.teacherMTable = {};
             asm.teacherMTable[currentUserEmail] = myMTable;
 
@@ -4597,47 +4601,41 @@ async function saveAssessmentToProject() {
             let isFinal = (missingTeachers.length === 0);
 
             if (isFinal) {
+                // 모두 완료 시 평균 계산
                 let avgCut100 = { A: 0, B: 0, C: 0, D: 0, E: 0 };
                 let teacherCount = collaborators.length;
                 for (let email in asm.teacherCutScores) {
                     avgCut100.A += asm.teacherCutScores[email].A; avgCut100.B += asm.teacherCutScores[email].B;
-                    avgCut100.C += asm.teacherCutScores[email].C; avgCut100.D += asm.teacherCutScores[email].D;
-                    avgCut100.E += asm.teacherCutScores[email].E;
+                    avgCut100.C += asm.teacherCutScores[email].C; avgCut100.D += asm.teacherCutScores[email].D; avgCut100.E += asm.teacherCutScores[email].E;
                 }
                 avgCut100.A /= teacherCount; avgCut100.B /= teacherCount; avgCut100.C /= teacherCount; avgCut100.D /= teacherCount; avgCut100.E /= teacherCount;
 
                 asm.scores = { A: avgCut100.A * (weight / 100), B: avgCut100.B * (weight / 100), C: avgCut100.C * (weight / 100), D: avgCut100.D * (weight / 100), E: avgCut100.E * (weight / 100) }; 
                 
                 infoZone.style.background = "#f0fdf4"; infoZone.style.border = "2px solid #22c55e";
-                infoZone.innerHTML = `<div style="color:#166534; font-size:0.9rem;">🎉 <strong>모든 교사 산출 완료!</strong> (수정 후 다시 저장 가능)</div>` + statusHTML;
+                infoZone.innerHTML = `<div style="color:#1e3a8a; font-size:1.1rem; font-weight:900; margin-bottom:5px;">📌 ${examTitle}</div>` + 
+                                     `<div style="color:#166534; font-size:0.9rem; font-weight:bold;">🎉 모든 교사 산출 완료! (저장됨)</div>` + statusHTML;
 
                 const compareBtn = document.getElementById('btn-compare-m');
                 if (compareBtn) {
-                    compareBtn.disabled = false;
-                    compareBtn.style.background = "#8b5cf6"; 
-                    compareBtn.style.cursor = "pointer";
-                    compareBtn.innerHTML = "📊 비교하기 (활성)";
+                    compareBtn.disabled = false; compareBtn.style.background = "#8b5cf6"; compareBtn.style.cursor = "pointer"; compareBtn.innerHTML = "📊 비교하기 (활성)";
                 }
+                alert("✅ 결과 저장이 성공적으로 완료되었습니다!\n(언제든지 다시 수정하고 [수정하기] 버튼을 누르시면 갱신됩니다.)");
             } else {
+                // 내 것만 완료 시
                 infoZone.style.background = "#fffbeb"; infoZone.style.border = "2px solid #f59e0b";
-                infoZone.innerHTML = `<div style="color:#92400e; font-size:0.9rem;">💾 <strong>내 점수 저장 완료!</strong> (다른 선생님 대기 중)</div>` + statusHTML;
+                infoZone.innerHTML = `<div style="color:#1e3a8a; font-size:1.1rem; font-weight:900; margin-bottom:5px;">📌 ${examTitle}</div>` + 
+                                     `<div style="color:#92400e; font-size:0.9rem; font-weight:bold;">💾 내 점수 저장 완료! (다른 교사 대기중)</div>` + statusHTML;
+                alert("✅ 내 점수 저장이 임시 완료되었습니다.\n나머지 교사가 완료해야 최종 점수가 갱신됩니다.");
             }
 
             asm.savedAt = new Date();
             await docRef.update({ assessments: assessments });
-            
-            // 💡 [핵심] 버튼 잠금 해제! 언제든 수정하고 다시 누를 수 있습니다.
-            saveBtn.disabled = false;
-            saveBtn.style.cursor = "pointer";
-            saveBtn.innerHTML = "🔄 수정하여 다시 저장";
-            saveBtn.style.background = "#3b82f6"; // 파란색으로 변경되어 수정 가능함을 알림
         }
     } catch(e) { 
         alert("업데이트 실패: " + e.message); 
-        saveBtn.disabled = false;
-        saveBtn.style.cursor = "pointer";
-        saveBtn.innerHTML = "💾 결과 저장하기";
-        saveBtn.style.background = "#ea580c";
+        const infoZone = document.getElementById('current-assessment-info');
+        if(infoZone) infoZone.innerHTML = `<div style="color:#ef4444; font-weight:bold;">❌ 저장 중 오류가 발생했습니다. 다시 시도해주세요.</div>`;
     }
 }
 
@@ -5107,6 +5105,7 @@ async function kickFromProject(projectId, targetEmail, event) {
         alert("삭제에 실패했습니다: " + error.message);
     }
 }
+
 function renderCollaborativeTable(projectData, asm) {
     const container = document.getElementById('score-table-container');
     const currentUserEmail = auth.currentUser.email;
