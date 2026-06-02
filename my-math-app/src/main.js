@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.0.5"; 
+const CURRENT_VERSION = "1.0.6"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -1140,7 +1140,8 @@ async function processAndSaveBackground(analysisText, apiKey) {
                 reason: extractedReason,
                 standard_code: code.replace(/[\[\]]/g, '').trim(), // DB 저장 시에는 대괄호만 빼고 깔끔하게 저장
                 subject: matchedSubject,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                user_email: auth.currentUser ? auth.currentUser.email : "알 수 없음" // 👈 여기!
             });
         
         }
@@ -1795,7 +1796,9 @@ async function resetChecklist() {
     if (auth.currentUser) {
         try {
             await db.collection('user_checklists').doc(auth.currentUser.uid).set({
-                [currentSubject]: {} 
+                [currentSubject]: {},
+                email: auth.currentUser.email,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
             alert("✅ 체크리스트가 깨끗하게 초기화되었습니다. 새로운 학기를 힘차게 시작하세요!");
         } catch(e) {
@@ -1950,7 +1953,8 @@ async function saveJournalEntry() {
         date: date,
         title: title,
         content: content,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        email: auth.currentUser.email
     };
 
     const btn = document.querySelector('#journal-modal .save-btn');
@@ -5901,7 +5905,8 @@ async function transformAndSaveExamToBank(skipConfirm = false) {
                     level: lvl, 
                     reason: finalReason,     
                     source: "📄 시험지 일괄 변형 저장",
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                    user_email: auth.currentUser ? auth.currentUser.email : "알 수 없음" // 👈 여기!
                 };
                 if (compressedImage) saveData.image = compressedImage;
 
@@ -6603,7 +6608,8 @@ async function saveUserSubjectGroup(group) {
     try {
         await db.collection('user_profiles').doc(auth.currentUser.uid).set({
             mainGroup: group,
-            email: auth.currentUser.email
+            email: auth.currentUser.email,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp() // 👈 여기에 가입/설정 시간이 자동 기록됩니다!
         }, { merge: true });
 
         currentUserGroup = group;
