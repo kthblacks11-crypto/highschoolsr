@@ -1245,6 +1245,14 @@ function showSection(id) {
         currentProjectId = null;
         document.querySelectorAll('.cut-score-card').forEach(card => card.style.display = 'none');
         document.getElementById('cut-score-dashboard').style.display = 'block';
+     // 💡 [기능 유실 방지 및 추가] 메뉴 클릭 시 겹쳐 있던 하위 상세 화면들을 깔끔하게 청소합니다.
+        const detailView = document.getElementById('project-detail-view');
+        const step2 = document.getElementById('cut-score-step2');
+        const step4 = document.getElementById('cut-score-step4');
+        if (detailView) detailView.style.display = 'none';
+        if (step2) step2.style.display = 'none';
+        if (step4) step4.style.display = 'none';
+
         if (typeof loadProjects === 'function') loadProjects();
     } else if (id === 'quiz') {
         const qSelect = document.getElementById('quiz-standard-selection');
@@ -2960,67 +2968,76 @@ async function handleNextToPath1Result() {
 
         const projectData = doc.data();
         const asm = projectData.assessments[currentEditingAssessmentIndex];
-        // const collaborators = projectData.collaborators || []; // 💡 더 이상 전체 교사 목록을 순회하지 않습니다.
         const teacherInputs = asm.teacherInputs || {};
         let baseQuestions = asm.parsedScores || [];
-
-        // 💡 1. 현재 로그인한 '나의 이메일'과 '나의 판정 데이터'만 콕 집어옵니다.
         const myEmail = auth.currentUser.email;
-        const myInputs = teacherInputs[myEmail] || [];
 
-        // 💡 2. 내가 모든 문항을 판정했는지만 검사합니다. (다른 교사가 안 했어도 나는 넘어갈 수 있음!)
-        const filledCount = myInputs.filter(i => i && i.level).length;
-        if(filledCount < baseQuestions.length) {
-            if(!confirm(`⚠️ 아직 선생님의 문항 판정이 모두 완료되지 않았습니다.\n(이대로 선생님만의 분할점수 산출을 진행하시겠습니까?)`)) {
-                return; 
-            }
+        const myStatus = asm.readyStatus ? asm.readyStatus[myEmail] : '대기 중';
+        if (myStatus !== '완료') {
+            alert("🔒 아직 '내 판정 저장 완료'가 되지 않았습니다.\n먼저 표 아래의 [내 판정 최종 저장하기] 버튼을 눌러주세요!");
+            return;
         }
 
-        // 💡 3. 평균 내는 복잡한 수식 제거! 오직 '내가 입력한 레벨(myLevel)' 기준으로 데이터를 묶습니다.
+        const myInputs = teacherInputs[myEmail] || [];
         let myMergedData = baseQuestions.map((q, qIdx) => {
-            let myLevel = myInputs[qIdx]?.level; // 내가 해당 문항에 매긴 A~E 등급
-            
+            let myLevel = myInputs[qIdx]?.level; 
             return {
-                num: q.num,
-                score: q.score,
-                difficulty: q.difficulty || '중', // 엑셀에서 정한 난이도
-                level: myLevel || q.level || 'C', // 🛡️ 내 판정이 비어있다면 기존 AI 판정이나 C로 보호
-                isShortAnswer: q.isShortAnswer,
-                pcts: getBasePct(q.isShortAnswer, q.difficulty || '중')
+                num: q.num, score: q.score, difficulty: q.difficulty || '중',
+                level: myLevel || q.level || 'C', isShortAnswer: q.isShortAnswer, pcts: getBasePct(q.isShortAnswer, q.difficulty || '중')
             };
         });
 
-        // 💡 4. 나의 판정 결과로 조립된 데이터를 다음 단계(M자 표)로 넘깁니다.
         parsedScores = myMergedData; 
+        history.pushState({ section: 'cut-score', sub: 'step4' }, "", "#cut-score/step4");
+        
         goToStep(4);
         renderGroupedCutScoreTable(myMergedData);
 
+        // 💡 [핵심 추가] 다시 화면에 들어왔을 때 버튼 및 신호등 상태 완벽 복구
         const infoZone = document.getElementById('current-assessment-info');
+        const saveBtn = document.querySelector('#save-to-project-zone .save-btn:last-child');
+        const compareBtn = document.getElementById('btn-compare-m');
+
         if (infoZone) {
             let allMembers = projectData.collaborators || [];
             if (projectData.ownerEmail && !allMembers.includes(projectData.ownerEmail)) allMembers.unshift(projectData.ownerEmail);
-            if (!allMembers.includes(auth.currentUser.email)) allMembers.push(auth.currentUser.email);
+            if (!allMembers.includes(myEmail)) allMembers.push(myEmail);
             const collaborators = [...new Set(allMembers)];
 
-            let statusHTML = `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:5px;">`;
+            let missingTeachers = [];
+            let statusHTML = `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:5px; justify-content:center;">`;
+            
             collaborators.forEach(email => {
                 const name = email.split('@')[0];
                 if (asm.teacherCutScores && asm.teacherCutScores[email]) {
                     statusHTML += `<span style="background: #dcfce7; color: #166534; padding: 4px 8px; border-radius: 4px; border: 1px solid #86efac; font-size: 0.8rem; font-weight: bold;">✅ ${name}: 완료</span>`;
                 } else {
+                    missingTeachers.push(name);
                     statusHTML += `<span style="background: #f1f5f9; color: #64748b; padding: 4px 8px; border-radius: 4px; border: 1px solid #e2e8f0; font-size: 0.8rem; font-weight: bold;">⏳ ${name}: 대기</span>`;
                 }
             });
             statusHTML += `</div>`;
-            infoZone.innerHTML = `<div style="color:#334155; font-size:0.9rem; font-weight:bold;">👥 M자 산출 저장 현황</div>` + statusHTML;
-            infoZone.style.background = "#f8fafc"; // 들어오자마자는 회색 톤으로
-            infoZone.style.border = "1px solid #cbd5e1";
-        }
-        // 👆👆👆 [여기까지 추가] 👆👆👆
 
-        } catch (e) {
-            alert("최종 산출 중 오류가 발생했습니다: " + e.message);
+            let isFinal = (missingTeachers.length === 0);
+
+            if (isFinal) {
+                infoZone.innerHTML = `<div style="color:#166534; font-size:0.9rem; text-align:center;">🎉 <strong>모든 교사 산출 완료!</strong> (수정 후 다시 저장 가능)</div>` + statusHTML;
+                infoZone.style.background = "#f0fdf4"; infoZone.style.border = "2px solid #22c55e";
+
+                if (saveBtn) { saveBtn.innerHTML = "🔄 수정하여 다시 저장"; saveBtn.style.background = "#3b82f6"; saveBtn.disabled = false; saveBtn.style.cursor = "pointer"; }
+                if (compareBtn) { compareBtn.disabled = false; compareBtn.style.background = "#8b5cf6"; compareBtn.style.cursor = "pointer"; compareBtn.innerHTML = "📊 비교하기 (활성)"; }
+            } else {
+                infoZone.innerHTML = `<div style="color:#334155; font-size:0.9rem; font-weight:bold; text-align:center;">👥 M자 산출 저장 현황</div>` + statusHTML;
+                infoZone.style.background = "#f8fafc"; infoZone.style.border = "1px solid #cbd5e1";
+
+                if (saveBtn) { saveBtn.innerHTML = "💾 결과 저장하기"; saveBtn.style.background = "#ea580c"; saveBtn.disabled = false; saveBtn.style.cursor = "pointer"; }
+                if (compareBtn) { compareBtn.disabled = true; compareBtn.style.background = "#94a3b8"; compareBtn.style.cursor = "not-allowed"; compareBtn.innerHTML = "📊 비교하기 (대기중)"; }
+            }
         }
+
+    } catch (e) {
+        alert("최종 산출 중 오류가 발생했습니다: " + e.message);
+    }
 }
 
 
@@ -3164,34 +3181,32 @@ function calculateTotalCutScores() {
 }
 
 function renderFinalScoreBoxes(A, B, C, D, E, totalScore) {
-    // 💡 부모 컨테이너가 좁을 때 박스들이 밑으로 떨어지도록 flexWrap 속성을 추가합니다.
     document.getElementById('final-cut-score-boxes').style.flexWrap = 'wrap';
 
-    // 💡 white-space: nowrap 을 추가하여 글자가 강제로 줄바꿈되는 현상을 막습니다.
     const boxHtml = `
         <div style="width: 100%; text-align: center; margin-bottom: 10px; color: #64748b; font-weight: bold;">(최종 인식된 총 배점: ${totalScore.toFixed(1)}점)</div>
         
-        <div style="flex:1; min-width:110px; padding:10px 5px; background:#fef2f2; border: 2px solid #ef4444; border-radius:8px; white-space: nowrap;">
+        <div style="flex:1; min-width:110px; padding:10px 5px; background:#fef2f2; border: 2px solid #ef4444; border-radius:8px; white-space: nowrap; text-align: center;">
             <strong style="font-size:0.9rem;">A수준 컷오프</strong><br>
             <span style="font-size:1.25rem; font-weight:bold; color:#ef4444;">${A.toFixed(2)}점</span>
         </div>
         
-        <div style="flex:1; min-width:110px; padding:10px 5px; background:#fffbeb; border: 2px solid #f59e0b; border-radius:8px; white-space: nowrap;">
+        <div style="flex:1; min-width:110px; padding:10px 5px; background:#fffbeb; border: 2px solid #f59e0b; border-radius:8px; white-space: nowrap; text-align: center;">
             <strong style="font-size:0.9rem;">B수준 컷오프</strong><br>
             <span style="font-size:1.25rem; font-weight:bold; color:#f59e0b;">${B.toFixed(2)}점</span>
         </div>
         
-        <div style="flex:1; min-width:110px; padding:10px 5px; background:#f0fdf4; border: 2px solid #22c55e; border-radius:8px; white-space: nowrap;">
+        <div style="flex:1; min-width:110px; padding:10px 5px; background:#f0fdf4; border: 2px solid #22c55e; border-radius:8px; white-space: nowrap; text-align: center;">
             <strong style="font-size:0.9rem;">C수준 컷오프</strong><br>
             <span style="font-size:1.25rem; font-weight:bold; color:#22c55e;">${C.toFixed(2)}점</span>
         </div>
         
-        <div style="flex:1; min-width:110px; padding:10px 5px; background:#eff6ff; border: 2px solid #3b82f6; border-radius:8px; white-space: nowrap;">
+        <div style="flex:1; min-width:110px; padding:10px 5px; background:#eff6ff; border: 2px solid #3b82f6; border-radius:8px; white-space: nowrap; text-align: center;">
             <strong style="font-size:0.9rem;">D수준 컷오프</strong><br>
             <span style="font-size:1.25rem; font-weight:bold; color:#3b82f6;">${D.toFixed(2)}점</span>
         </div>
         
-        <div style="flex:1; min-width:110px; padding:10px 5px; background:#f8fafc; border: 2px solid #94a3b8; border-radius:8px; white-space: nowrap;">
+        <div style="flex:1; min-width:110px; padding:10px 5px; background:#f8fafc; border: 2px solid #94a3b8; border-radius:8px; white-space: nowrap; text-align: center;">
             <strong style="font-size:0.9rem;">E수준 컷오프</strong><br>
             <span style="font-size:1.25rem; font-weight:bold; color:#64748b;">${E.toFixed(2)}점</span>
         </div>
@@ -5170,20 +5185,22 @@ function renderCollaborativeTable(projectData, asm) {
             }
         });
 
+        // 💡 줄 전체 배경색은 서답형 색상 구분만 유지하고 투명하게 초기화합니다 (어지러움 방지)
         let trStyle = isShort ? 'background:#fff7ed;' : '';
         let statusIcon = '';
+        let cellColorStyle = ''; // 💡 오직 선생님들의 판정 칸(셀)만 염색하기 위한 변수
 
         if (minNum !== null && maxNum !== null) {
             const diffLevel = maxNum - minNum;
             if (diffLevel === 0) {
-                trStyle = 'background:#f0fdf4; border: 2px solid #22c55e;';
                 statusIcon = ' ✅'; 
+                cellColorStyle = ''; // 판정 일치 시 배경 변화 없음
             } else if (diffLevel === 1) {
-                trStyle = 'background:#fff1f2; border: 2px solid #fca5a5;';
                 statusIcon = ' ⚠️'; 
+                cellColorStyle = 'background:#fff1f2; border: 2px solid #fca5a5;'; // 옅은 빨강 전용 셀 스타일
             } else if (diffLevel >= 2) {
-                trStyle = 'background:#fee2e2; border: 2px solid #ef4444;';
                 statusIcon = ' 🚨';
+                cellColorStyle = 'background:#fee2e2; border: 2px solid #ef4444;'; // 진한 빨강 전용 셀 스타일
             }
         }
 
@@ -5224,7 +5241,7 @@ function renderCollaborativeTable(projectData, asm) {
                 ${aiCellContentHtml}
             </td>
             
-            <td>
+            <td style="${cellColorStyle} text-align:center; vertical-align:middle;">
                 <select class="level-select" style="padding:4px; font-weight:bold;" onchange="saveMyInput(${qIdx}, this.value)">
                     <option value="" ${!myInput ? 'selected' : ''}>선택</option>
                     <option value="A+" ${myInput==='A+'?'selected':''}>A+</option>
@@ -5236,7 +5253,8 @@ function renderCollaborativeTable(projectData, asm) {
         collaborators.forEach(email => {
             if (email !== currentUserEmail) {
                 const theirInput = teacherInputs[email]?.[qIdx]?.level;
-                html += `<td>${theirInput ? "<span style='color:#10b981; font-weight:bold;'>입력완료🔒</span>" : "<span style='color:#cbd5e1;'>대기중</span>"}</td>`;
+                // 💡 동료 선생님들의 칸에도 지정된 색상을 정확히 대입합니다.
+                html += `<td style="${cellColorStyle} text-align:center; vertical-align:middle;">${theirInput ? "<span style='color:#10b981; font-weight:bold;'>입력완료🔒</span>" : "<span style='color:#cbd5e1;'>대기중</span>"}</td>`;
             }
         });
         
@@ -5247,9 +5265,14 @@ function renderCollaborativeTable(projectData, asm) {
     html += `</tbody></table>`;
     container.innerHTML = html; 
 
-    let externalHtml = `<div style="text-align: right; margin-bottom: 10px;">
-    <button onclick="alert('더 안정적인 서비스 제공을 위해 현재 시스템을 점검 및 업데이트 중입니다. 핵심 기능인 점수 산출은 정상적으로 이용 가능합니다! 🛠️');" style="background: #94a3b8; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">📄 시험지 파일 및 편집 확인 (업데이트 예정) ⏳</button>
- </div>`;
+    // 💡 [범례 알림창 좌측 추가] 비활성화 버튼 왼쪽에 나란히 예쁜 가이드 상자를 구축합니다.
+    let externalHtml = `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; gap: 8px;">
+            <div style="background: #fff1f2; border: 2px solid #fca5a5; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; color: #991b1b; font-weight: bold; display: flex; align-items: center; gap: 4px;">⚠️ 1수준 다름</div>
+            <div style="background: #fee2e2; border: 2px solid #ef4444; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; color: #b91c1c; font-weight: bold; display: flex; align-items: center; gap: 4px;">🚨 2수준 이상 다름</div>
+        </div>
+        <button onclick="alert('더 안정적인 서비스 제공을 위해 현재 시스템을 점검 및 업데이트 중입니다. 핵심 기능인 점수 산출은 정상적으로 이용 가능합니다! 🛠️');" style="background: #94a3b8; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">📄 시험지 파일 및 편집 확인 (업데이트 예정) ⏳</button>
+    </div>`;
 
     const readyStatus = asm.readyStatus || {};
     let statusHtml = `<div style="padding: 15px; background: #f8fafc; border-radius: 8px; border: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">`;
@@ -5273,7 +5296,7 @@ function renderCollaborativeTable(projectData, asm) {
     statusHtml += `</div>`;
 
     const myStatus = readyStatus[currentUserEmail] || '대기 중';
-    const amIReady = myStatus === '완료'; // 💡 내 상태가 완료인지 확인
+    const amIReady = myStatus === '완료'; 
     
     statusHtml += `<div>
         <button onclick="markAsReady()" style="background: ${amIReady ? '#10b981' : '#ea580c'}; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.95rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
@@ -5287,7 +5310,6 @@ function renderCollaborativeTable(projectData, asm) {
 
     updateStep2Total();
     
-    // 💡 [핵심 변경 포인트] allReady를 지우고 오직 amIReady 조건으로 버튼 활성화
     const nextBtn = document.getElementById('btn-next-to-step3');
     if (nextBtn) {
         nextBtn.style.display = 'inline-block';
