@@ -16,8 +16,8 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'] // HTML, JS, CSS를 폰/PC에 영구 저장!
       },
       manifest: {
-        name: '2022 개정교육과정 수학 성취기준 매칭 시스템',
-        short_name: '수학매칭앱',
+        name: '2022 개정교육과정 성취기준 매칭 시스템',
+        short_name: '성취기준 매칭앱',
         description: '오프라인 분할점수 산출 및 성취기준 분석 도구',
         theme_color: '#1e3a8a',
         background_color: '#f8fafc',
