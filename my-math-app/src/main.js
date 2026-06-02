@@ -2995,9 +2995,32 @@ async function handleNextToPath1Result() {
         goToStep(4);
         renderGroupedCutScoreTable(myMergedData);
 
-    } catch (e) {
-        alert("최종 산출 중 오류가 발생했습니다: " + e.message);
-    }
+        const infoZone = document.getElementById('current-assessment-info');
+        if (infoZone) {
+            let allMembers = projectData.collaborators || [];
+            if (projectData.ownerEmail && !allMembers.includes(projectData.ownerEmail)) allMembers.unshift(projectData.ownerEmail);
+            if (!allMembers.includes(auth.currentUser.email)) allMembers.push(auth.currentUser.email);
+            const collaborators = [...new Set(allMembers)];
+
+            let statusHTML = `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:5px;">`;
+            collaborators.forEach(email => {
+                const name = email.split('@')[0];
+                if (asm.teacherCutScores && asm.teacherCutScores[email]) {
+                    statusHTML += `<span style="background: #dcfce7; color: #166534; padding: 4px 8px; border-radius: 4px; border: 1px solid #86efac; font-size: 0.8rem; font-weight: bold;">✅ ${name}: 완료</span>`;
+                } else {
+                    statusHTML += `<span style="background: #f1f5f9; color: #64748b; padding: 4px 8px; border-radius: 4px; border: 1px solid #e2e8f0; font-size: 0.8rem; font-weight: bold;">⏳ ${name}: 대기</span>`;
+                }
+            });
+            statusHTML += `</div>`;
+            infoZone.innerHTML = `<div style="color:#334155; font-size:0.9rem; font-weight:bold;">👥 M자 산출 저장 현황</div>` + statusHTML;
+            infoZone.style.background = "#f8fafc"; // 들어오자마자는 회색 톤으로
+            infoZone.style.border = "1px solid #cbd5e1";
+        }
+        // 👆👆👆 [여기까지 추가] 👆👆👆
+
+        } catch (e) {
+            alert("최종 산출 중 오류가 발생했습니다: " + e.message);
+        }
 }
 
 
@@ -3143,15 +3166,15 @@ function calculateTotalCutScores() {
 function renderFinalScoreBoxes(A, B, C, D, E, totalScore) {
     const boxHtml = `
         <div style="width: 100%; text-align: center; margin-bottom: 10px; color: #64748b; font-weight: bold;">(최종 인식된 총 배점: ${totalScore.toFixed(1)}점)</div>
-        <div style="flex:1; padding:15px; background:#fef2f2; border: 2px solid #ef4444; border-radius:8px;"><strong>A수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#ef4444;">${A.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:15px; background:#fffbeb; border: 2px solid #f59e0b; border-radius:8px;"><strong>B수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#f59e0b;">${B.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:15px; background:#f0fdf4; border: 2px solid #22c55e; border-radius:8px;"><strong>C수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#22c55e;">${C.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:15px; background:#eff6ff; border: 2px solid #3b82f6; border-radius:8px;"><strong>D수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#3b82f6;">${D.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:15px; background:#f8fafc; border: 2px solid #94a3b8; border-radius:8px;"><strong>E수준 컷오프</strong><br><span style="font-size:1.8rem; font-weight:bold; color:#64748b;">${E.toFixed(2)}점</span></div>
+        <div style="flex:1; padding:10px; background:#fef2f2; border: 2px solid #ef4444; border-radius:8px;"><strong>A수준 컷오프</strong><br><span style="font-size:1.3rem; font-weight:bold; color:#ef4444;">${A.toFixed(2)}점</span></div>
+        <div style="flex:1; padding:10px; background:#fffbeb; border: 2px solid #f59e0b; border-radius:8px;"><strong>B수준 컷오프</strong><br><span style="font-size:1.3rem; font-weight:bold; color:#f59e0b;">${B.toFixed(2)}점</span></div>
+        <div style="flex:1; padding:10px; background:#f0fdf4; border: 2px solid #22c55e; border-radius:8px;"><strong>C수준 컷오프</strong><br><span style="font-size:1.3rem; font-weight:bold; color:#22c55e;">${C.toFixed(2)}점</span></div>
+        <div style="flex:1; padding:10px; background:#eff6ff; border: 2px solid #3b82f6; border-radius:8px;"><strong>D수준 컷오프</strong><br><span style="font-size:1.3rem; font-weight:bold; color:#3b82f6;">${D.toFixed(2)}점</span></div>
+        <div style="flex:1; padding:10px; background:#f8fafc; border: 2px solid #94a3b8; border-radius:8px;"><strong>E수준 컷오프</strong><br><span style="font-size:1.3rem; font-weight:bold; color:#64748b;">${E.toFixed(2)}점</span></div>
     `;
     document.getElementById('final-cut-score-boxes').innerHTML = boxHtml;
     document.getElementById('final-result-container').style.display = 'block';
-    
+
     const aiLoading = document.getElementById('final-ai-loading');
     if(aiLoading) aiLoading.style.display = 'none';
 }
@@ -3286,6 +3309,7 @@ async function openCompareModal() {
         collaborators.forEach(email => {
             const inputs = teacherInputs[email] || [];
             const cutScores = asm.teacherCutScores ? asm.teacherCutScores[email] : null;
+            const mTablePcts = asm.teacherMTable ? asm.teacherMTable[email] : null; 
             const name = email.split('@')[0];
             
             if (!cutScores) {
@@ -3296,80 +3320,90 @@ async function openCompareModal() {
                 return;
             }
             
-            // 💡 해당 교사의 M자 데이터 재구성
+            // 선생님별 M자 그룹화 데이터 생성 (실제 표와 100% 동일한 로직)
             const groups = {
-                '선택형(객관식)_상': { label: '선택형(객관식) 상', count: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]} },
-                '선택형(객관식)_중': { label: '선택형(객관식) 중', count: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]} },
-                '선택형(객관식)_하': { label: '선택형(객관식) 하', count: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]} },
-                '서답형_상': { label: '서답형 상', count: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]} },
-                '서답형_중': { label: '서답형 중', count: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]} },
-                '서답형_하': { label: '서답형 하', count: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]} }
+                '선택형(객관식)_상': { typeStr: '선택형(객관식)', difficulty: '상', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(false, '상') },
+                '선택형(객관식)_중': { typeStr: '선택형(객관식)', difficulty: '중', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(false, '중') },
+                '선택형(객관식)_하': { typeStr: '선택형(객관식)', difficulty: '하', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(false, '하') },
+                '서답형_상': { typeStr: '서답형', difficulty: '상', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(true, '상') },
+                '서답형_중': { typeStr: '서답형', difficulty: '중', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(true, '중') },
+                '서답형_하': { typeStr: '서답형', difficulty: '하', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(true, '하') }
             };
             
             baseQuestions.forEach((q, qIdx) => {
                 const typeStr = q.isShortAnswer ? '서답형' : '선택형(객관식)';
-                let diff = q.difficulty || '중';
+                let diff = q.difficulty;
                 if (diff === '쉬움') diff = '하'; if (diff === '보통') diff = '중'; if (diff === '어려움') diff = '상';
                 
-                let myLevel = inputs[qIdx]?.level || 'C'; // 이 선생님이 판정한 레벨
+                let myLevel = inputs[qIdx]?.level || 'C'; // 각 선생님이 판정한 레벨
                 
                 const key = `${typeStr}_${diff}`;
                 if (groups[key]) {
                     groups[key].count++;
+                    groups[key].scoreSum += q.score;
                     if (groups[key].levels[myLevel]) groups[key].levels[myLevel].push(q.num);
                     else groups[key].levels['C'].push(q.num); 
                 }
             });
             
-            // 💡 표 그리기
             html += `
             <div style="border: 2px solid #cbd5e1; border-radius: 8px; padding: 1.5rem; background: white; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #8b5cf6; padding-bottom: 10px; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
-                    <h3 style="margin: 0; color: #1e3a8a; font-size: 1.2rem;">👤 ${name} 선생님의 M자 분석</h3>
-                    <div style="display: flex; gap: 6px;">
-                        <span style="background:#fee2e2; color:#b91c1c; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">A: ${cutScores.A.toFixed(1)}점</span>
-                        <span style="background:#fef3c7; color:#b45309; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">B: ${cutScores.B.toFixed(1)}점</span>
-                        <span style="background:#dcfce7; color:#15803d; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">C: ${cutScores.C.toFixed(1)}점</span>
-                        <span style="background:#dbeafe; color:#1d4ed8; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">D: ${cutScores.D.toFixed(1)}점</span>
-                        <span style="background:#f1f5f9; color:#475569; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">E: ${cutScores.E.toFixed(1)}점</span>
-                    </div>
-                </div>
-                <table class="score-table" style="width: 100%; font-size: 0.9rem;">
-                    <thead style="background: #f8fafc;">
-                        <tr>
-                            <th style="width: 25%;">문항 범주</th>
-                            <th>A+ / A</th>
-                            <th>B</th>
-                            <th>C</th>
-                            <th>D</th>
-                            <th>E</th>
-                        </tr>
+                <h3 style="margin: 0 0 15px 0; color: #1e3a8a; font-size: 1.2rem; border-bottom: 2px solid #8b5cf6; padding-bottom: 10px;">👤 ${name} 선생님의 M자 표</h3>
+                
+                <table class="score-table" style="width: 100%; margin-bottom: 15px;">
+                    <thead style="background: #f1f5f9;">
+                        <tr><th style="min-width:150px;">문항 범주</th><th>배점</th><th>난이도</th><th>A (%)</th><th>B (%)</th><th>C (%)</th><th>D (%)</th><th>E (%)</th></tr>
                     </thead>
                     <tbody>`;
             
-            const formatLevels = (lvls) => lvls.length > 0 ? `<strong style="color:var(--primary);">${lvls.join(', ')}번</strong>` : '<span style="color:#cbd5e1;">-</span>';
-            
-            Object.values(groups).forEach((g, idx) => {
-                if (g.count === 0) return; // 문항이 없는 줄은 숨겨서 깔끔하게 표시
+            Object.values(groups).forEach((g, index) => {
+                const isEmpty = g.count === 0;
+                let bottomBorder = (index === 2) ? 'border-bottom: 3px double #64748b;' : 'border-bottom: 1px solid #e2e8f0;';
+                const rowStyle = isEmpty ? `background: #f8fafc; opacity: 0.5; ${bottomBorder}` : bottomBorder;
+                const diffColor = isEmpty ? '#cbd5e1' : (g.difficulty === '상' ? '#ef4444' : g.difficulty === '중' ? '#f59e0b' : '#22c55e');
                 
-                let aArr = [];
-                if (g.levels['A+'].length > 0) aArr.push(`<span style="color:#ef4444;">A+: ${g.levels['A+'].join(', ')}</span>`);
-                if (g.levels['A'].length > 0) aArr.push(`A: ${g.levels['A'].join(', ')}`);
-                let aContent = aArr.length > 0 ? aArr.join('<br>') : '<span style="color:#cbd5e1;">-</span>';
-                let bottomBorder = (idx === 2) ? 'border-bottom: 3px double #64748b;' : 'border-bottom: 1px solid #e2e8f0;';
+                let qNumHtml = '';
+                if (isEmpty) {
+                    qNumHtml = '<div style="color:#94a3b8; font-size:0.8rem; margin-bottom:4px;">해당 문항 없음</div>';
+                } else {
+                    ['A+', 'A', 'B', 'C', 'D', 'E'].forEach(lvl => {
+                        if (g.levels[lvl].length > 0) {
+                            let lvlLabel = lvl === 'A+' ? '<strong style="color:#ef4444;">A+</strong>' : `<strong>${lvl}</strong>`;
+                            qNumHtml += `<div style="font-size:0.85rem; color:#475569; margin-bottom:2px;">${lvlLabel}: ${g.levels[lvl].join(', ')}번</div>`;
+                        }
+                    });
+                }
                 
+                // DB에 저장된 % 값이 있으면 우선 적용, 없으면 기본값
+                let pcts = mTablePcts && mTablePcts[index] ? mTablePcts[index] : g.pcts;
+                
+                const getPctInput = (val) => `<input type="number" value="${isEmpty ? '' : val}" disabled style="width: 50px; padding: 4px; text-align: center; border-radius: 4px; border: 1px solid #cbd5e1; background: #f1f5f9; font-weight: bold; color: #475569;">`;
+
                 html += `
-                    <tr style="${bottomBorder}">
-                        <td style="font-weight: bold; background: #f8fafc; text-align: left;">${g.label} <div style="font-size:0.75rem; color:#64748b; font-weight:normal; margin-top:2px;">(총 ${g.count}문항)</div></td>
-                        <td style="vertical-align: middle;">${aContent}</td>
-                        <td style="vertical-align: middle;">${formatLevels(g.levels['B'])}</td>
-                        <td style="vertical-align: middle;">${formatLevels(g.levels['C'])}</td>
-                        <td style="vertical-align: middle;">${formatLevels(g.levels['D'])}</td>
-                        <td style="vertical-align: middle;">${formatLevels(g.levels['E'])}</td>
-                    </tr>
-                `;
+                <tr style="${rowStyle}">
+                    <td style="text-align: left; vertical-align: top;">
+                        ${qNumHtml}
+                        <strong style="color: ${isEmpty ? '#94a3b8' : 'var(--primary)'}; display:block; margin-top:5px;">${g.typeStr} ${isEmpty ? '0문항' : `총 ${g.count}문항`}</strong>
+                    </td>
+                    <td style="color: ${isEmpty ? '#94a3b8' : '#ea580c'}; font-weight: bold; vertical-align: middle;">${isEmpty ? '-' : g.scoreSum.toFixed(1)}</td>
+                    <td style="vertical-align: middle;"><span style="background:${diffColor}; color:white; padding: 4px 10px; border-radius: 4px; font-weight: bold;">${g.difficulty}</span></td>
+                    <td style="vertical-align: middle;">${getPctInput(pcts.A)}</td>
+                    <td style="vertical-align: middle;">${getPctInput(pcts.B)}</td>
+                    <td style="vertical-align: middle;">${getPctInput(pcts.C)}</td>
+                    <td style="vertical-align: middle;">${getPctInput(pcts.D)}</td>
+                    <td style="vertical-align: middle;">${getPctInput(pcts.E)}</td>
+                </tr>`;
             });
-            html += `</tbody></table></div>`;
+            
+            html += `</tbody></table>
+                <div style="display: flex; gap: 6px; justify-content: center;">
+                    <span style="background:#fef2f2; border: 1px solid #ef4444; color:#ef4444; padding: 6px 12px; border-radius: 6px; font-size: 0.9rem; font-weight: bold;">A: ${cutScores.A.toFixed(1)}점</span>
+                    <span style="background:#fffbeb; border: 1px solid #f59e0b; color:#f59e0b; padding: 6px 12px; border-radius: 6px; font-size: 0.9rem; font-weight: bold;">B: ${cutScores.B.toFixed(1)}점</span>
+                    <span style="background:#f0fdf4; border: 1px solid #22c55e; color:#22c55e; padding: 6px 12px; border-radius: 6px; font-size: 0.9rem; font-weight: bold;">C: ${cutScores.C.toFixed(1)}점</span>
+                    <span style="background:#eff6ff; border: 1px solid #3b82f6; color:#3b82f6; padding: 6px 12px; border-radius: 6px; font-size: 0.9rem; font-weight: bold;">D: ${cutScores.D.toFixed(1)}점</span>
+                    <span style="background:#f8fafc; border: 1px solid #64748b; color:#64748b; padding: 6px 12px; border-radius: 6px; font-size: 0.9rem; font-weight: bold;">E: ${cutScores.E.toFixed(1)}점</span>
+                </div>
+            </div>`;
         });
         
         container.innerHTML = html;
@@ -4450,29 +4484,26 @@ async function saveAssessmentToProject() {
     const boxes = document.getElementById('final-cut-score-boxes').querySelectorAll('span');
     if (boxes.length < 5) { alert("점수 산출이 먼저 완료되어야 합니다."); return; }
 
-    // 💡 왼쪽 정보창(선생님이 체크하신 부분)과 저장 버튼 가져오기
     const infoZone = document.getElementById('current-assessment-info');
-    const saveBtn = document.querySelector('#save-to-project-zone .save-btn:last-child'); // 오른쪽 끝 저장버튼
+    const saveBtn = document.querySelector('#save-to-project-zone .save-btn:last-child');
     
-    // 버튼을 로딩 상태로 변경하여 중복 클릭 방지
+    // 버튼 로딩 상태
     saveBtn.innerHTML = "⏳ 저장 중...";
     saveBtn.style.background = "#94a3b8";
     saveBtn.style.cursor = "not-allowed";
     saveBtn.disabled = true;
 
-    let latestScores = [];
-    document.querySelectorAll('.score-input').forEach((input, idx) => {
-        const selects = document.querySelectorAll('.level-select');
-        const diffs = document.querySelectorAll('.diff-select');
-        latestScores.push({
-            num: input.getAttribute('data-num') || String(idx + 1),
-            score: parseFloat(input.value) || 0,
-            level: selects[idx] ? selects[idx].value : 'C',
-            difficulty: diffs[idx] ? diffs[idx].value : '중',
-            isShortAnswer: String(input.getAttribute('data-num')).includes('서')
+    // 💡 [추가됨] 나중에 완벽한 비교 표를 그리기 위해, 표 안의 % 입력값들도 싹 긁어모읍니다.
+    let myMTable = [];
+    document.querySelectorAll('#cut-score-result-table .cut-score-row').forEach(row => {
+        myMTable.push({
+            A: row.querySelector('.pct-A').value,
+            B: row.querySelector('.pct-B').value,
+            C: row.querySelector('.pct-C').value,
+            D: row.querySelector('.pct-D').value,
+            E: row.querySelector('.pct-E').value
         });
     });
-    if(latestScores.length > 0) parsedScores = latestScores;
 
     try {
         const docRef = db.collection('user_projects').doc(currentProjectId);
@@ -4500,8 +4531,11 @@ async function saveAssessmentToProject() {
 
             if (!asm.teacherCutScores) asm.teacherCutScores = {};
             asm.teacherCutScores[currentUserEmail] = myCut100;
+            
+            // 💡 [추가됨] 내 % 입력값 DB에 저장
+            if (!asm.teacherMTable) asm.teacherMTable = {};
+            asm.teacherMTable[currentUserEmail] = myMTable;
 
-            // 🚦 신호등 UI (선생님이 사진에 체크한 영역에 들어갈 내용)
             let missingTeachers = [];
             let statusHTML = `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">`;
 
@@ -4519,7 +4553,6 @@ async function saveAssessmentToProject() {
             let isFinal = (missingTeachers.length === 0);
 
             if (isFinal) {
-                // 🟢 모두 완료되었을 때 (최종 산출 및 비교하기 버튼 활성화)
                 let avgCut100 = { A: 0, B: 0, C: 0, D: 0, E: 0 };
                 let teacherCount = collaborators.length;
                 for (let email in asm.teacherCutScores) {
@@ -4531,45 +4564,36 @@ async function saveAssessmentToProject() {
 
                 asm.scores = { A: avgCut100.A * (weight / 100), B: avgCut100.B * (weight / 100), C: avgCut100.C * (weight / 100), D: avgCut100.D * (weight / 100), E: avgCut100.E * (weight / 100) }; 
                 
-                // 안내창 내용 변경 (사진에 체크된 부분)
                 infoZone.style.background = "#f0fdf4"; infoZone.style.border = "2px solid #22c55e";
-                infoZone.innerHTML = `<div style="color:#166534; font-size:0.9rem;">🎉 <strong>모든 교사 산출 완료!</strong> 최종 점수가 반영되었습니다.</div>` + statusHTML;
-                
-                // 오른쪽 끝 저장 버튼
-                saveBtn.innerHTML = "✅ 최종 확정 완료";
-                saveBtn.style.background = "#10b981";
+                infoZone.innerHTML = `<div style="color:#166534; font-size:0.9rem;">🎉 <strong>모든 교사 산출 완료!</strong> (수정 후 다시 저장 가능)</div>` + statusHTML;
 
-                // 💡 [핵심] 비교하기 버튼 활성화!
                 const compareBtn = document.getElementById('btn-compare-m');
                 if (compareBtn) {
                     compareBtn.disabled = false;
-                    compareBtn.style.background = "#8b5cf6"; // 보라색으로 짠!
+                    compareBtn.style.background = "#8b5cf6"; 
                     compareBtn.style.cursor = "pointer";
                     compareBtn.innerHTML = "📊 비교하기 (활성)";
                 }
-
             } else {
-                // 🟠 아직 내 것만 저장되었을 때 (대기 상태 유지)
                 infoZone.style.background = "#fffbeb"; infoZone.style.border = "2px solid #f59e0b";
                 infoZone.innerHTML = `<div style="color:#92400e; font-size:0.9rem;">💾 <strong>내 점수 저장 완료!</strong> (다른 선생님 대기 중)</div>` + statusHTML;
-                
-                saveBtn.innerHTML = "✅ 내 판정 저장됨";
-                saveBtn.style.background = "#10b981";
-                // ❌ 강제 이동(setTimeout) 삭제! 화면에 그대로 머뭅니다.
             }
 
             asm.savedAt = new Date();
-            asm.parsedScores = parsedScores;
             await docRef.update({ assessments: assessments });
             
-            // 👉 이제 팝업도 안 뜨고, 화면 밖으로 튕기지도 않고 현재 상태를 그대로 보여줍니다!
+            // 💡 [핵심] 버튼 잠금 해제! 언제든 수정하고 다시 누를 수 있습니다.
+            saveBtn.disabled = false;
+            saveBtn.style.cursor = "pointer";
+            saveBtn.innerHTML = "🔄 수정하여 다시 저장";
+            saveBtn.style.background = "#3b82f6"; // 파란색으로 변경되어 수정 가능함을 알림
         }
     } catch(e) { 
         alert("업데이트 실패: " + e.message); 
+        saveBtn.disabled = false;
+        saveBtn.style.cursor = "pointer";
         saveBtn.innerHTML = "💾 결과 저장하기";
         saveBtn.style.background = "#ea580c";
-        saveBtn.style.cursor = "pointer";
-        saveBtn.disabled = false;
     }
 }
 
