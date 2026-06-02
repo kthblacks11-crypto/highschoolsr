@@ -3164,13 +3164,37 @@ function calculateTotalCutScores() {
 }
 
 function renderFinalScoreBoxes(A, B, C, D, E, totalScore) {
+    // 💡 부모 컨테이너가 좁을 때 박스들이 밑으로 떨어지도록 flexWrap 속성을 추가합니다.
+    document.getElementById('final-cut-score-boxes').style.flexWrap = 'wrap';
+
+    // 💡 white-space: nowrap 을 추가하여 글자가 강제로 줄바꿈되는 현상을 막습니다.
     const boxHtml = `
         <div style="width: 100%; text-align: center; margin-bottom: 10px; color: #64748b; font-weight: bold;">(최종 인식된 총 배점: ${totalScore.toFixed(1)}점)</div>
-        <div style="flex:1; padding:10px; background:#fef2f2; border: 2px solid #ef4444; border-radius:8px;"><strong>A수준 컷오프</strong><br><span style="font-size:1.3rem; font-weight:bold; color:#ef4444;">${A.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:10px; background:#fffbeb; border: 2px solid #f59e0b; border-radius:8px;"><strong>B수준 컷오프</strong><br><span style="font-size:1.3rem; font-weight:bold; color:#f59e0b;">${B.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:10px; background:#f0fdf4; border: 2px solid #22c55e; border-radius:8px;"><strong>C수준 컷오프</strong><br><span style="font-size:1.3rem; font-weight:bold; color:#22c55e;">${C.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:10px; background:#eff6ff; border: 2px solid #3b82f6; border-radius:8px;"><strong>D수준 컷오프</strong><br><span style="font-size:1.3rem; font-weight:bold; color:#3b82f6;">${D.toFixed(2)}점</span></div>
-        <div style="flex:1; padding:10px; background:#f8fafc; border: 2px solid #94a3b8; border-radius:8px;"><strong>E수준 컷오프</strong><br><span style="font-size:1.3rem; font-weight:bold; color:#64748b;">${E.toFixed(2)}점</span></div>
+        
+        <div style="flex:1; min-width:110px; padding:10px 5px; background:#fef2f2; border: 2px solid #ef4444; border-radius:8px; white-space: nowrap;">
+            <strong style="font-size:0.9rem;">A수준 컷오프</strong><br>
+            <span style="font-size:1.25rem; font-weight:bold; color:#ef4444;">${A.toFixed(2)}점</span>
+        </div>
+        
+        <div style="flex:1; min-width:110px; padding:10px 5px; background:#fffbeb; border: 2px solid #f59e0b; border-radius:8px; white-space: nowrap;">
+            <strong style="font-size:0.9rem;">B수준 컷오프</strong><br>
+            <span style="font-size:1.25rem; font-weight:bold; color:#f59e0b;">${B.toFixed(2)}점</span>
+        </div>
+        
+        <div style="flex:1; min-width:110px; padding:10px 5px; background:#f0fdf4; border: 2px solid #22c55e; border-radius:8px; white-space: nowrap;">
+            <strong style="font-size:0.9rem;">C수준 컷오프</strong><br>
+            <span style="font-size:1.25rem; font-weight:bold; color:#22c55e;">${C.toFixed(2)}점</span>
+        </div>
+        
+        <div style="flex:1; min-width:110px; padding:10px 5px; background:#eff6ff; border: 2px solid #3b82f6; border-radius:8px; white-space: nowrap;">
+            <strong style="font-size:0.9rem;">D수준 컷오프</strong><br>
+            <span style="font-size:1.25rem; font-weight:bold; color:#3b82f6;">${D.toFixed(2)}점</span>
+        </div>
+        
+        <div style="flex:1; min-width:110px; padding:10px 5px; background:#f8fafc; border: 2px solid #94a3b8; border-radius:8px; white-space: nowrap;">
+            <strong style="font-size:0.9rem;">E수준 컷오프</strong><br>
+            <span style="font-size:1.25rem; font-weight:bold; color:#64748b;">${E.toFixed(2)}점</span>
+        </div>
     `;
     document.getElementById('final-cut-score-boxes').innerHTML = boxHtml;
     document.getElementById('final-result-container').style.display = 'block';
@@ -3304,6 +3328,12 @@ async function openCompareModal() {
         const collaborators = [...new Set(allMembers)];
         
         const container = document.getElementById('compare-modal-content');
+        
+        // 💡 [핵심] 비교창 내부를 2열 Grid 구조로 변경합니다!
+        container.style.display = 'grid';
+        container.style.gridTemplateColumns = 'repeat(auto-fit, minmax(450px, 1fr))';
+        container.style.gap = '1.5rem';
+        
         let html = '';
         
         collaborators.forEach(email => {
@@ -3314,17 +3344,16 @@ async function openCompareModal() {
             
             if (!cutScores) {
                 html += `
-                <div style="border: 2px dashed #cbd5e1; border-radius: 8px; padding: 1.5rem; background: #f8fafc; text-align: center;">
-                    <h3 style="margin: 0; color: #94a3b8;">👤 ${name} 선생님 (아직 최종 저장을 완료하지 않았습니다)</h3>
+                <div style="border: 2px dashed #cbd5e1; border-radius: 8px; padding: 1.5rem; background: #f8fafc; text-align: center; height: 100%; display: flex; align-items: center; justify-content: center;">
+                    <h3 style="margin: 0; color: #94a3b8;">👤 ${name} 선생님<br><span style="font-size:0.9rem; font-weight:normal;">(아직 저장을 완료하지 않았습니다)</span></h3>
                 </div>`;
                 return;
             }
             
-            // 선생님별 M자 그룹화 데이터 생성 (실제 표와 100% 동일한 로직)
             const groups = {
-                '선택형(객관식)_상': { typeStr: '선택형(객관식)', difficulty: '상', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(false, '상') },
-                '선택형(객관식)_중': { typeStr: '선택형(객관식)', difficulty: '중', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(false, '중') },
-                '선택형(객관식)_하': { typeStr: '선택형(객관식)', difficulty: '하', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(false, '하') },
+                '선택형(객관식)_상': { typeStr: '객관식', difficulty: '상', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(false, '상') },
+                '선택형(객관식)_중': { typeStr: '객관식', difficulty: '중', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(false, '중') },
+                '선택형(객관식)_하': { typeStr: '객관식', difficulty: '하', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(false, '하') },
                 '서답형_상': { typeStr: '서답형', difficulty: '상', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(true, '상') },
                 '서답형_중': { typeStr: '서답형', difficulty: '중', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(true, '중') },
                 '서답형_하': { typeStr: '서답형', difficulty: '하', count: 0, scoreSum: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]}, pcts: getBasePct(true, '하') }
@@ -3335,7 +3364,7 @@ async function openCompareModal() {
                 let diff = q.difficulty;
                 if (diff === '쉬움') diff = '하'; if (diff === '보통') diff = '중'; if (diff === '어려움') diff = '상';
                 
-                let myLevel = inputs[qIdx]?.level || 'C'; // 각 선생님이 판정한 레벨
+                let myLevel = inputs[qIdx]?.level || 'C'; 
                 
                 const key = `${typeStr}_${diff}`;
                 if (groups[key]) {
@@ -3347,14 +3376,15 @@ async function openCompareModal() {
             });
             
             html += `
-            <div style="border: 2px solid #cbd5e1; border-radius: 8px; padding: 1.5rem; background: white; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-                <h3 style="margin: 0 0 15px 0; color: #1e3a8a; font-size: 1.2rem; border-bottom: 2px solid #8b5cf6; padding-bottom: 10px;">👤 ${name} 선생님의 M자 표</h3>
+            <div style="border: 2px solid #cbd5e1; border-radius: 8px; padding: 1rem; background: white; box-shadow: 0 4px 6px rgba(0,0,0,0.05); display: flex; flex-direction: column;">
+                <h3 style="margin: 0 0 10px 0; color: #1e3a8a; font-size: 1.1rem; border-bottom: 2px solid #8b5cf6; padding-bottom: 8px;">👤 ${name} 선생님의 판정</h3>
                 
-                <table class="score-table" style="width: 100%; margin-bottom: 15px;">
-                    <thead style="background: #f1f5f9;">
-                        <tr><th style="min-width:150px;">문항 범주</th><th>배점</th><th>난이도</th><th>A (%)</th><th>B (%)</th><th>C (%)</th><th>D (%)</th><th>E (%)</th></tr>
-                    </thead>
-                    <tbody>`;
+                <div style="flex: 1; overflow-x: auto;">
+                    <table class="score-table" style="width: 100%; margin-bottom: 10px; font-size: 0.85rem;">
+                        <thead style="background: #f1f5f9;">
+                            <tr><th style="min-width:100px;">범주</th><th style="width:40px;">배점</th><th>난이도</th><th>A (%)</th><th>B (%)</th><th>C (%)</th><th>D (%)</th><th>E (%)</th></tr>
+                        </thead>
+                        <tbody>`;
             
             Object.values(groups).forEach((g, index) => {
                 const isEmpty = g.count === 0;
@@ -3364,44 +3394,42 @@ async function openCompareModal() {
                 
                 let qNumHtml = '';
                 if (isEmpty) {
-                    qNumHtml = '<div style="color:#94a3b8; font-size:0.8rem; margin-bottom:4px;">해당 문항 없음</div>';
+                    qNumHtml = '<div style="color:#94a3b8; font-size:0.75rem;">문항 없음</div>';
                 } else {
                     ['A+', 'A', 'B', 'C', 'D', 'E'].forEach(lvl => {
                         if (g.levels[lvl].length > 0) {
                             let lvlLabel = lvl === 'A+' ? '<strong style="color:#ef4444;">A+</strong>' : `<strong>${lvl}</strong>`;
-                            qNumHtml += `<div style="font-size:0.85rem; color:#475569; margin-bottom:2px;">${lvlLabel}: ${g.levels[lvl].join(', ')}번</div>`;
+                            qNumHtml += `<div style="font-size:0.8rem; color:#475569; margin-bottom:2px;">${lvlLabel}: ${g.levels[lvl].join(', ')}</div>`;
                         }
                     });
                 }
                 
-                // DB에 저장된 % 값이 있으면 우선 적용, 없으면 기본값
                 let pcts = mTablePcts && mTablePcts[index] ? mTablePcts[index] : g.pcts;
-                
-                const getPctInput = (val) => `<input type="number" value="${isEmpty ? '' : val}" disabled style="width: 50px; padding: 4px; text-align: center; border-radius: 4px; border: 1px solid #cbd5e1; background: #f1f5f9; font-weight: bold; color: #475569;">`;
+                const getPctInput = (val) => `<input type="number" value="${isEmpty ? '' : val}" disabled style="width: 35px; padding: 2px; text-align: center; border-radius: 4px; border: 1px solid #cbd5e1; background: #f1f5f9; font-weight: bold; color: #475569; font-size: 0.8rem;">`;
 
                 html += `
                 <tr style="${rowStyle}">
-                    <td style="text-align: left; vertical-align: top;">
+                    <td style="text-align: left; vertical-align: top; padding: 6px;">
                         ${qNumHtml}
-                        <strong style="color: ${isEmpty ? '#94a3b8' : 'var(--primary)'}; display:block; margin-top:5px;">${g.typeStr} ${isEmpty ? '0문항' : `총 ${g.count}문항`}</strong>
+                        <strong style="color: ${isEmpty ? '#94a3b8' : 'var(--primary)'}; display:block; margin-top:3px; font-size:0.8rem;">${g.typeStr}(${g.count})</strong>
                     </td>
-                    <td style="color: ${isEmpty ? '#94a3b8' : '#ea580c'}; font-weight: bold; vertical-align: middle;">${isEmpty ? '-' : g.scoreSum.toFixed(1)}</td>
-                    <td style="vertical-align: middle;"><span style="background:${diffColor}; color:white; padding: 4px 10px; border-radius: 4px; font-weight: bold;">${g.difficulty}</span></td>
-                    <td style="vertical-align: middle;">${getPctInput(pcts.A)}</td>
-                    <td style="vertical-align: middle;">${getPctInput(pcts.B)}</td>
-                    <td style="vertical-align: middle;">${getPctInput(pcts.C)}</td>
-                    <td style="vertical-align: middle;">${getPctInput(pcts.D)}</td>
-                    <td style="vertical-align: middle;">${getPctInput(pcts.E)}</td>
+                    <td style="color: ${isEmpty ? '#94a3b8' : '#ea580c'}; font-weight: bold; vertical-align: middle; padding: 6px;">${isEmpty ? '-' : g.scoreSum.toFixed(1)}</td>
+                    <td style="vertical-align: middle; padding: 6px;"><span style="background:${diffColor}; color:white; padding: 3px 6px; border-radius: 4px; font-weight: bold; font-size: 0.8rem;">${g.difficulty}</span></td>
+                    <td style="vertical-align: middle; padding: 6px;">${getPctInput(pcts.A)}</td>
+                    <td style="vertical-align: middle; padding: 6px;">${getPctInput(pcts.B)}</td>
+                    <td style="vertical-align: middle; padding: 6px;">${getPctInput(pcts.C)}</td>
+                    <td style="vertical-align: middle; padding: 6px;">${getPctInput(pcts.D)}</td>
+                    <td style="vertical-align: middle; padding: 6px;">${getPctInput(pcts.E)}</td>
                 </tr>`;
             });
             
-            html += `</tbody></table>
-                <div style="display: flex; gap: 6px; justify-content: center;">
-                    <span style="background:#fef2f2; border: 1px solid #ef4444; color:#ef4444; padding: 6px 12px; border-radius: 6px; font-size: 0.9rem; font-weight: bold;">A: ${cutScores.A.toFixed(1)}점</span>
-                    <span style="background:#fffbeb; border: 1px solid #f59e0b; color:#f59e0b; padding: 6px 12px; border-radius: 6px; font-size: 0.9rem; font-weight: bold;">B: ${cutScores.B.toFixed(1)}점</span>
-                    <span style="background:#f0fdf4; border: 1px solid #22c55e; color:#22c55e; padding: 6px 12px; border-radius: 6px; font-size: 0.9rem; font-weight: bold;">C: ${cutScores.C.toFixed(1)}점</span>
-                    <span style="background:#eff6ff; border: 1px solid #3b82f6; color:#3b82f6; padding: 6px 12px; border-radius: 6px; font-size: 0.9rem; font-weight: bold;">D: ${cutScores.D.toFixed(1)}점</span>
-                    <span style="background:#f8fafc; border: 1px solid #64748b; color:#64748b; padding: 6px 12px; border-radius: 6px; font-size: 0.9rem; font-weight: bold;">E: ${cutScores.E.toFixed(1)}점</span>
+            html += `</tbody></table></div>
+                <div style="display: flex; gap: 4px; justify-content: space-between; margin-top: auto;">
+                    <span style="flex:1; text-align:center; background:#fef2f2; border: 1px solid #ef4444; color:#ef4444; padding: 4px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">A<br>${cutScores.A.toFixed(1)}</span>
+                    <span style="flex:1; text-align:center; background:#fffbeb; border: 1px solid #f59e0b; color:#f59e0b; padding: 4px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">B<br>${cutScores.B.toFixed(1)}</span>
+                    <span style="flex:1; text-align:center; background:#f0fdf4; border: 1px solid #22c55e; color:#22c55e; padding: 4px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">C<br>${cutScores.C.toFixed(1)}</span>
+                    <span style="flex:1; text-align:center; background:#eff6ff; border: 1px solid #3b82f6; color:#3b82f6; padding: 4px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">D<br>${cutScores.D.toFixed(1)}</span>
+                    <span style="flex:1; text-align:center; background:#f8fafc; border: 1px solid #64748b; color:#64748b; padding: 4px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">E<br>${cutScores.E.toFixed(1)}</span>
                 </div>
             </div>`;
         });
