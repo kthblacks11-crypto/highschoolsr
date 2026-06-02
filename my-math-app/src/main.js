@@ -1273,6 +1273,7 @@ function showSection(id) {
 // ==========================================
 let currentGroup = 'math'; 
 let currentSubjectQCount = {}; // 💡 과목별 문항 개수 미리 저장소
+let cachedSubjectQCounts = {}; // 🌟 [방어막 추가] 한 번 센 문항 개수를 기억해두는 캐시 수첩!
 
 const curriculumMap = {
     'math': {
@@ -1368,29 +1369,40 @@ async function changeSubject() {
         subTitleEl.innerText = "이 과목의 성취기준 데이터가 아직 등록되지 않았습니다.";
     }
     
-    // 2. 버튼 비활성화를 위한 문항 개수 계산
-    currentSubjectQCount = {};
+    // 2. 버튼 비활성화를 위한 문항 개수 계산 (🌟 수첩 캐시 적용!)
     if (currentSubject && currentSubject !== 'uncategorized') {
-        try {
-            const snapshot = await db.collection('transformed_bank').where('subject', '==', currentSubject).get();
-            snapshot.forEach(doc => {
-                const stdCode = doc.data().standard_code;
-                if (stdCode && stdCode !== "unknown" && stdCode !== "코드없음") {
-                    const cleanCode = stdCode.replace(/[\[\]\s]/g, ''); // 대괄호 제거
-                    currentSubjectQCount[cleanCode] = (currentSubjectQCount[cleanCode] || 0) + 1;
-                }
-            });
-        } catch(e) { console.warn("문항 수 계산 실패", e); }
+        // 수첩에 이미 세어둔 숫자가 있다면 DB를 부르지 않고 바로 꺼내 씁니다.
+        if (cachedSubjectQCounts[currentSubject]) {
+            currentSubjectQCount = cachedSubjectQCounts[currentSubject];
+        } else {
+            // 수첩에 없다면(처음 누른 과목이라면) DB에서 딱 1번만 가져옵니다.
+            currentSubjectQCount = {};
+            try {
+                const snapshot = await db.collection('transformed_bank').where('subject', '==', currentSubject).get();
+                snapshot.forEach(doc => {
+                    const stdCode = doc.data().standard_code;
+                    if (stdCode && stdCode !== "unknown" && stdCode !== "코드없음") {
+                        const cleanCode = stdCode.replace(/[\[\]\s]/g, ''); // 대괄호 제거
+                        currentSubjectQCount[cleanCode] = (currentSubjectQCount[cleanCode] || 0) + 1;
+                    }
+                });
+                // 다 세었으면 다음을 위해 수첩에 기록해 둡니다.
+                cachedSubjectQCounts[currentSubject] = currentSubjectQCount;
+            } catch(e) { console.warn("문항 수 계산 실패", e); }
+        }
+    } else {
+        currentSubjectQCount = {};
     }
-        // 🌟 3. [핵심] 3가지 화면 모두 즉시 새로고침
-        initDashboard(); 
-        if (typeof initChecklist === 'function') initChecklist(); 
 
-        // 🚫 [핵심 수정 1] 여기서 loadBookmark()를 호출하던 것을 삭제했습니다.
+    // 🌟 3. [핵심] 3가지 화면 모두 즉시 새로고침
+    initDashboard(); 
+    if (typeof initChecklist === 'function') initChecklist(); 
 
-        // 👇 [여기에 3줄 추가] 과목을 바꾸면 무조건 초기 화면으로 강제 이동 및 퀴즈 상자 닫기
-        if (document.getElementById('quiz-standard-selection')) document.getElementById('quiz-standard-selection').style.display = 'block';
-        if (document.getElementById('quiz-level-matching')) document.getElementById('quiz-level-matching').style.display = 'none';
+    // 🚫 [핵심 수정 1] 여기서 loadBookmark()를 호출하던 것을 삭제했습니다. (유지됨)
+
+    // 👇 [여기에 3줄 추가] 과목을 바꾸면 무조건 초기 화면으로 강제 이동 및 퀴즈 상자 닫기 (유지됨)
+    if (document.getElementById('quiz-standard-selection')) document.getElementById('quiz-standard-selection').style.display = 'block';
+    if (document.getElementById('quiz-level-matching')) document.getElementById('quiz-level-matching').style.display = 'none';
 }
 
 function initDashboard() {
@@ -6573,13 +6585,16 @@ async function updateQuestionCount() {
                                      .where('subject', '==', targetSubject)
                                      .get();
                                      
-                  snapshot.forEach(doc => {
-                       const stdCode = doc.data().standard_code;
-                       if (stdCode && stdCode !== "unknown" && stdCode !== "코드없음") {
-                      const cleanCode = stdCode.replace(/[\[\]\s]/g, ''); // 대괄호 제거
-                      currentSubjectQCount[cleanCode] = (currentSubjectQCount[cleanCode] || 0) + 1;
-                      }
-                  });
+            snapshot.forEach(doc => {
+                const stdCode = doc.data().standard_code;
+                if (stdCode && stdCode !== "unknown" && stdCode !== "코드없음") {
+                    const cleanCode = stdCode.replace(/[\[\]\s]/g, ''); // 대괄호 제거
+                    currentSubjectQCount[cleanCode] = (currentSubjectQCount[cleanCode] || 0) + 1;
+                }
+            });
+            
+            // 🌟 [추가됨] 문항이 새로 추가되었으므로, 수첩(캐시)의 내용도 '최신 개수'로 덮어씁니다!
+            cachedSubjectQCounts[targetSubject] = currentSubjectQCount;
             
             console.log("✅ 문항 수 갱신 완료:", currentSubjectQCount);
             
