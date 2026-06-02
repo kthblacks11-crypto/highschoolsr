@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.0.3"; 
+const CURRENT_VERSION = "1.0.4"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -3025,7 +3025,7 @@ async function handleNextToPath1Result() {
 
             if (asm.teacherCutScores && asm.teacherCutScores[myEmail]) {
                 if (saveBtn) {
-                    saveBtn.innerHTML = "✅ 저장됨"; // 👈 선생님이 원하신 문구 적용!
+                    saveBtn.innerHTML = "✅ 저장 완료"; // 👈 저장완료로 다시 바꿈
                     saveBtn.style.background = "#10b981"; 
                     saveBtn.disabled = true;
                     saveBtn.style.cursor = "not-allowed";
