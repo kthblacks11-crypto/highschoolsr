@@ -4936,8 +4936,28 @@ function renderCollaborativeTable(projectData, asm) {
             }
         });
 
-        const isWarning = (minNum !== null && maxNum !== null && (maxNum - minNum >= 2));
-        const trStyle = isWarning ? 'background:#fee2e2; border: 2px solid #ef4444;' : (isShort ? 'background:#fff7ed;' : '');
+        // 🌟 [수정된 부분] 선생님들의 판정 차이에 따라 3단계로 색상과 아이콘을 다르게 부여합니다!
+        let trStyle = isShort ? 'background:#fff7ed;' : ''; // 기본 스타일 (서답형은 옅은 주황색)
+        let statusIcon = ''; // 번호 옆에 띄울 아이콘
+
+        if (minNum !== null && maxNum !== null) {
+            const diffLevel = maxNum - minNum; // 최대값과 최소값의 차이 계산
+            
+            if (diffLevel === 0) {
+                // 🟢 1. 모두 일치할 때 (녹색 배경과 테두리, 체크 아이콘)
+                trStyle = 'background:#f0fdf4; border: 2px solid #22c55e;';
+                statusIcon = ' ✅'; 
+            } else if (diffLevel === 1) {
+                // 🟠 2. 1단계 차이 날 때 (옅은 분홍 배경, 주의 아이콘)
+                trStyle = 'background:#fff1f2; border: 2px solid #fca5a5;';
+                statusIcon = ' ⚠️'; 
+            } else if (diffLevel >= 2) {
+                // 🔴 3. 2단계 이상 차이 날 때 (진한 빨강 배경, 경고 아이콘)
+                trStyle = 'background:#fee2e2; border: 2px solid #ef4444;';
+                statusIcon = ' 🚨';
+            }
+        }
+
         const diff = q.difficulty || '선택하세요';
 
         let aiCellContentHtml = '';
@@ -4957,8 +4977,9 @@ function renderCollaborativeTable(projectData, asm) {
             `;
         }
 
+        // 🌟 테이블 행(tr) 생성 시작 부분
         html += `<tr style="${trStyle}">
-            <td style="font-size: 0.9rem; font-weight:bold; text-align:center;">${q.num}${isWarning ? ' 🚨' : ''}</td>
+            <td style="font-size: 0.9rem; font-weight:bold; text-align:center;">${q.num}${statusIcon}</td>
             <td style="width: 120px; vertical-align: middle;">
                 <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
                     <input type="checkbox" class="diff-batch-cb" data-idx="${qIdx}" style="transform: scale(1.3); margin: 0;">
