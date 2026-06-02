@@ -307,16 +307,22 @@
             </div>
             <div id="final-cut-score-boxes" style="display: flex; gap: 10px; justify-content: space-around;"></div>
             
-            <div id="save-to-project-zone" style="margin-top: 2rem; padding: 1.5rem; background: #fffbeb; border-radius: 12px; border: 1px solid #fde68a; text-align: center;">
-                <p style="font-weight: bold; color: #92400e; margin-bottom: 1rem;">✨ 이 산출 결과를 현재 폴더에 덮어써서 최종 저장하시겠습니까?</p>
-                <div style="display: flex; gap: 10px; justify-content: center; max-width: 600px; margin: 0 auto;">
-                    <div id="current-assessment-info" style="flex: 2; padding: 0.8rem; background: white; border-radius: 8px; border: 1px solid #cbd5e1; color: #334155; font-weight: bold; text-align: left;">평가 정보 불러오는 중...</div>
+            <div id="save-to-project-zone" style="margin-top: 2rem; padding: 1.5rem; background: #fffbeb; border-radius: 12px; border: 1px solid #fde68a;">
+                <div style="display: flex; gap: 15px; justify-content: space-between; align-items: stretch; max-width: 1000px; margin: 0 auto; flex-wrap: wrap;">
                     
-                    <button id="btn-compare-m" class="save-btn" onclick="openCompareModal()" style="flex: 1; margin: 0; background: #94a3b8; cursor: not-allowed;" disabled>📊 비교하기 (대기중)</button>
+                    <div id="current-assessment-info" style="flex: 1.5; min-width: 320px; padding: 1rem; background: white; border-radius: 8px; border: 1px solid #cbd5e1; text-align: left; display: flex; flex-direction: column; justify-content: center;">
+                        평가 정보 불러오는 중...
+                    </div>
                     
-                    <button class="save-btn" onclick="saveAssessmentToProject()" style="flex: 1; margin: 0; background: #ea580c;">💾 결과 저장하기</button>
+                    <div style="flex: 1; min-width: 300px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-content: center;">
+                        <button id="btn-compare-m" class="save-btn" onclick="openCompareModal()" style="margin:0; background: #94a3b8; cursor: not-allowed;" disabled>📊 비교하기 (대기)</button>
+                        <button id="btn-save-m" class="save-btn" onclick="saveAssessmentToProject()" style="margin:0; background: #ea580c;">💾 결과 저장하기</button>
+                        <button id="btn-edit-m" class="save-btn" onclick="saveAssessmentToProject()" style="margin:0; background: #3b82f6;">🔄 수정하기</button>
+                        <button id="btn-reset-m" class="save-btn" onclick="resetMCutScores()" style="margin:0; background: #ef4444;">🗑️ 초기화</button>
+                    </div>
+                    
                 </div>
-                <p style="margin-top: 15px; font-size: 0.85rem; color: #dc2626; font-weight: bold; letter-spacing: -0.5px;">⚠️ 모든 협업 교사가 '결과 저장하기'를 완료해야 최종 점수가 반영되며, [비교하기] 창이 열립니다.</p>
+                <p style="margin-top: 15px; font-size: 0.85rem; color: #dc2626; font-weight: bold; letter-spacing: -0.5px; text-align: center;">⚠️ 모든 협업 교사가 '결과 저장하기'를 완료해야 최종 점수가 반영되며, [비교하기] 창이 열립니다.</p>
             </div>
 
     </div>

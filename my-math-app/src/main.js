@@ -2995,7 +2995,6 @@ async function handleNextToPath1Result() {
 
         // 💡 [핵심 추가] 다시 화면에 들어왔을 때 버튼 및 신호등 상태 완벽 복구
         const infoZone = document.getElementById('current-assessment-info');
-        const saveBtn = document.querySelector('#save-to-project-zone .save-btn:last-child');
         const compareBtn = document.getElementById('btn-compare-m');
 
         if (infoZone) {
@@ -3004,8 +3003,11 @@ async function handleNextToPath1Result() {
             if (!allMembers.includes(myEmail)) allMembers.push(myEmail);
             const collaborators = [...new Set(allMembers)];
 
+            // 💡 고사명과 반영비율 추출
+            const examTitle = `${asm.name || '평가명 없음'} (${asm.weight || 0}%)`;
+
             let missingTeachers = [];
-            let statusHTML = `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:5px; justify-content:center;">`;
+            let statusHTML = `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">`;
             
             collaborators.forEach(email => {
                 const name = email.split('@')[0];
@@ -3021,20 +3023,19 @@ async function handleNextToPath1Result() {
             let isFinal = (missingTeachers.length === 0);
 
             if (isFinal) {
-                infoZone.innerHTML = `<div style="color:#166534; font-size:0.9rem; text-align:center;">🎉 <strong>모든 교사 산출 완료!</strong> (수정 후 다시 저장 가능)</div>` + statusHTML;
+                infoZone.innerHTML = `<div style="color:#1e3a8a; font-size:1.1rem; font-weight:900; margin-bottom:5px;">📌 ${examTitle}</div>` + 
+                                     `<div style="color:#166534; font-size:0.9rem; font-weight:bold;">🎉 모든 교사 산출 완료!</div>` + statusHTML;
                 infoZone.style.background = "#f0fdf4"; infoZone.style.border = "2px solid #22c55e";
-
-                if (saveBtn) { saveBtn.innerHTML = "🔄 수정하여 다시 저장"; saveBtn.style.background = "#3b82f6"; saveBtn.disabled = false; saveBtn.style.cursor = "pointer"; }
-                if (compareBtn) { compareBtn.disabled = false; compareBtn.style.background = "#8b5cf6"; compareBtn.style.cursor = "pointer"; compareBtn.innerHTML = "📊 비교하기 (활성)"; }
+                
+                if (compareBtn) { compareBtn.disabled = false; compareBtn.style.background = "#8b5cf6"; compareBtn.style.cursor = "pointer"; compareBtn.innerHTML = "📊 비교하기"; }
             } else {
-                infoZone.innerHTML = `<div style="color:#334155; font-size:0.9rem; font-weight:bold; text-align:center;">👥 M자 산출 저장 현황</div>` + statusHTML;
+                infoZone.innerHTML = `<div style="color:#1e3a8a; font-size:1.1rem; font-weight:900; margin-bottom:5px;">📌 ${examTitle}</div>` + 
+                                     `<div style="color:#334155; font-size:0.9rem; font-weight:bold;">👥 교사별 산출 저장 현황</div>` + statusHTML;
                 infoZone.style.background = "#f8fafc"; infoZone.style.border = "1px solid #cbd5e1";
-
-                if (saveBtn) { saveBtn.innerHTML = "💾 결과 저장하기"; saveBtn.style.background = "#ea580c"; saveBtn.disabled = false; saveBtn.style.cursor = "pointer"; }
-                if (compareBtn) { compareBtn.disabled = true; compareBtn.style.background = "#94a3b8"; compareBtn.style.cursor = "not-allowed"; compareBtn.innerHTML = "📊 비교하기 (대기중)"; }
+                
+                if (compareBtn) { compareBtn.disabled = true; compareBtn.style.background = "#94a3b8"; compareBtn.style.cursor = "not-allowed"; compareBtn.innerHTML = "📊 비교하기"; }
             }
         }
-
     } catch (e) {
         alert("최종 산출 중 오류가 발생했습니다: " + e.message);
     }
@@ -5200,7 +5201,7 @@ function renderCollaborativeTable(projectData, asm) {
                 cellColorStyle = 'background:#fff1f2; border: 2px solid #fca5a5;'; // 옅은 빨강 전용 셀 스타일
             } else if (diffLevel >= 2) {
                 statusIcon = ' 🚨';
-                cellColorStyle = 'background:#fee2e2; border: 2px solid #ef4444;'; // 진한 빨강 전용 셀 스타일
+                cellColorStyle = 'background:#fca5a5; border: 3px solid #b91c1c; color: #7f1d1d; font-weight: 900;'; 
             }
         }
 
@@ -5265,11 +5266,11 @@ function renderCollaborativeTable(projectData, asm) {
     html += `</tbody></table>`;
     container.innerHTML = html; 
 
-    // 💡 [범례 알림창 좌측 추가] 비활성화 버튼 왼쪽에 나란히 예쁜 가이드 상자를 구축합니다.
+    // 💡 [수정됨] 하단 2수준 이상 다름 범례 박스 색상도 동일하게 강렬히 맞춤
     let externalHtml = `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
         <div style="display: flex; gap: 8px;">
             <div style="background: #fff1f2; border: 2px solid #fca5a5; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; color: #991b1b; font-weight: bold; display: flex; align-items: center; gap: 4px;">⚠️ 1수준 다름</div>
-            <div style="background: #fee2e2; border: 2px solid #ef4444; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; color: #b91c1c; font-weight: bold; display: flex; align-items: center; gap: 4px;">🚨 2수준 이상 다름</div>
+            <div style="background: #fca5a5; border: 2px solid #b91c1c; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; color: #7f1d1d; font-weight: 900; display: flex; align-items: center; gap: 4px;">🚨 2수준 이상 다름</div>
         </div>
         <button onclick="alert('더 안정적인 서비스 제공을 위해 현재 시스템을 점검 및 업데이트 중입니다. 핵심 기능인 점수 산출은 정상적으로 이용 가능합니다! 🛠️');" style="background: #94a3b8; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">📄 시험지 파일 및 편집 확인 (업데이트 예정) ⏳</button>
     </div>`;
@@ -5347,6 +5348,18 @@ async function resetAiLevels() {
     } catch(e) {
         alert("초기화 실패: " + e.message);
     }
+}
+
+function resetMCutScores() {
+    if(!confirm("입력된 모든 비율(%) 내용을 삭제하고 0점으로 초기화하시겠습니까?")) return;
+    
+    document.querySelectorAll('.pct-input').forEach(input => {
+        input.value = ''; // 빈칸으로 만듦
+        input.style.backgroundImage = 'none'; // 수정 빗금 제거
+        input.style.border = '1px solid #cbd5e1'; // 테두리 복구
+    });
+    
+    calculateTotalCutScores(); // 0점 상태로 하단 상자 재계산
 }
 
 async function deleteTableQuestion(qIdx) {
@@ -7305,7 +7318,7 @@ const exposeToWindow = {
     prevLevelQuestion, skipLevelQuestion, saveAndClosePassageTray,   clearAllPassages,
     resetChecklist, openJournalModal, closeJournalModal, saveJournalEntry, deleteJournalEntry, saveUserSubjectGroup,
     silentSaveChecklist, downloadAllJournalsExcel, cancelSubjectSelection, initDictionaryDrag, clearExamFile, markAsModified,
-    openCompareModal
+    openCompareModal, resetMCutScores
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
