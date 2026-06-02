@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.0.4"; 
+const CURRENT_VERSION = "1.0.5"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -5210,6 +5210,7 @@ async function pasteImageToQuestion(idx) {
     }
 }
 // ✨ 다른 선생님을 폴더 공동 작업자로 초대하는 함수
+// ✨ 다른 선생님을 폴더 공동 작업자로 초대하는 함수
 async function inviteCollaborator(projectId, event) {
     event.stopPropagation(); // 버튼 눌렀을 때 폴더 안으로 안 들어가게 막아줌
     
@@ -5218,14 +5219,40 @@ async function inviteCollaborator(projectId, event) {
     
     try {
         const docRef = db.collection('user_projects').doc(projectId);
+        const doc = await docRef.get();
         
-        // 💡 Firebase 배열에 이메일 추가! (중복 방지 자동 처리)
-        await docRef.update({
-            collaborators: firebase.firestore.FieldValue.arrayUnion(email.trim())
-        });
-        
-        alert(`✅ ${email} 선생님을 성공적으로 초대했습니다!\n\n초대받은 선생님이 로그인하시면 [분할점수 산출] 화면에 이 폴더가 나타납니다.`);
-        loadProjects(); // 화면 갱신해서 '👥 참여 교사: 2명' 등으로 업데이트
+        if (doc.exists) {
+            let data = doc.data();
+            let collabs = data.collaborators || [];
+            
+            // 이미 초대된 사람인지 확인
+            if (collabs.includes(email.trim())) {
+                alert("이미 초대된 선생님입니다.");
+                return;
+            }
+            
+            collabs.push(email.trim());
+            let assessments = data.assessments || [];
+            
+            // 💡 [핵심] 선생님이 만드신 '난이도, 배점 연동 데이터(parsedScores)'는 절대 건드리지 않습니다!
+            // 오직 폴더 밖의 '최종 합산 분할점수(scores)'만 지워서 산출 전 상태로 블라인드 처리합니다.
+            assessments = assessments.map(asm => {
+                if (asm.scores) {
+                    delete asm.scores; // 최종 분할점수 결과만 삭제
+                }
+                return asm;
+            });
+            
+            // DB에 초대 명단(collaborators)과 업데이트된 상태를 한 번에 저장
+            await docRef.update({
+                collaborators: collabs,
+                assessments: assessments
+            });
+            
+            alert(`✅ ${email} 선생님을 성공적으로 초대했습니다!\n\n초대받은 선생님이 로그인하시면 [분할점수 산출] 화면에 이 폴더가 나타납니다.\n(새로운 협의체가 구성되어 폴더 밖의 '최종 분할점수'는 블라인드 처리되었으나, 문항별 배점과 난이도 연동은 그대로 유지됩니다!)`);
+            
+            loadProjects(); // 화면 갱신해서 '👥 참여 교사: 2명' 등으로 업데이트
+        }
     } catch (e) {
         alert("초대 중 오류가 발생했습니다: " + e.message);
     }
