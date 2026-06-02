@@ -315,10 +315,13 @@
                     </div>
                     
                     <div style="flex: 1; min-width: 300px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-content: center;">
-                        <button id="btn-compare-m" class="save-btn" onclick="openCompareModal()" style="margin:0; background: #94a3b8; cursor: not-allowed;" disabled>📊 비교하기 (대기)</button>
-                        <button id="btn-save-m" class="save-btn" onclick="saveAssessmentToProject()" style="margin:0; background: #ea580c;">💾 결과 저장하기</button>
-                        <button id="btn-edit-m" class="save-btn" onclick="saveAssessmentToProject()" style="margin:0; background: #3b82f6;">🔄 수정하기</button>
-                        <button id="btn-reset-m" class="save-btn" onclick="resetMCutScores()" style="margin:0; background: #ef4444;">🗑️ 초기화</button>
+                        <button id="btn-compare-m" class="save-btn" onclick="openCompareModal()" style="margin:0; background: #94a3b8; cursor: not-allowed; text-align: center;" disabled>📊 비교하기 (대기)</button>
+                        <!-- 👇 결과 저장하기: 기본 빨간색(#ef4444) -->
+                        <button id="btn-save-m" class="save-btn" onclick="saveAssessmentToProject()" style="margin:0; background: #ef4444; text-align: center;">💾 결과 저장하기</button>
+                        <!-- 👇 수정하기: 누르면 enableMEditMode 함수 실행 -->
+                        <button id="btn-edit-m" class="save-btn" onclick="enableMEditMode()" style="margin:0; background: #3b82f6; text-align: center;">🔄 수정하기</button>
+                        <!-- 👇 초기화: 회색 톤으로 정리 -->
+                        <button id="btn-reset-m" class="save-btn" onclick="resetMCutScores()" style="margin:0; background: #64748b; text-align: center;">🗑️ 초기화</button>
                     </div>
                     
                 </div>
