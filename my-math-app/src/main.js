@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.0.2"; 
+const CURRENT_VERSION = "1.0.3"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -3260,6 +3260,125 @@ function goBackStep(currentStep) {
     }
 }
 
+// 📊 비교하기 모달을 열고 데이터를 렌더링하는 함수
+async function openCompareModal() {
+    if (!currentProjectId || currentEditingAssessmentIndex === -1) return;
+    
+    try {
+        const docRef = db.collection('user_projects').doc(currentProjectId);
+        const doc = await docRef.get();
+        if (!doc.exists) return;
+        
+        const projectData = doc.data();
+        const asm = projectData.assessments[currentEditingAssessmentIndex];
+        const baseQuestions = asm.parsedScores || [];
+        const teacherInputs = asm.teacherInputs || {};
+        
+        let allMembers = projectData.collaborators || [];
+        if (projectData.ownerEmail && !allMembers.includes(projectData.ownerEmail)) allMembers.unshift(projectData.ownerEmail); 
+        const currentUserEmail = auth.currentUser.email;
+        if (!allMembers.includes(currentUserEmail)) allMembers.push(currentUserEmail); 
+        const collaborators = [...new Set(allMembers)];
+        
+        const container = document.getElementById('compare-modal-content');
+        let html = '';
+        
+        collaborators.forEach(email => {
+            const inputs = teacherInputs[email] || [];
+            const cutScores = asm.teacherCutScores ? asm.teacherCutScores[email] : null;
+            const name = email.split('@')[0];
+            
+            if (!cutScores) {
+                html += `
+                <div style="border: 2px dashed #cbd5e1; border-radius: 8px; padding: 1.5rem; background: #f8fafc; text-align: center;">
+                    <h3 style="margin: 0; color: #94a3b8;">👤 ${name} 선생님 (아직 최종 저장을 완료하지 않았습니다)</h3>
+                </div>`;
+                return;
+            }
+            
+            // 💡 해당 교사의 M자 데이터 재구성
+            const groups = {
+                '선택형(객관식)_상': { label: '선택형(객관식) 상', count: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]} },
+                '선택형(객관식)_중': { label: '선택형(객관식) 중', count: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]} },
+                '선택형(객관식)_하': { label: '선택형(객관식) 하', count: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]} },
+                '서답형_상': { label: '서답형 상', count: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]} },
+                '서답형_중': { label: '서답형 중', count: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]} },
+                '서답형_하': { label: '서답형 하', count: 0, levels: {'A+':[], 'A':[], 'B':[], 'C':[], 'D':[], 'E':[]} }
+            };
+            
+            baseQuestions.forEach((q, qIdx) => {
+                const typeStr = q.isShortAnswer ? '서답형' : '선택형(객관식)';
+                let diff = q.difficulty || '중';
+                if (diff === '쉬움') diff = '하'; if (diff === '보통') diff = '중'; if (diff === '어려움') diff = '상';
+                
+                let myLevel = inputs[qIdx]?.level || 'C'; // 이 선생님이 판정한 레벨
+                
+                const key = `${typeStr}_${diff}`;
+                if (groups[key]) {
+                    groups[key].count++;
+                    if (groups[key].levels[myLevel]) groups[key].levels[myLevel].push(q.num);
+                    else groups[key].levels['C'].push(q.num); 
+                }
+            });
+            
+            // 💡 표 그리기
+            html += `
+            <div style="border: 2px solid #cbd5e1; border-radius: 8px; padding: 1.5rem; background: white; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #8b5cf6; padding-bottom: 10px; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                    <h3 style="margin: 0; color: #1e3a8a; font-size: 1.2rem;">👤 ${name} 선생님의 M자 분석</h3>
+                    <div style="display: flex; gap: 6px;">
+                        <span style="background:#fee2e2; color:#b91c1c; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">A: ${cutScores.A.toFixed(1)}점</span>
+                        <span style="background:#fef3c7; color:#b45309; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">B: ${cutScores.B.toFixed(1)}점</span>
+                        <span style="background:#dcfce7; color:#15803d; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">C: ${cutScores.C.toFixed(1)}점</span>
+                        <span style="background:#dbeafe; color:#1d4ed8; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">D: ${cutScores.D.toFixed(1)}점</span>
+                        <span style="background:#f1f5f9; color:#475569; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">E: ${cutScores.E.toFixed(1)}점</span>
+                    </div>
+                </div>
+                <table class="score-table" style="width: 100%; font-size: 0.9rem;">
+                    <thead style="background: #f8fafc;">
+                        <tr>
+                            <th style="width: 25%;">문항 범주</th>
+                            <th>A+ / A</th>
+                            <th>B</th>
+                            <th>C</th>
+                            <th>D</th>
+                            <th>E</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+            
+            const formatLevels = (lvls) => lvls.length > 0 ? `<strong style="color:var(--primary);">${lvls.join(', ')}번</strong>` : '<span style="color:#cbd5e1;">-</span>';
+            
+            Object.values(groups).forEach((g, idx) => {
+                if (g.count === 0) return; // 문항이 없는 줄은 숨겨서 깔끔하게 표시
+                
+                let aArr = [];
+                if (g.levels['A+'].length > 0) aArr.push(`<span style="color:#ef4444;">A+: ${g.levels['A+'].join(', ')}</span>`);
+                if (g.levels['A'].length > 0) aArr.push(`A: ${g.levels['A'].join(', ')}`);
+                let aContent = aArr.length > 0 ? aArr.join('<br>') : '<span style="color:#cbd5e1;">-</span>';
+                let bottomBorder = (idx === 2) ? 'border-bottom: 3px double #64748b;' : 'border-bottom: 1px solid #e2e8f0;';
+                
+                html += `
+                    <tr style="${bottomBorder}">
+                        <td style="font-weight: bold; background: #f8fafc; text-align: left;">${g.label} <div style="font-size:0.75rem; color:#64748b; font-weight:normal; margin-top:2px;">(총 ${g.count}문항)</div></td>
+                        <td style="vertical-align: middle;">${aContent}</td>
+                        <td style="vertical-align: middle;">${formatLevels(g.levels['B'])}</td>
+                        <td style="vertical-align: middle;">${formatLevels(g.levels['C'])}</td>
+                        <td style="vertical-align: middle;">${formatLevels(g.levels['D'])}</td>
+                        <td style="vertical-align: middle;">${formatLevels(g.levels['E'])}</td>
+                    </tr>
+                `;
+            });
+            html += `</tbody></table></div>`;
+        });
+        
+        container.innerHTML = html;
+        document.getElementById('compare-modal').style.display = 'flex';
+        
+    } catch (e) {
+        alert("비교 데이터를 불러오는 중 오류가 발생했습니다: " + e.message);
+    }
+}
 
 // 전역 변수로 관리하여 삭제/수정이 용이하게 합니다
 let extractedQuestionsArray = [];
@@ -4438,6 +4557,15 @@ async function saveAssessmentToProject() {
                 
                 saveBtn.innerHTML = "✅ 최종 확정 완료";
                 saveBtn.style.background = "#10b981";
+
+                // 💡 [추가] 모든 교사 저장 완료 시 '비교하기' 버튼 활성화!
+                const compareBtn = document.getElementById('btn-compare-m');
+                if (compareBtn) {
+                    compareBtn.disabled = false;
+                    compareBtn.style.background = "#8b5cf6"; // 보라색으로 강조
+                    compareBtn.style.cursor = "pointer";
+                    compareBtn.innerHTML = "📊 비교하기 (활성)";
+                }
             } else {
                 infoZone.style.background = "#fffbeb";
                 infoZone.style.border = "2px solid #f59e0b";
@@ -4476,6 +4604,8 @@ async function saveAssessmentToProject() {
         saveBtn.disabled = false;
     }
 }
+
+
 
 window.onload = async () => {
     // 1. DB 다운로드 대기 (이미 끝났으면 즉시 통과)
@@ -7132,7 +7262,8 @@ const exposeToWindow = {
     toggleExamRangeInputs, previewExamFile, executeExamAnalysis, resetAiLevels,
     prevLevelQuestion, skipLevelQuestion, saveAndClosePassageTray,   clearAllPassages,
     resetChecklist, openJournalModal, closeJournalModal, saveJournalEntry, deleteJournalEntry, saveUserSubjectGroup,
-    silentSaveChecklist, downloadAllJournalsExcel, cancelSubjectSelection, initDictionaryDrag, clearExamFile, markAsModified
+    silentSaveChecklist, downloadAllJournalsExcel, cancelSubjectSelection, initDictionaryDrag, clearExamFile, markAsModified,
+    openCompareModal
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
