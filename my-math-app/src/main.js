@@ -3061,8 +3061,9 @@ async function handleNextToPath1Result() {
             }
 
             if (isFinal) {
+                // 💡 군더더기 문구 삭제하고 제목 고정
                 infoZone.innerHTML = `<div style="color:#1e3a8a; font-size:1.1rem; font-weight:900; margin-bottom:5px;">📌 ${examTitle}</div>` + 
-                                     `<div style="color:#166534; font-size:0.9rem; font-weight:bold;">🎉 모든 교사 산출 완료!</div>` + statusHTML;
+                                     `<div style="color:#334155; font-size:0.9rem; font-weight:bold;">👥 교사별 산출 저장 현황</div>` + statusHTML;
                 infoZone.style.background = "#f0fdf4"; infoZone.style.border = "2px solid #22c55e";
                 
                 if (compareBtn) { compareBtn.disabled = false; compareBtn.style.background = "#8b5cf6"; compareBtn.style.cursor = "pointer"; compareBtn.innerHTML = "📊 비교하기 (활성)"; }
