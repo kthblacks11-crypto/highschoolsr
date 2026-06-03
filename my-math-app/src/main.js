@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.0.6"; 
+const CURRENT_VERSION = "1.0.7"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -1208,6 +1208,12 @@ function showSection(id) {
     // resetAnalysis가 있으면 실행해서 이전 화면 잔여물 제거
     if (typeof resetAnalysis === 'function') resetAnalysis(false); 
 
+    // 💡 [최적화 방어막 2] 분할점수(협업) 화면을 떠나 다른 탭으로 갈 때 모든 실시간 CCTV 끄기
+    if (id !== 'cut-score') {
+        if (projectDetailsUnsubscribe) { projectDetailsUnsubscribe(); projectDetailsUnsubscribe = null; }
+        if (unsubscribeProject) { unsubscribeProject(); unsubscribeProject = null; }
+        if (unsubscribeMemos) { unsubscribeMemos(); unsubscribeMemos = null; }
+    }
 
     // 5. 화면(섹션) 전환
     document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
@@ -2030,20 +2036,48 @@ async function saveChecklist() {
     }
 }
 // [추가 1] 체크박스를 누를 때마다 조용히 DB에 저장하는 함수 (체크 증발 방지)
+let checklistTimeout = null;
+let pendingChecklistData = null; // 창이 닫힐 때를 대비해 마지막 상태를 기억할 변수
+
 async function silentSaveChecklist() {
     if (!auth.currentUser) return;
+    
     const checks = {};
     document.querySelectorAll('#checklist-container input[type="checkbox"]').forEach(input => {
         checks[input.id.replace('c-', '')] = input.checked;
     });
-    try {
-        await db.collection('user_checklists').doc(auth.currentUser.uid).set({
-            [currentSubject]: checks
-        }, { merge: true });
-    } catch (e) {
-        console.error("체크리스트 자동 저장 실패:", e);
+
+    // 전송할 데이터를 보관해둡니다 (창이 갑자기 닫힐 때를 대비)
+    pendingChecklistData = checks;
+
+    // 기존 예약된 저장이 있다면 취소하고 다시 1.5초를 셉니다.
+    if (checklistTimeout) {
+        clearTimeout(checklistTimeout);
     }
+
+    checklistTimeout = setTimeout(async () => {
+        try {
+            await db.collection('user_checklists').doc(auth.currentUser.uid).set({
+                [currentSubject]: pendingChecklistData
+            }, { merge: true });
+            
+            pendingChecklistData = null; // 안전하게 저장되었으므로 보류 데이터를 비웁니다.
+            console.log("✅ 체크리스트 일괄 안전 저장 완료");
+        } catch (e) {
+            console.error("체크리스트 자동 저장 실패:", e);
+        }
+    }, 1500);
 }
+
+// 🚨 안전장치: 사용자가 1.5초가 되기 전에 브라우저 창을 닫거나 새로고침할 때 발동
+window.addEventListener('beforeunload', () => {
+    // 저장되지 않고 대기 중인 데이터가 있다면 창이 닫히기 직전에 즉시 DB에 기록 요청
+    if (pendingChecklistData && auth.currentUser) {
+        db.collection('user_checklists').doc(auth.currentUser.uid).set({
+            [currentSubject]: pendingChecklistData
+        }, { merge: true });
+    }
+});
 
 // [추가 2] 내가 쓴 모든 수업일지를 엑셀로 한 번에 다운로드하는 마법의 함수
 async function downloadAllJournalsExcel() {
@@ -2269,10 +2303,23 @@ let dbLoadPromise = null; // 💡 DB 로딩 완료를 기다려줄 신호등
 
 async function loadStandardsFromDB() {
     try {
-        console.log("⏳ DB에서 시스템 데이터를 불러옵니다...");
+        // 💡 [최적화 방어막] 영구 수첩(localStorage) 확인 및 버전 검사
+        const cachedData = localStorage.getItem('saved_subject_data');
+        const cachedVersion = localStorage.getItem('saved_app_version');
 
-        // 1. curriculumMap을 이용해 모든 과목의 뼈대를 먼저 구축합니다!
-        // (subjects 컬렉션에 등록되지 않은 과목도 성취기준만 있으면 무조건 뜨도록 보완)
+        // 내 수첩의 버전과 선생님이 배포한 최신 버전(CURRENT_VERSION)이 같을 때만 수첩에서 꺼냅니다.
+        if (cachedData && cachedVersion === CURRENT_VERSION) {
+            console.log(`⚡ 영구 수첩에서 성취기준을 0초 만에 불러옵니다! (버전: ${CURRENT_VERSION})`);
+            subjectData = JSON.parse(cachedData);
+            isDbLoaded = true;
+            return; // DB 요청 안 함!
+        }
+
+        // 💡 [로딩 켜기] 버전이 다르거나 최초 접속이면 예쁜 화면으로 덮어버립니다!
+        showSystemLoading();
+        console.log(`⏳ [새 버전 감지 또는 최초 접속] DB에서 시스템 데이터를 다운로드합니다...`);
+
+        // 🌟 [여기서부터 선생님 원본 코드와 100% 동일] 🌟
         for (const group in curriculumMap) {
             for (const category in curriculumMap[group]) {
                 curriculumMap[group][category].forEach(sub => {
@@ -2288,7 +2335,6 @@ async function loadStandardsFromDB() {
             subjectData['uncategorized'] = { title: '미분류 보관함', subtitle: '분류되지 않은 데이터', standards: [] };
         }
 
-        // 2. subjects 컬렉션에 특별한 부제목 설정이 있다면 덮어쓰기
         const subjectSnapshot = await db.collection('subjects').get();
         subjectSnapshot.forEach(doc => {
             const data = doc.data();
@@ -2297,7 +2343,6 @@ async function loadStandardsFromDB() {
             if (data.subtitle) subjectData[doc.id].subtitle = data.subtitle;
         });
 
-        // 3. 성취기준 로드
         const standardsSnapshot = await db.collection('standards_2022').get();
         standardsSnapshot.forEach(doc => {
             const data = doc.data();
@@ -2317,13 +2362,21 @@ async function loadStandardsFromDB() {
                 subjectData[subj].standards.sort((a, b) => a.code.localeCompare(b.code));
             }
         }
-        
-        isDbLoaded = true; // 완료 도장 쾅!
-        console.log("✅ 시스템 데이터 세팅 완료");
+        // 🌟 [선생님 원본 코드 끝] 🌟
+
+        // 💡 [최적화 완료] 새로 받은 데이터와 '현재 배포 버전'을 영구 수첩에 함께 저장합니다.
+        localStorage.setItem('saved_subject_data', JSON.stringify(subjectData));
+        localStorage.setItem('saved_app_version', CURRENT_VERSION);
+
+        isDbLoaded = true; 
+        console.log(`✅ 시스템 데이터 세팅 및 영구 수첩 저장 완료 (적용 버전: ${CURRENT_VERSION})`);
         
     } catch(error) {
         console.error("DB 로딩 에러:", error);
-        isDbLoaded = true; // 에러가 나도 무한 대기하지 않도록 방어
+        isDbLoaded = true; 
+    } finally {
+        // 💡 [로딩 끄기] 작업이 끝났거나 에러가 나도 무조건 로딩 화면을 치워줍니다!
+        hideSystemLoading();
     }
 }
 
@@ -2382,6 +2435,10 @@ async function saveStandardToDB() {
             questions: [] 
         });
         alert("🎉 새로운 성취기준이 DB에 성공적으로 저장되었습니다!");
+        
+        // 💡 [핵심 추가] 관리자가 직접 추가했으니 내 브라우저 수첩을 찢어버림!
+        localStorage.removeItem('saved_subject_data'); 
+        
         location.reload(); 
     } catch (error) {
         console.error("저장 실패:", error);
@@ -2465,7 +2522,11 @@ function resetBookmarkView() {
 // 🟢 이 변수는 반드시 함수 바깥(위에) 있어야 합니다! 기존에 없다면 꼭 같이 복사해주세요.
 let bookmarkSnapshotUnsubscribe = null;
 
-// 🟢 [수정됨] 실시간 감시(onSnapshot)를 끄고 1회성 읽기(get)로 변경하여 데이터를 획기적으로 절약한 북마크 로직
+// 👇 [핵심 추가] DB 중복 호출을 막기 위한 메모리 수첩 변수
+let cachedBookmarkData = null;
+let lastBookmarkSubject = null;
+
+// 🟢 실시간 감시(onSnapshot)를 끄고 1회성 읽기(get) 및 메모리 캐싱으로 데이터를 획기적으로 절약한 북마크 로직
 async function loadBookmark(level) {
     // ✨ 1. 모든 버튼을 살짝 투명하게 만들고 크기를 원래대로 되돌림 (선생님 코드 100% 유지)
     ['A', 'B', 'C', 'D', 'E'].forEach(l => {
@@ -2482,31 +2543,40 @@ async function loadBookmark(level) {
     const activeBtn = document.getElementById(`bm-btn-${level}`);
     if (activeBtn) {
         activeBtn.style.opacity = '1';
-        activeBtn.style.transform = 'scale(1.15)'; // 15% 커짐
-        activeBtn.style.border = '3px solid #0f172a'; // 진한 남색 테두리
-        activeBtn.style.boxShadow = '0 4px 10px rgba(0,0,0,0.2)'; // 그림자 효과
+        activeBtn.style.transform = 'scale(1.15)'; 
+        activeBtn.style.border = '3px solid #0f172a'; 
+        activeBtn.style.boxShadow = '0 4px 10px rgba(0,0,0,0.2)'; 
     }
 
-    // 선택된 과목이 없으면 기본값으로 uncategorized 설정
     const subject = currentSubject || "uncategorized"; 
     const listContainer = document.getElementById('bookmark-list');
-    listContainer.innerHTML = "<p style='text-align:center; color:var(--primary); font-weight:bold;'>데이터베이스에서 문항을 불러오는 중입니다... ⏳</p>";
 
     try {
         currentBookmarkQuestions = []; // 배열 초기화
 
-        // 🚨 [핵심 변경 1] 실시간 감시(.onSnapshot)를 지우고 1회성 읽기(.get)로 바꿨습니다.
-        let query;
-        if (subject === "uncategorized") {
-            // 미분류 탭일 때: 전체 문항을 딱 1번만 불러와서 선생님의 기존 로직으로 필터링합니다. (onSnapshot을 get으로만 바꿈)
-            query = db.collection('transformed_bank').get(); 
-        } else {
-            // 일반 과목일 때: 해당 과목 데이터만 딱 1번만 불러옵니다.
-            query = db.collection('transformed_bank').where('subject', '==', subject).get();
+        // 🚨 [핵심 변경 1] 과목이 바뀌었거나 처음 누를 때만 딱 1번 DB에서 다운로드합니다! (비용 절감)
+        if (lastBookmarkSubject !== subject || !cachedBookmarkData) {
+            listContainer.innerHTML = "<p style='text-align:center; color:var(--primary); font-weight:bold;'>데이터베이스에서 문항을 최초 1회 불러오는 중입니다... ⏳</p>";
+            
+            let query;
+            if (subject === "uncategorized") {
+                query = db.collection('transformed_bank').get(); 
+            } else {
+                query = db.collection('transformed_bank').where('subject', '==', subject).get();
+            }
+
+            // DB에서 데이터를 딱 1번만 가져옵니다.
+            const snapshot = await query;
+            
+            // 가져온 데이터를 수첩(cachedBookmarkData)에 모두 적어둡니다.
+            cachedBookmarkData = [];
+            snapshot.forEach(doc => cachedBookmarkData.push(doc.data()));
+            lastBookmarkSubject = subject; // 현재 과목 기억
         }
 
-        // DB에서 데이터를 1번만 싹 가져옵니다.
-        const snapshot = await query;
+        // ==========================================================
+        // 🚨 이제부터는 DB를 부르지 않고 수첩(cachedBookmarkData)에서 필터링합니다!
+        // ==========================================================
 
         // 🌟 [선생님 로직 1] 선생님 수동 문항 담기 (일반 과목일 때만)
         if (subject !== "uncategorized") {
@@ -2530,9 +2600,8 @@ async function loadBookmark(level) {
             }
         }
 
-        // 🌟 [선생님 로직 2] DB 데이터 분류해서 담기 (기존 코드 100% 동일)
-        snapshot.forEach(doc => {
-            const d = doc.data();
+        // 🌟 [선생님 로직 2] 수첩 데이터 분류해서 담기 (기존 코드 100% 동일)
+        cachedBookmarkData.forEach(d => {
             let extractedLevel = d.level || d.original_analysis?.match(/성취수준:\s*([A-E])/)?.[1];
             
             // 미분류 탭 전용 로직
@@ -3843,7 +3912,11 @@ async function updateStandardInDB() {
         try {
             await db.collection('standards_2022').doc(docId).update(updatedData);
             alert("✅ 성공적으로 수정되었습니다!");
-            location.reload(); // 새로고침해서 최신 데이터 반영
+            
+            // 💡 [핵심 추가] 수첩 데이터 초기화
+            localStorage.removeItem('saved_subject_data'); 
+            
+            location.reload(); 
         } catch(e) { alert("수정 실패: " + e.message); }
     }
 }
@@ -3856,10 +3929,15 @@ async function deleteStandardFromDB() {
         try {
             await db.collection('standards_2022').doc(docId).delete();
             alert("🗑️ 성취기준이 삭제되었습니다.");
+            
+            // 💡 [핵심 추가] 수첩 데이터 초기화
+            localStorage.removeItem('saved_subject_data'); 
+            
             location.reload();
         } catch(e) { alert("삭제 실패: " + e.message); }
     }
 }
+
 // ==========================================
 // 🛠️ 관리자 모드: 기존 문항(Question) 수정 및 삭제 로직
 // ==========================================
@@ -4209,6 +4287,17 @@ function backToProjectList() {
     currentProjectId = null;
     document.getElementById('project-detail-view').style.display = 'none';
     document.getElementById('cut-score-dashboard').style.display = 'block';
+
+    // 💡 [최적화 방어막 1] 폴더 밖으로 나가면 켜져 있던 실시간 CCTV(리스너)를 완벽히 끕니다!
+    if (projectDetailsUnsubscribe) {
+        projectDetailsUnsubscribe();
+        projectDetailsUnsubscribe = null;
+    }
+    if (unsubscribeProject) {
+        unsubscribeProject();
+        unsubscribeProject = null;
+    }
+
     loadProjects();
 }
 
@@ -7473,6 +7562,30 @@ async function loadStandardsForManage() {
     }
 }
 
+// 🟢 [추가] 다운로드 딜레이 중 화면을 예쁘게 가려줄 로딩 UI (JS로 자동 생성)
+function showSystemLoading() {
+    let loader = document.getElementById('system-update-loader');
+    if (!loader) {
+        loader = document.createElement('div');
+        loader.id = 'system-update-loader';
+        loader.innerHTML = `
+            <div style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(255,255,255,0.95); z-index:99999; display:flex; flex-direction:column; justify-content:center; align-items:center;">
+                <div style="width:60px; height:60px; border:6px solid #e2e8f0; border-top-color:#1e3a8a; border-radius:50%; animation:spin 1s linear infinite; margin-bottom:20px;"></div>
+                <h2 style="color:#1e3a8a; margin-bottom:10px;">데이터베이스 최신화 중... ⏳</h2>
+                <p style="color:#64748b; font-weight:bold; margin-bottom:5px;">새로운 시스템 데이터(성취기준 등)를 불러오고 있습니다.</p>
+                <p style="color:#94a3b8; font-size:0.9rem;">잠시만 기다려주세요 (최초 1회만 약 3~5초 소요됩니다)</p>
+                <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+            </div>
+        `;
+        document.body.appendChild(loader);
+    }
+    loader.style.display = 'flex';
+}
+
+function hideSystemLoading() {
+    const loader = document.getElementById('system-update-loader');
+    if (loader) loader.style.display = 'none';
+}
 
 // ==========================================
 // 🌟 [최종 업데이트] Vite 모듈 환경에서 HTML 버튼들이 함수를 찾을 수 있도록 외부(window)로 연결해주는 마법의 다리
