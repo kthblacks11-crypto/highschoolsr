@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.0.7"; 
+const CURRENT_VERSION = "1.0.8"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -4710,6 +4710,11 @@ async function saveAssessmentToProject() {
                 if (compareBtn) { compareBtn.disabled = false; compareBtn.style.background = "#8b5cf6"; compareBtn.style.cursor = "pointer"; compareBtn.innerHTML = "📊 비교하기 (활성)"; }
                 alert("✅ 결과 저장이 성공적으로 완료되었습니다!");
             } else {
+                // 👇 [여기에 추가!] 아직 완료하지 않은 교사가 있다면 기존의 폴더 밖 점수를 삭제하여 블라인드 처리
+                if (asm.scores) {
+                    delete asm.scores;
+                }
+
                 infoZone.style.background = "#fffbeb"; infoZone.style.border = "2px solid #f59e0b";
                 infoZone.innerHTML = `<div style="color:#1e3a8a; font-size:1.1rem; font-weight:900; margin-bottom:5px;">📌 ${examTitle}</div>` + 
                                      `<div style="color:#92400e; font-size:0.9rem; font-weight:bold;">💾 내 점수 저장 완료! (다른 교사 대기중)</div>` + statusHTML;
