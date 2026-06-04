@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.1.1"; 
+const CURRENT_VERSION = "1.1.2"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -4044,7 +4044,12 @@ async function loadProjects() {
                             } else {
                                 isDone = a.teacherManualScores && a.teacherManualScores[email];
                             }
-                            return `${id}:${isDone ? '완료' : '대기'}`;
+                            // 💡 완료는 찐한 빨간색(눈에 띄게) 볼드체, 대기는 옅은 반투명 색상 처리
+                            let statusHtml = isDone 
+                                ? `<span style="color: #ff4d4d; font-weight: 900; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">완료</span>`
+                                : `<span style="color: #cbd5e1; opacity: 0.6; font-weight: normal;">대기</span>`;
+                                
+                            return `${id}:${statusHtml}`;
                         });
                         
                         // 결과: "thkim:완료, test:대기"
