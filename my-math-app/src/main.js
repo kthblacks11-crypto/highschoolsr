@@ -80,16 +80,22 @@ function startAppVersionCheck() {
                       const userWantsToUpdate = confirm(
                           "🚀 시스템이 업데이트되었습니다!\n지금 바로 새로고침 하시겠습니까?"
                       );
-                      if (userWantsToUpdate) window.location.reload(true); 
-                  } else {
-                      window.location.reload(true);
-                  }
-              }
-          }
-      })
-      .catch(err => {
-          console.log("버전 체크 중 에러:", err);
-      });
+                      if (userWantsToUpdate) {
+                        // 💡 추가: 새로고침 하기 전에 '이번 버전에 대해 새로고침을 눌렀음'을 기록
+                        sessionStorage.setItem('update_tried_for_' + serverVersion, 'true');
+                        window.location.reload(true); 
+                    }
+                } else {
+                    // 일과 시간 외에는 묻지 않고 즉시 새로고침
+                    sessionStorage.setItem('update_tried_for_' + serverVersion, 'true');
+                    window.location.reload(true);
+                }
+            }
+        }
+    })
+    .catch(err => {
+        console.log("버전 체크 중 에러:", err);
+    });
 }
 
 
@@ -4515,33 +4521,57 @@ function openManualAssessmentModal() {
 
 let currentEditingManualIndex = -1;
 
-// ✨ [추가] 수행평가 수정 창 열기 함수
+// ✨ [수정됨] 수행평가 수정 창 열기 함수 (협업 블라인드 에러 완벽 해결)
 function editManualAssessment(index) {
+    // 💡 새로운 협업 시스템이 내가 몇 번째 평가를 누른 건지 알 수 있도록 네비게이션 설정
+    currentEditingAssessmentIndex = index;
+    currentEditingManualIndex = index;
+
     db.collection('user_projects').doc(currentProjectId).get().then(doc => {
         if(doc.exists) {
-            const asm = doc.data().assessments[index];
-            document.getElementById('manual-assess-name').value = asm.name;
-            document.getElementById('manual-assess-weight').value = asm.weight;
+            const projectData = doc.data();
+            const asm = projectData.assessments[index];
+            const myEmail = auth.currentUser.email;
             
-            const ratio = asm.weight / 100;
-            document.getElementById('manual-a').value = Math.round((asm.scores.A || 0) / ratio);
-            document.getElementById('manual-b').value = Math.round((asm.scores.B || 0) / ratio);
-            document.getElementById('manual-c').value = Math.round((asm.scores.C || 0) / ratio);
-            document.getElementById('manual-d').value = Math.round((asm.scores.D || 0) / ratio);
-            document.getElementById('manual-e').value = Math.round((asm.scores.E || 0) / ratio);
+            // 1. 평가명과 비율 등 기본 정보 세팅
+            document.getElementById('manual-assess-name').value = asm.name || '';
+            document.getElementById('manual-assess-weight').value = asm.weight || '';
             
-            // 🌟 하위 평가요소 데이터가 복원 목록에 있다면 화면에 동적 재구성
+            // 2. 선생님의 하위 평가요소 데이터(가, 나, 다 등) 복원
             const subList = document.getElementById('sub-factors-list');
-            subList.innerHTML = '';
+            if(subList) subList.innerHTML = '';
+            
             if (asm.subFactors && asm.subFactors.length > 0) {
                 asm.subFactors.forEach(sf => {
-                    addSubFactorRow(sf);
+                    if (typeof addSubFactorRow === 'function') addSubFactorRow(sf);
                 });
             }
             
-            currentEditingManualIndex = index;
-            document.getElementById('manual-assessment-modal').style.display = 'flex';
+            // 3. 모달 창 열기
+            const modal = document.getElementById('manual-assessment-modal');
+            if(modal) modal.style.display = 'flex';
+
+            // 4. [핵심] 에러가 나던 예전 로직을 버리고, 새로 만든 협업 워크스페이스 실행!
+            if (typeof loadManualAssessmentWorkspace === 'function') {
+                loadManualAssessmentWorkspace();
+            } else {
+                // (만약 새 시스템이 아직 연동 안 된 과도기일 경우를 위한 안전 방어막)
+                const ratio = asm.weight ? (asm.weight / 100) : 1;
+                // 에러 나지 않도록 ?. 연산자와 방어 코드 적용
+                let target = (asm.teacherManualScores && asm.teacherManualScores[myEmail]) 
+                             ? asm.teacherManualScores[myEmail] 
+                             : (asm.scores || {A:0, B:0, C:0, D:0, E:0});
+                
+                document.getElementById('manual-a').value = Math.round((target.A || 0) / ratio);
+                document.getElementById('manual-b').value = Math.round((target.B || 0) / ratio);
+                document.getElementById('manual-c').value = Math.round((target.C || 0) / ratio);
+                document.getElementById('manual-d').value = Math.round((target.D || 0) / ratio);
+                document.getElementById('manual-e').value = Math.round((target.E || 0) / ratio);
+            }
         }
+    }).catch(e => {
+        console.error("수행평가 로드 에러:", e);
+        alert("불러오기 중 시스템 오류가 발생했습니다.");
     });
 }
 
