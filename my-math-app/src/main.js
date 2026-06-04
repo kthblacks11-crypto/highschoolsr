@@ -4577,27 +4577,6 @@ function closeManualAssessmentModal() {
     }
 }
 
-// 2. 모달이 닫힐 때 CCTV를 끄고 화면을 청소하는 로직
-function closeManualAssessmentModal() { 
-    document.getElementById('manual-assessment-modal').style.display = 'none';
-    currentEditingManualIndex = -1; 
-    
-    // 입력창 청소
-    document.querySelectorAll('#manual-assessment-modal input').forEach(input => {
-        input.value = '';
-        input.readOnly = false;
-        input.style.background = 'white';
-    }); 
-    document.getElementById('sub-factors-list').innerHTML = ''; 
-    
-    // 💡 [핵심] 창을 닫으면 쓸데없는 데이터 소모를 막기 위해 실시간 감시를 끕니다.
-    if (manualWorkspaceUnsubscribe) {
-        manualWorkspaceUnsubscribe();
-        manualWorkspaceUnsubscribe = null;
-    }
-}
-
-
 
 async function saveAssessmentToProject() {
     if (!currentProjectId || currentEditingAssessmentIndex === -1) { alert("오류: 편집 중인 평가를 찾을 수 없습니다."); return; }
