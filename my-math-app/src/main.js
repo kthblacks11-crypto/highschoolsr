@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.1.2"; 
+const CURRENT_VERSION = "1.1.3"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -4494,11 +4494,17 @@ function openManualAssessmentModal() {
 
 let currentEditingManualIndex = -1;
 
-// ✨ [수정됨] 수행평가 수정 창 열기 함수 (협업 블라인드 에러 완벽 해결)
+// ✨ [수정됨] 수행평가 수정 창 열기 함수 (협업 블라인드 에러 완벽 해결 + CCTV 최적화)
 function editManualAssessment(index) {
     // 💡 새로운 협업 시스템이 내가 몇 번째 평가를 누른 건지 알 수 있도록 네비게이션 설정
     currentEditingAssessmentIndex = index;
     currentEditingManualIndex = index;
+
+    // 💡 [CCTV 최적화 1] 상세 작업에 들어왔으므로, 메인 폴더의 실시간 감시를 잠시 꺼서 데이터를 절약합니다.
+    if (typeof projectDetailsUnsubscribe !== 'undefined' && projectDetailsUnsubscribe) {
+        projectDetailsUnsubscribe();
+        projectDetailsUnsubscribe = null;
+    }
 
     db.collection('user_projects').doc(currentProjectId).get().then(doc => {
         if(doc.exists) {
@@ -4524,13 +4530,12 @@ function editManualAssessment(index) {
             const modal = document.getElementById('manual-assessment-modal');
             if(modal) modal.style.display = 'flex';
 
-            // 4. [핵심] 에러가 나던 예전 로직을 버리고, 새로 만든 협업 워크스페이스 실행!
+            // 4. [핵심] 새로 만든 협업 워크스페이스 실행! (이 안에서 수행평가 전용 CCTV가 켜집니다)
             if (typeof loadManualAssessmentWorkspace === 'function') {
                 loadManualAssessmentWorkspace();
             } else {
-                // (만약 새 시스템이 아직 연동 안 된 과도기일 경우를 위한 안전 방어막)
+                // (만약 새 시스템이 아직 연동 안 된 과도기일 경우를 위한 안전 방어막 - 기존 코드 완벽 유지)
                 const ratio = asm.weight ? (asm.weight / 100) : 1;
-                // 에러 나지 않도록 ?. 연산자와 방어 코드 적용
                 let target = (asm.teacherManualScores && asm.teacherManualScores[myEmail]) 
                              ? asm.teacherManualScores[myEmail] 
                              : (asm.scores || {A:0, B:0, C:0, D:0, E:0});
@@ -4546,6 +4551,30 @@ function editManualAssessment(index) {
         console.error("수행평가 로드 에러:", e);
         alert("불러오기 중 시스템 오류가 발생했습니다.");
     });
+}
+
+// ✨ 모달 닫기 (수행평가 CCTV 차단 및 폴더 복귀)
+function closeManualAssessmentModal() { 
+    document.getElementById('manual-assessment-modal').style.display = 'none';
+    currentEditingManualIndex = -1; 
+    
+    document.querySelectorAll('#manual-assessment-modal input').forEach(input => {
+        input.value = '';
+        input.readOnly = false;
+        input.style.background = 'white';
+    }); 
+    document.getElementById('sub-factors-list').innerHTML = ''; 
+    
+    // 💡 [CCTV 최적화 2] 창을 닫았으므로 수행평가 전용 실시간 감시의 전원을 뽑습니다. (데이터 절약 핵심!)
+    if (typeof manualWorkspaceUnsubscribe !== 'undefined' && manualWorkspaceUnsubscribe) {
+        manualWorkspaceUnsubscribe();
+        manualWorkspaceUnsubscribe = null;
+    }
+
+    // 💡 [CCTV 복구 3] 메인 폴더로 돌아왔으므로 다시 폴더 겉면을 감시하는 스위치를 켭니다.
+    if (currentProjectId) {
+        if (typeof loadProjectDetails === 'function') loadProjectDetails();
+    }
 }
 
 // 2. 모달이 닫힐 때 CCTV를 끄고 화면을 청소하는 로직
@@ -4913,16 +4942,22 @@ function startEditAssessment(index) {
     currentEditingAssessmentIndex = index;
     history.pushState({ section: 'cut-score', sub: 'step2' }, "", "#cut-score/step2");
 
-    // 💡 [추가된 청소 로직] 다른 회차로 이동할 때, 이전 회차의 파일과 추출 내역을 화면에서 비워줍니다.
+    // 💡 [기존 로직 보존] 다른 회차로 이동할 때, 이전 회차의 파일과 추출 내역을 화면에서 비워줍니다.
     const fileInput = document.getElementById('exam-file-upload');
-    if (fileInput) fileInput.value = ''; // 첨부파일 창 비우기
-    extractedQuestionsArray = []; // 추출된 문항 배열 초기화
+    if (fileInput) fileInput.value = ''; 
+    extractedQuestionsArray = []; 
     const listContainer = document.getElementById('extracted-questions-list');
-    if (listContainer) listContainer.innerHTML = ''; // 추출된 텍스트 목록 화면 비우기
+    if (listContainer) listContainer.innerHTML = ''; 
 
     document.getElementById('project-detail-view').style.display = 'none';
     document.getElementById('cut-score-step2').style.display = 'block';
     
+    // 💡 [CCTV 최적화 핵심 스위치 추가] 지필평가 창에 진입했으므로 바깥쪽 메인 폴더 감시를 끕니다. (이중 과금 방지)
+    if (typeof projectDetailsUnsubscribe !== 'undefined' && projectDetailsUnsubscribe) {
+        projectDetailsUnsubscribe();
+        projectDetailsUnsubscribe = null;
+    }
+
     if (unsubscribeProject) unsubscribeProject();
 
     unsubscribeProject = db.collection('user_projects').doc(currentProjectId).onSnapshot(doc => {
@@ -4948,7 +4983,8 @@ function startEditAssessment(index) {
                 document.getElementById('choice-count').value = 20;
                 document.getElementById('short-count').value = 5;
             }
-            // 🟢 [추가] 토글 버튼 작동 시 실시간 연동을 위한 데이터 캐싱 백업
+            
+            // 🟢 [기존 로직 보존] 토글 버튼 작동 시 실시간 연동을 위한 데이터 캐싱 백업
             cachedProjectData = projectData;
             cachedAsmData = asm;
 
@@ -5031,7 +5067,7 @@ function openAiHelper() {
     const zone = document.getElementById('ai-helper-zone');
     zone.style.display = zone.style.display === 'none' ? 'block' : 'none';
 }
-// 🟢 [완벽 수정] 브라우저 뒤로가기 제어 로직 보완
+// 🟢 [완벽 수정] 브라우저 뒤로가기 제어 로직 (CCTV 스마트 스위칭 포함)
 window.addEventListener('popstate', function(event) {
     document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -5045,8 +5081,19 @@ window.addEventListener('popstate', function(event) {
             document.querySelectorAll('.cut-score-card').forEach(card => card.style.display = 'none');
             
             if (event.state.sub === 'project-detail') {
-                // 프로젝트 상세 화면으로 복귀
+                // [프로젝트 상세 화면으로 복귀]
                 document.getElementById('project-detail-view').style.display = 'block';
+
+                // 💡 [CCTV 최적화] 지필평가 상세 창에서 뒤로가기로 나왔으므로, 지필용 감시 전원을 뽑습니다.
+                if (typeof unsubscribeProject !== 'undefined' && unsubscribeProject) {
+                    unsubscribeProject();
+                    unsubscribeProject = null;
+                }
+                // 💡 폴더 화면으로 돌아왔으므로 폴더용 감시를 다시 켭니다.
+                if (currentProjectId && typeof loadProjectDetails === 'function') {
+                    loadProjectDetails();
+                }
+
             } else if (event.state.sub === 'step2') {
                 // 표 작성 화면으로 복귀
                 document.getElementById('cut-score-step2').style.display = 'block';
@@ -6629,12 +6676,16 @@ function addSubFactorRow(savedData = null) {
 // =========================================================================
 
 let isManualCompareMode = false; // 비교하기(토글) 상태 추적 변수
+let manualWorkspaceUnsubscribe = null; // 🟢 [추가] 수행평가 전용 CCTV (실시간 감시) 스위치 변수
 
 // 1. 수행평가 작업 공간 초기화 (해당 평가를 클릭했을 때 실행해주세요)
 async function loadManualAssessmentWorkspace() {
     if (!currentProjectId || currentEditingAssessmentIndex === -1) return;
+    
+    const docRef = db.collection('user_projects').doc(currentProjectId);
+
+    // 💡 [기존 로직 완벽 보존] 내 데이터는 최초 1회만 고정해서 불러옵니다.
     try {
-        const docRef = db.collection('user_projects').doc(currentProjectId);
         const doc = await docRef.get();
         if (!doc.exists) return;
 
@@ -6666,6 +6717,23 @@ async function loadManualAssessmentWorkspace() {
     } catch (e) {
         console.error("수행평가 로드 실패:", e);
     }
+
+    // 💡 [최적화 & 실시간 반영 추가] 
+    // 기존에 켜진 CCTV가 있다면 끄고, 새로 켭니다.
+    if (manualWorkspaceUnsubscribe) {
+        manualWorkspaceUnsubscribe();
+    }
+
+    // 이제 이 공간(수행평가 창)에 있는 동안, 상대방이 저장을 누르면 '대기->완료'로 실시간 자동 변경됩니다!
+    manualWorkspaceUnsubscribe = docRef.onSnapshot((doc) => {
+        if (!doc.exists) return;
+        const projectData = doc.data();
+        const asm = projectData.assessments[currentEditingAssessmentIndex];
+
+        // ⚠️ 내 텍스트 박스는 건드리지 않고(타이핑 방해 금지), 오직 '상대방 데이터'와 '대기/완료 현황판'만 업데이트!
+        renderPartnerManualData(asm, projectData);
+        updateManualTableStatus(asm, projectData);
+    });
 }
 
 // 2. 상단 현황판 업데이트 및 [비교하기] 활성화
