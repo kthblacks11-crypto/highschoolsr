@@ -6604,14 +6604,15 @@ function addSubFactorRow(savedData = null) {
 // 🎯 [수정됨] 수행평가 실시간 동기화 (CCTV) 로직 추가
 // =========================================================================
 
-// 실시간 감시를 켜고 끄기 위한 변수
-let manualWorkspaceUnsubscribe = null;
+// =========================================================================
+// 🎯 [수행평가 전용] 협업, 블라인드 처리, 분할점수 저장 통합 로직
+// =========================================================================
 
-// 1. 수행평가 작업 공간 초기화 및 실시간 감시 시작
-// 1. 수행평가 작업 공간 초기화 및 실시간 감시 시작
+let isManualCompareMode = false; // 비교하기(토글) 상태 추적 변수
+
+// 1. 수행평가 작업 공간 초기화 (해당 평가를 클릭했을 때 실행해주세요)
 async function loadManualAssessmentWorkspace() {
     if (!currentProjectId || currentEditingAssessmentIndex === -1) return;
-    
     try {
         const docRef = db.collection('user_projects').doc(currentProjectId);
         const doc = await docRef.get();
@@ -6621,51 +6622,29 @@ async function loadManualAssessmentWorkspace() {
         const asm = projectData.assessments[currentEditingAssessmentIndex];
         const myEmail = auth.currentUser.email;
 
-        isManualCompareMode = false; // 진입 시 비교창 닫음
+        isManualCompareMode = false; // 진입 시 무조건 비교창 닫음(가림) 상태로 초기화
 
-        const saveBtn = document.getElementById('btn-save-manual'); // 버튼 요소 가져오기
-
+        // 내 기존 점수 불러오기
         if (asm.teacherManualScores && asm.teacherManualScores[myEmail]) {
             const mySaved = asm.teacherManualScores[myEmail];
-            document.getElementById('manual-a').value = mySaved.A;
-            document.getElementById('manual-b').value = mySaved.B;
-            document.getElementById('manual-c').value = mySaved.C;
-            document.getElementById('manual-d').value = mySaved.D;
-            document.getElementById('manual-e').value = mySaved.E;
-            lockManualInputs(true);
-            
-            // 🌟 [버그 수정 3] 이미 저장된 상태라면 확실하게 버튼 비활성화
-            if (saveBtn) {
-                saveBtn.innerHTML = "✅ 저장 완료";
-                saveBtn.style.background = "#10b981";
-                saveBtn.disabled = true; 
-            }
+            document.getElementById('manual-a').value = mySaved.A; // 💡수정됨
+            document.getElementById('manual-b').value = mySaved.B; // 💡수정됨
+            document.getElementById('manual-c').value = mySaved.C; // 💡수정됨
+            document.getElementById('manual-d').value = mySaved.D; // 💡수정됨
+            document.getElementById('manual-e').value = mySaved.E; // 💡수정됨
+            lockManualInputs(true); // 이미 저장했다면 잠금
+            document.getElementById('btn-save-manual').innerHTML = "✅ 저장 완료";
+            document.getElementById('btn-save-manual').style.background = "#10b981";
         } else {
             lockManualInputs(false);
-            
-            // 🌟 [버그 수정 4] 아직 저장 전이라면 확실하게 버튼 활성화
-            if (saveBtn) {
-                saveBtn.innerHTML = "💾 결과 저장하기";
-                saveBtn.style.background = "#ea580c";
-                saveBtn.disabled = false; 
-            }
+            document.getElementById('btn-save-manual').innerHTML = "💾 결과 저장하기";
+            document.getElementById('btn-save-manual').style.background = "#ea580c";
         }
 
-        if (manualWorkspaceUnsubscribe) {
-            manualWorkspaceUnsubscribe(); // 기존 CCTV 끄기
-        }
-        
-        manualWorkspaceUnsubscribe = db.collection('user_projects').doc(currentProjectId).onSnapshot(snap => {
-            if (!snap.exists) return;
-            const rtData = snap.data();
-            const rtAsm = rtData.assessments[currentEditingAssessmentIndex];
-            
-            renderPartnerManualData(rtAsm, rtData);
-            updateManualTableStatus(rtAsm, rtData);
-        });
-
+        renderPartnerManualData(asm, projectData);
+        updateManualTableStatus(asm, projectData);
     } catch (e) {
-        console.error("수행평가 작업 공간 로드 실패:", e);
+        console.error("수행평가 로드 실패:", e);
     }
 }
 
@@ -6786,152 +6765,74 @@ async function toggleManualCompareMode() {
     }
 }
 
-// 5. 결과 저장 (선생님의 하위요소 수집 + 협업 블라인드 로직 완벽 결합)
+// 5. 결과 저장 (최종 반영비율 계산 포함)
 async function saveManualAssessmentToProject() {
-    // 1. 기본 정보 수집
-    const name = document.getElementById('manual-assess-name').value.trim();
-    const weight = parseFloat(document.getElementById('manual-assess-weight').value) || 0;
-    
-    if(!name || weight <= 0) { alert("평가명과 반영 비율을 정확히 입력하세요."); return; }
+    if (!currentProjectId || currentEditingAssessmentIndex === -1) return;
 
-    const valA = parseFloat(document.getElementById('manual-a').value) || 0;
-    const valB = parseFloat(document.getElementById('manual-b').value) || 0;
-    const valC = parseFloat(document.getElementById('manual-c').value) || 0;
-    const valD = parseFloat(document.getElementById('manual-d').value) || 0;
-    const valE = parseFloat(document.getElementById('manual-e').value) || 0;
-    
-    if (!valA && !valB) { alert("산출된 분할점수를 입력해 주세요."); return; }
-
-    // 2. 선생님의 고유 로직: 하위 평가요소(subFactors) 수집
-    let subFactors = [];
-    document.querySelectorAll('.sub-factor-row').forEach(row => {
-        subFactors.push({
-            name: row.querySelector('.sub-factor-name').value.trim(),
-            max: parseFloat(row.querySelector('.sub-factor-max').value) || 0,
-            a: parseFloat(row.querySelector('.sub-a').value) || 0,
-            b: parseFloat(row.querySelector('.sub-b').value) || 0,
-            c: parseFloat(row.querySelector('.sub-c').value) || 0,
-            d: parseFloat(row.querySelector('.sub-d').value) || 0,
-            e: parseFloat(row.querySelector('.sub-e').value) || 0
-        });
-    });
+    // 💡 선생님 HTML의 ID(manual-a)로 값을 읽어오도록 수정되었습니다.
+    const vA = parseFloat(document.getElementById('manual-a').value || 0);
+    const vB = parseFloat(document.getElementById('manual-b').value || 0);
+    const vC = parseFloat(document.getElementById('manual-c').value || 0);
+    const vD = parseFloat(document.getElementById('manual-d').value || 0);
+    const vE = parseFloat(document.getElementById('manual-e').value || 0);
+    if (!vA && !vB) { alert("산출된 분할점수를 입력해 주세요."); return; }
 
     const saveBtn = document.getElementById('btn-save-manual');
-    if (saveBtn) {
-        saveBtn.innerHTML = "⏳ 저장 중..."; 
-        saveBtn.disabled = true;
-    }
+    saveBtn.innerHTML = "⏳ 저장 중..."; saveBtn.disabled = true;
+
+    // 💡 (중요) 선생님의 영역명 클래스(.manual-domain-input)에 맞게 배열 추출
+    let currentStructure = [];
+    document.querySelectorAll('.manual-domain-input').forEach(dom => {
+        let subs = [];
+        document.querySelectorAll(`.manual-sub-input[data-parent-id="${dom.getAttribute('data-domain-id')}"]`).forEach(s => subs.push(s.value));
+        currentStructure.push({ domainName: dom.value, subElements: subs });
+    });
 
     try {
         const docRef = db.collection('user_projects').doc(currentProjectId);
-
-        // 🌟 [수정 1] 데이터 덮어쓰기 방지를 위한 트랜잭션 적용
-        await db.runTransaction(async (transaction) => {
-            const doc = await transaction.get(docRef);
-            if (!doc.exists) throw new Error("프로젝트가 존재하지 않습니다.");
-
+        const doc = await docRef.get();
+        if (doc.exists) {
             let projectData = doc.data();
-            let assessments = projectData.assessments || [];
+            let asm = projectData.assessments[currentEditingAssessmentIndex];
             const currentUserEmail = auth.currentUser.email;
 
-            // 3. 신규 생성(push)인지 기존 항목 수정인지 판별
-            let targetIndex = (typeof currentEditingManualIndex !== 'undefined' && currentEditingManualIndex !== -1) 
-                              ? currentEditingManualIndex 
-                              : currentEditingAssessmentIndex;
-            
-            let asm;
-            if (targetIndex !== -1 && assessments[targetIndex]) {
-                asm = assessments[targetIndex]; // 기존 데이터 덮어쓰기
-            } else {
-                asm = { type: 'manual', teacherManualScores: {}, teacherManualStructures: {}, subFactors: [] };
-                targetIndex = assessments.length;
-                assessments.push(asm);
-                
-                if (typeof currentEditingManualIndex !== 'undefined') currentEditingManualIndex = targetIndex;
-                if (typeof currentEditingAssessmentIndex !== 'undefined') currentEditingAssessmentIndex = targetIndex;
-            }
-
-            // 기본 정보 갱신
-            asm.name = name;
-            asm.weight = weight;
-            asm.subFactors = subFactors;
-
-            // 🌟 [수정 2] 영역명을 팀원에게 동기화하는 코드 (누락되었던 부분)
-            if (!asm.teacherManualStructures) asm.teacherManualStructures = {};
-            asm.teacherManualStructures[currentUserEmail] = subFactors.map(sf => ({
-                domainName: sf.name || '영역명 없음',
-                subElements: [ (sf.max || 0) + '점' ]
-            }));
-
-            // 4. 협업 스코어 기록
             if (!asm.teacherManualScores) asm.teacherManualScores = {};
-            asm.teacherManualScores[currentUserEmail] = { A:valA, B:valB, C:valC, D:valD, E:valE };
+            if (!asm.teacherManualStructures) asm.teacherManualStructures = {};
 
-            // 프로젝트 참여자 목록 정리
+            asm.teacherManualScores[currentUserEmail] = { A:vA, B:vB, C:vC, D:vD, E:vE };
+            asm.teacherManualStructures[currentUserEmail] = currentStructure;
+            if (currentStructure.length > 0) asm.manualStructure = currentStructure; // 마스터 구조 등록
+
             let allMembers = projectData.collaborators || [];
             if (projectData.ownerEmail && !allMembers.includes(projectData.ownerEmail)) allMembers.unshift(projectData.ownerEmail);
             if (!allMembers.includes(currentUserEmail)) allMembers.push(currentUserEmail);
             const collaborators = [...new Set(allMembers)];
 
-            let missingTeachers = [];
-            collaborators.forEach(email => {
-                if (!asm.teacherManualScores[email]) missingTeachers.push(email);
-            });
+            let isFinal = collaborators.every(email => asm.teacherManualScores[email]);
 
-            let isFinal = (missingTeachers.length === 0);
-
-            // 5. 블라인드 및 최종 반영비율 산출 로직
             if (isFinal) {
+                // 팀원 전체 완료 -> 평균 내어 목록 점수(scores)에 반영
                 let avg = { A:0, B:0, C:0, D:0, E:0 };
-                let cnt = collaborators.length;
-                
                 collaborators.forEach(email => {
-                    if(asm.teacherManualScores[email]) {
-                        avg.A += asm.teacherManualScores[email].A; 
-                        avg.B += asm.teacherManualScores[email].B;
-                        avg.C += asm.teacherManualScores[email].C; 
-                        avg.D += asm.teacherManualScores[email].D; 
-                        avg.E += asm.teacherManualScores[email].E;
-                    }
+                    avg.A += asm.teacherManualScores[email].A; avg.B += asm.teacherManualScores[email].B;
+                    avg.C += asm.teacherManualScores[email].C; avg.D += asm.teacherManualScores[email].D; avg.E += asm.teacherManualScores[email].E;
                 });
-                
-                asm.scores = { 
-                    A: (avg.A/cnt)*(weight/100), 
-                    B: (avg.B/cnt)*(weight/100), 
-                    C: (avg.C/cnt)*(weight/100), 
-                    D: (avg.D/cnt)*(weight/100), 
-                    E: (avg.E/cnt)*(weight/100) 
-                };
-                asm.savedAt = new Date();
+                const cnt = collaborators.length;
+                const weight = asm.weight || 100;
+                asm.scores = { A: (avg.A/cnt)*(weight/100), B: (avg.B/cnt)*(weight/100), C: (avg.C/cnt)*(weight/100), D: (avg.D/cnt)*(weight/100), E: (avg.E/cnt)*(weight/100) };
+                alert("✅ 수행평가 산출 완료! 평균 점수가 목록에 반영되었습니다.");
             } else {
+                // 아직 완료 안 함 -> 목록 점수 삭제(블라인드)
                 if(asm.scores) delete asm.scores;
-                asm.savedAt = new Date();
+                alert("✅ 내 점수가 저장되었습니다. 다른 교사가 완료하면 최종 반영됩니다.");
             }
 
-            transaction.update(docRef, { assessments: assessments });
-        });
-        
-        // 🌟 [수정 3] DB 저장이 무사히 끝난 직후 버튼을 '저장 완료'로 즉시 변경
-        if (saveBtn) {
-            saveBtn.innerHTML = "✅ 저장 완료";
-            saveBtn.style.background = "#10b981"; // 초록색으로 변경
+            await docRef.update({ assessments: projectData.assessments });
+            loadManualAssessmentWorkspace(); // 리로드
         }
-
-        alert("✅ 수행평가 내용이 안전하게 저장되었습니다.");
-        
-        if (typeof loadManualAssessmentWorkspace === 'function') {
-            loadManualAssessmentWorkspace();
-        } else {
-            document.getElementById('manual-assessment-modal').style.display = 'none';
-        }
-
     } catch(e) {
         alert("수행평가 저장 실패: " + e.message);
-        if (saveBtn) {
-            saveBtn.innerHTML = "💾 결과 저장하기"; 
-            saveBtn.style.background = "#ea580c"; // 에러 시 원래 색상 복구
-            saveBtn.disabled = false;
-        }
+        saveBtn.innerHTML = "💾 결과 저장하기"; saveBtn.disabled = false;
     }
 }
 
