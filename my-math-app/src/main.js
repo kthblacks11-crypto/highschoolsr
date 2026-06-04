@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.0.10"; 
+const CURRENT_VERSION = "1.0.11"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -4575,16 +4575,24 @@ function editManualAssessment(index) {
     });
 }
 
-// ✨ [수정] 수행평가 모달 닫을 때 내용 초기화
+// 2. 모달이 닫힐 때 CCTV를 끄고 화면을 청소하는 로직
 function closeManualAssessmentModal() { 
     document.getElementById('manual-assessment-modal').style.display = 'none';
     currentEditingManualIndex = -1; 
+    
+    // 입력창 청소
     document.querySelectorAll('#manual-assessment-modal input').forEach(input => {
         input.value = '';
         input.readOnly = false;
         input.style.background = 'white';
     }); 
-    document.getElementById('sub-factors-list').innerHTML = ''; // 서랍 초기화
+    document.getElementById('sub-factors-list').innerHTML = ''; 
+    
+    // 💡 [핵심] 창을 닫으면 쓸데없는 데이터 소모를 막기 위해 실시간 감시를 끕니다.
+    if (manualWorkspaceUnsubscribe) {
+        manualWorkspaceUnsubscribe();
+        manualWorkspaceUnsubscribe = null;
+    }
 }
 
 
@@ -6540,15 +6548,18 @@ function addSubFactorRow(savedData = null) {
     calculateSubFactorsTotal();
 }
 // =========================================================================
-// 🎯 [수행평가 전용] 협업, 블라인드 처리, 분할점수 저장 통합 로직
+// 🎯 [수정됨] 수행평가 실시간 동기화 (CCTV) 로직 추가
 // =========================================================================
 
-let isManualCompareMode = false; // 비교하기(토글) 상태 추적 변수
+// 실시간 감시를 켜고 끄기 위한 변수
+let manualWorkspaceUnsubscribe = null;
 
-// 1. 수행평가 작업 공간 초기화 (해당 평가를 클릭했을 때 실행해주세요)
+// 1. 수행평가 작업 공간 초기화 및 실시간 감시 시작
 async function loadManualAssessmentWorkspace() {
     if (!currentProjectId || currentEditingAssessmentIndex === -1) return;
+    
     try {
+        // [1단계] 내 입력창을 덮어쓰면 안 되므로, 내 점수는 '처음 1번만' 얌전하게 불러옵니다.
         const docRef = db.collection('user_projects').doc(currentProjectId);
         const doc = await docRef.get();
         if (!doc.exists) return;
@@ -6557,19 +6568,16 @@ async function loadManualAssessmentWorkspace() {
         const asm = projectData.assessments[currentEditingAssessmentIndex];
         const myEmail = auth.currentUser.email;
 
-        isManualCompareMode = false; // 진입 시 무조건 비교창 닫음(가림) 상태로 초기화
+        isManualCompareMode = false; // 진입 시 비교창 닫음
 
-        // 내 기존 점수 불러오기
-       // [1] 공간 초기화 시 내 점수 불러오기 부분 (ID 수정됨)
-       if (asm.teacherManualScores && asm.teacherManualScores[myEmail]) {
-        const mySaved = asm.teacherManualScores[myEmail];
-        document.getElementById('manual-a').value = mySaved.A; // 💡수정됨
-        document.getElementById('manual-b').value = mySaved.B; // 💡수정됨
-        document.getElementById('manual-c').value = mySaved.C; // 💡수정됨
-        document.getElementById('manual-d').value = mySaved.D; // 💡수정됨
-        document.getElementById('manual-e').value = mySaved.E; // 💡수정됨
-        // ... 생략
-            lockManualInputs(true); // 이미 저장했다면 잠금
+        if (asm.teacherManualScores && asm.teacherManualScores[myEmail]) {
+            const mySaved = asm.teacherManualScores[myEmail];
+            document.getElementById('manual-a').value = mySaved.A;
+            document.getElementById('manual-b').value = mySaved.B;
+            document.getElementById('manual-c').value = mySaved.C;
+            document.getElementById('manual-d').value = mySaved.D;
+            document.getElementById('manual-e').value = mySaved.E;
+            lockManualInputs(true);
             document.getElementById('btn-save-manual').innerHTML = "✅ 저장 완료";
             document.getElementById('btn-save-manual').style.background = "#10b981";
         } else {
@@ -6578,10 +6586,23 @@ async function loadManualAssessmentWorkspace() {
             document.getElementById('btn-save-manual').style.background = "#ea580c";
         }
 
-        renderPartnerManualData(asm, projectData);
-        updateManualTableStatus(asm, projectData);
+        // [2단계] 상대방이 저장할 때마다 좌측 하단 현황판과 우측 데이터를 '실시간'으로 업데이트합니다.
+        if (manualWorkspaceUnsubscribe) {
+            manualWorkspaceUnsubscribe(); // 기존 CCTV 끄기
+        }
+        
+        manualWorkspaceUnsubscribe = db.collection('user_projects').doc(currentProjectId).onSnapshot(snap => {
+            if (!snap.exists) return;
+            const rtData = snap.data();
+            const rtAsm = rtData.assessments[currentEditingAssessmentIndex];
+            
+            // 실시간으로 변하는 데이터를 화면에 즉시 렌더링!
+            renderPartnerManualData(rtAsm, rtData);
+            updateManualTableStatus(rtAsm, rtData);
+        });
+
     } catch (e) {
-        console.error("수행평가 로드 실패:", e);
+        console.error("수행평가 작업 공간 로드 실패:", e);
     }
 }
 
