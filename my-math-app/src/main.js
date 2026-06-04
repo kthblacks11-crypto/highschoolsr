@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.0.15"; 
+const CURRENT_VERSION = "1.0.16"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -6600,9 +6600,7 @@ function addSubFactorRow(savedData = null) {
     container.appendChild(row);
     calculateSubFactorsTotal();
 }
-// =========================================================================
-// 🎯 [수정됨] 수행평가 실시간 동기화 (CCTV) 로직 추가
-// =========================================================================
+
 
 // =========================================================================
 // 🎯 [수행평가 전용] 협업, 블라인드 처리, 분할점수 저장 통합 로직
@@ -6765,44 +6763,92 @@ async function toggleManualCompareMode() {
     }
 }
 
-// 5. 결과 저장 (최종 반영비율 계산 포함)
+// 5. 결과 저장 (새로 만들기 & 기존 수정 완벽 통합)
 async function saveManualAssessmentToProject() {
-    if (!currentProjectId || currentEditingAssessmentIndex === -1) return;
+    // 💡 1. 인덱스가 -1일 때 튕겨내는 방어막을 제거해야 '신규 생성'이 가능합니다.
+    if (!currentProjectId) {
+        alert("선택된 프로젝트가 없습니다. 폴더를 다시 열어주세요.");
+        return;
+    }
 
-    // 💡 선생님 HTML의 ID(manual-a)로 값을 읽어오도록 수정되었습니다.
-    const vA = parseFloat(document.getElementById('manual-a').value || 0);
-    const vB = parseFloat(document.getElementById('manual-b').value || 0);
-    const vC = parseFloat(document.getElementById('manual-c').value || 0);
-    const vD = parseFloat(document.getElementById('manual-d').value || 0);
-    const vE = parseFloat(document.getElementById('manual-e').value || 0);
-    if (!vA && !vB) { alert("산출된 분할점수를 입력해 주세요."); return; }
+    // 💡 2. 평가명과 반영 비율을 가장 먼저 확인합니다.
+    const name = document.getElementById('manual-assess-name').value.trim();
+    const weight = parseFloat(document.getElementById('manual-assess-weight').value) || 0;
+    
+    if (!name) {
+        alert("수행평가 이름(예: 포트폴리오 평가)을 입력해 주세요.");
+        return;
+    }
+
+    // 💡 3. 괄호를 밖으로 빼서 빈칸/문자 입력 시 화면이 멈추는(NaN 에러) 현상을 원천 차단했습니다.
+    const vA = parseFloat(document.getElementById('manual-a').value) || 0;
+    const vB = parseFloat(document.getElementById('manual-b').value) || 0;
+    const vC = parseFloat(document.getElementById('manual-c').value) || 0;
+    const vD = parseFloat(document.getElementById('manual-d').value) || 0;
+    const vE = parseFloat(document.getElementById('manual-e').value) || 0;
+
+    if (vA === 0 && vB === 0 && vC === 0 && vD === 0 && vE === 0) { 
+        alert("산출된 최종 분할점수를 하나 이상 입력해 주세요."); 
+        return; 
+    }
 
     const saveBtn = document.getElementById('btn-save-manual');
-    saveBtn.innerHTML = "⏳ 저장 중..."; saveBtn.disabled = true;
+    const originalBtnText = saveBtn.innerHTML;
+    saveBtn.innerHTML = "⏳ 저장 중..."; 
+    saveBtn.disabled = true;
 
-    // 💡 (중요) 선생님의 영역명 클래스(.manual-domain-input)에 맞게 배열 추출
-    let currentStructure = [];
-    document.querySelectorAll('.manual-domain-input').forEach(dom => {
-        let subs = [];
-        document.querySelectorAll(`.manual-sub-input[data-parent-id="${dom.getAttribute('data-domain-id')}"]`).forEach(s => subs.push(s.value));
-        currentStructure.push({ domainName: dom.value, subElements: subs });
+    // 💡 4. 선생님이 만드신 하위 평가요소(가,나,다) 줄의 내용들을 배열로 모아줍니다.
+    let subFactors = [];
+    document.querySelectorAll('.sub-factor-row').forEach(row => {
+        subFactors.push({
+            name: row.querySelector('.sub-factor-name').value,
+            max: parseFloat(row.querySelector('.sub-factor-max').value) || 0,
+            a: parseFloat(row.querySelector('.sub-a').value) || 0,
+            b: parseFloat(row.querySelector('.sub-b').value) || 0,
+            c: parseFloat(row.querySelector('.sub-c').value) || 0,
+            d: parseFloat(row.querySelector('.sub-d').value) || 0,
+            e: parseFloat(row.querySelector('.sub-e').value) || 0
+        });
     });
 
     try {
         const docRef = db.collection('user_projects').doc(currentProjectId);
         const doc = await docRef.get();
+        
         if (doc.exists) {
             let projectData = doc.data();
-            let asm = projectData.assessments[currentEditingAssessmentIndex];
+            let assessments = projectData.assessments || [];
             const currentUserEmail = auth.currentUser.email;
 
+            let asm;
+            
+            // 💡 5. 핵심 로직: 신규 생성이면 배열에 새로 밀어넣고(-1), 기존 것이면 덮어씁니다!
+            if (currentEditingAssessmentIndex === -1) {
+                // [신규 생성 모드]
+                asm = {
+                    name: name,
+                    weight: weight,
+                    type: 'manual',
+                    subFactors: subFactors,
+                    teacherManualScores: {},
+                    savedAt: new Date()
+                };
+                assessments.push(asm);
+                // 방금 새로 만든 요소의 번호(배열의 맨 끝)로 인덱스를 업데이트 해줍니다.
+                currentEditingAssessmentIndex = assessments.length - 1; 
+            } else {
+                // [기존 수정 모드]
+                asm = assessments[currentEditingAssessmentIndex];
+                asm.name = name;
+                asm.weight = weight;
+                asm.subFactors = subFactors; 
+            }
+
+            // 내 점수 기록하기
             if (!asm.teacherManualScores) asm.teacherManualScores = {};
-            if (!asm.teacherManualStructures) asm.teacherManualStructures = {};
-
             asm.teacherManualScores[currentUserEmail] = { A:vA, B:vB, C:vC, D:vD, E:vE };
-            asm.teacherManualStructures[currentUserEmail] = currentStructure;
-            if (currentStructure.length > 0) asm.manualStructure = currentStructure; // 마스터 구조 등록
 
+            // 협업 완료 현황 확인
             let allMembers = projectData.collaborators || [];
             if (projectData.ownerEmail && !allMembers.includes(projectData.ownerEmail)) allMembers.unshift(projectData.ownerEmail);
             if (!allMembers.includes(currentUserEmail)) allMembers.push(currentUserEmail);
@@ -6810,29 +6856,46 @@ async function saveManualAssessmentToProject() {
 
             let isFinal = collaborators.every(email => asm.teacherManualScores[email]);
 
+            // 모두 입력했다면 최종 점수 합산 반영
             if (isFinal) {
-                // 팀원 전체 완료 -> 평균 내어 목록 점수(scores)에 반영
                 let avg = { A:0, B:0, C:0, D:0, E:0 };
                 collaborators.forEach(email => {
-                    avg.A += asm.teacherManualScores[email].A; avg.B += asm.teacherManualScores[email].B;
-                    avg.C += asm.teacherManualScores[email].C; avg.D += asm.teacherManualScores[email].D; avg.E += asm.teacherManualScores[email].E;
+                    avg.A += asm.teacherManualScores[email].A; 
+                    avg.B += asm.teacherManualScores[email].B;
+                    avg.C += asm.teacherManualScores[email].C; 
+                    avg.D += asm.teacherManualScores[email].D; 
+                    avg.E += asm.teacherManualScores[email].E;
                 });
                 const cnt = collaborators.length;
-                const weight = asm.weight || 100;
-                asm.scores = { A: (avg.A/cnt)*(weight/100), B: (avg.B/cnt)*(weight/100), C: (avg.C/cnt)*(weight/100), D: (avg.D/cnt)*(weight/100), E: (avg.E/cnt)*(weight/100) };
+                const finalWeight = asm.weight || 100;
+                asm.scores = { 
+                    A: (avg.A/cnt)*(finalWeight/100), 
+                    B: (avg.B/cnt)*(finalWeight/100), 
+                    C: (avg.C/cnt)*(finalWeight/100), 
+                    D: (avg.D/cnt)*(finalWeight/100), 
+                    E: (avg.E/cnt)*(finalWeight/100) 
+                };
                 alert("✅ 수행평가 산출 완료! 평균 점수가 목록에 반영되었습니다.");
             } else {
-                // 아직 완료 안 함 -> 목록 점수 삭제(블라인드)
                 if(asm.scores) delete asm.scores;
-                alert("✅ 내 점수가 저장되었습니다. 다른 교사가 완료하면 최종 반영됩니다.");
+                alert("✅ 내 점수가 저장되었습니다. 다른 교사가 완료하면 최종 산출됩니다.");
             }
 
-            await docRef.update({ assessments: projectData.assessments });
-            loadManualAssessmentWorkspace(); // 리로드
+            // DB에 최종 덮어쓰기!
+            await docRef.update({ assessments: assessments });
+            
+            saveBtn.innerHTML = "✅ 저장 완료";
+            saveBtn.style.background = "#10b981";
+            
+            // 뒤에 깔려있는 메인 목록과 현재 수행평가 작업판 모두 갱신 (선생님이 찾으시던 마지막 부분입니다!)
+            if(typeof loadProjectDetails === 'function') loadProjectDetails(); 
+            loadManualAssessmentWorkspace(); 
         }
     } catch(e) {
-        alert("수행평가 저장 실패: " + e.message);
-        saveBtn.innerHTML = "💾 결과 저장하기"; saveBtn.disabled = false;
+        console.error("수행평가 저장 에러:", e);
+        alert("저장 실패: " + e.message);
+        saveBtn.innerHTML = originalBtnText; 
+        saveBtn.disabled = false;
     }
 }
 
