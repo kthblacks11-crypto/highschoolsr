@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.0.14"; 
+const CURRENT_VERSION = "1.0.15"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -6824,28 +6824,31 @@ async function saveManualAssessmentToProject() {
 
     try {
         const docRef = db.collection('user_projects').doc(currentProjectId);
-        const doc = await docRef.get();
-        
-        if (doc.exists) {
+
+        // 🌟 [수정 1] 데이터 덮어쓰기 방지를 위한 트랜잭션 적용
+        await db.runTransaction(async (transaction) => {
+            const doc = await transaction.get(docRef);
+            if (!doc.exists) throw new Error("프로젝트가 존재하지 않습니다.");
+
             let projectData = doc.data();
             let assessments = projectData.assessments || [];
             const currentUserEmail = auth.currentUser.email;
 
-            // 🌟 [버그 수정] 다른 인덱스를 참조하지 않고, 오직 수행평가 고유 인덱스만 신뢰하도록 수정
-            let targetIndex = currentEditingManualIndex;
+            // 3. 신규 생성(push)인지 기존 항목 수정인지 판별
+            let targetIndex = (typeof currentEditingManualIndex !== 'undefined' && currentEditingManualIndex !== -1) 
+                              ? currentEditingManualIndex 
+                              : currentEditingAssessmentIndex;
             
             let asm;
             if (targetIndex !== -1 && assessments[targetIndex]) {
                 asm = assessments[targetIndex]; // 기존 데이터 덮어쓰기
             } else {
-                // 새로 만들기일 경우 구조 초기화 후 push
-                asm = { type: 'manual', teacherManualScores: {}, subFactors: [] };
+                asm = { type: 'manual', teacherManualScores: {}, teacherManualStructures: {}, subFactors: [] };
                 targetIndex = assessments.length;
                 assessments.push(asm);
                 
-                // 전역 변수 동기화
-                currentEditingManualIndex = targetIndex;
-                currentEditingAssessmentIndex = targetIndex;
+                if (typeof currentEditingManualIndex !== 'undefined') currentEditingManualIndex = targetIndex;
+                if (typeof currentEditingAssessmentIndex !== 'undefined') currentEditingAssessmentIndex = targetIndex;
             }
 
             // 기본 정보 갱신
@@ -6853,17 +6856,23 @@ async function saveManualAssessmentToProject() {
             asm.weight = weight;
             asm.subFactors = subFactors;
 
+            // 🌟 [수정 2] 영역명을 팀원에게 동기화하는 코드 (누락되었던 부분)
+            if (!asm.teacherManualStructures) asm.teacherManualStructures = {};
+            asm.teacherManualStructures[currentUserEmail] = subFactors.map(sf => ({
+                domainName: sf.name || '영역명 없음',
+                subElements: [ (sf.max || 0) + '점' ]
+            }));
+
             // 4. 협업 스코어 기록
             if (!asm.teacherManualScores) asm.teacherManualScores = {};
             asm.teacherManualScores[currentUserEmail] = { A:valA, B:valB, C:valC, D:valD, E:valE };
 
-            // 프로젝트 참여자 목록 정리 및 👻 유령 멤버 완벽 차단!
+            // 프로젝트 참여자 목록 정리
             let allMembers = projectData.collaborators || [];
             if (projectData.ownerEmail && !allMembers.includes(projectData.ownerEmail)) allMembers.unshift(projectData.ownerEmail);
             if (!allMembers.includes(currentUserEmail)) allMembers.push(currentUserEmail);
-            const collaborators = [...new Set(allMembers)].filter(Boolean); // 👈 핵심 버그 픽스 구역
+            const collaborators = [...new Set(allMembers)];
 
-            // 모두 완료했는지 검사
             let missingTeachers = [];
             collaborators.forEach(email => {
                 if (!asm.teacherManualScores[email]) missingTeachers.push(email);
@@ -6876,7 +6885,6 @@ async function saveManualAssessmentToProject() {
                 let avg = { A:0, B:0, C:0, D:0, E:0 };
                 let cnt = collaborators.length;
                 
-                // 🛡️ 유령 팀원 차단 방어막 적용 (현재 팀원 점수만 더하기)
                 collaborators.forEach(email => {
                     if(asm.teacherManualScores[email]) {
                         avg.A += asm.teacherManualScores[email].A; 
@@ -6895,32 +6903,38 @@ async function saveManualAssessmentToProject() {
                     E: (avg.E/cnt)*(weight/100) 
                 };
                 asm.savedAt = new Date();
-                alert("✅ 수행평가 산출 완료! 평균 점수가 목록에 반영되었습니다.");
             } else {
                 if(asm.scores) delete asm.scores;
                 asm.savedAt = new Date();
-                alert("✅ 내 점수가 저장되었습니다. 다른 교사가 완료하면 최종 반영됩니다.");
             }
 
-            await docRef.update({ assessments: assessments });
-            
-            // 저장 완료 후 현황판 리로드
-            if (typeof loadManualAssessmentWorkspace === 'function') {
-                loadManualAssessmentWorkspace();
-            } else {
-                // 에러 대비 방어 코드
-                alert("저장 성공! 창을 닫습니다.");
-                document.getElementById('manual-assessment-modal').style.display = 'none';
-            }
+            transaction.update(docRef, { assessments: assessments });
+        });
+        
+        // 🌟 [수정 3] DB 저장이 무사히 끝난 직후 버튼을 '저장 완료'로 즉시 변경
+        if (saveBtn) {
+            saveBtn.innerHTML = "✅ 저장 완료";
+            saveBtn.style.background = "#10b981"; // 초록색으로 변경
         }
+
+        alert("✅ 수행평가 내용이 안전하게 저장되었습니다.");
+        
+        if (typeof loadManualAssessmentWorkspace === 'function') {
+            loadManualAssessmentWorkspace();
+        } else {
+            document.getElementById('manual-assessment-modal').style.display = 'none';
+        }
+
     } catch(e) {
         alert("수행평가 저장 실패: " + e.message);
         if (saveBtn) {
             saveBtn.innerHTML = "💾 결과 저장하기"; 
+            saveBtn.style.background = "#ea580c"; // 에러 시 원래 색상 복구
             saveBtn.disabled = false;
         }
     }
 }
+
 // 6. 수정하기
 function enableManualEditMode() {
     lockManualInputs(false);
