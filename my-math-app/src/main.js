@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.0.13"; 
+const CURRENT_VERSION = "1.0.14"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -4446,14 +4446,26 @@ function openManualAssessmentModal() {
     document.getElementById('manual-assess-name').value = '';
     document.getElementById('manual-assess-weight').value = '';
     // ✨ 입력하지 않아도 0점이 되지 않도록 실제 값을 꽂아줍니다.
-    document.getElementById('manual-a').value = '90';
-    document.getElementById('manual-b').value = '80';
-    document.getElementById('manual-c').value = '70';
-    document.getElementById('manual-d').value = '60';
-    document.getElementById('manual-e').value = '40';
+    document.getElementById('manual-a').value = '';
+    document.getElementById('manual-b').value = '';
+    document.getElementById('manual-c').value = '';
+    document.getElementById('manual-d').value = '';
+    document.getElementById('manual-e').value = '';
     
-    document.getElementById('sub-factors-list').innerHTML = '';
+    document.getElementById('sub-factors-list').innerHTML = ''; 
+    
+    // 🌟 [버그 수정 1] 새 평가를 만들 때 기존 인덱스 완벽 초기화 (덮어쓰기 방지)
     currentEditingManualIndex = -1; 
+    currentEditingAssessmentIndex = -1;
+
+    // 🌟 [버그 수정 2] 창을 열 때 무조건 저장 버튼 잠금 해제
+    const saveBtn = document.getElementById('btn-save-manual');
+    if (saveBtn) {
+        saveBtn.innerHTML = "💾 결과 저장하기";
+        saveBtn.style.background = "#ea580c";
+        saveBtn.disabled = false;
+    }
+
     document.getElementById('manual-assessment-modal').style.display = 'flex'; 
 }
 
@@ -6596,11 +6608,11 @@ function addSubFactorRow(savedData = null) {
 let manualWorkspaceUnsubscribe = null;
 
 // 1. 수행평가 작업 공간 초기화 및 실시간 감시 시작
+// 1. 수행평가 작업 공간 초기화 및 실시간 감시 시작
 async function loadManualAssessmentWorkspace() {
     if (!currentProjectId || currentEditingAssessmentIndex === -1) return;
     
     try {
-        // [1단계] 내 입력창을 덮어쓰면 안 되므로, 내 점수는 '처음 1번만' 얌전하게 불러옵니다.
         const docRef = db.collection('user_projects').doc(currentProjectId);
         const doc = await docRef.get();
         if (!doc.exists) return;
@@ -6611,6 +6623,8 @@ async function loadManualAssessmentWorkspace() {
 
         isManualCompareMode = false; // 진입 시 비교창 닫음
 
+        const saveBtn = document.getElementById('btn-save-manual'); // 버튼 요소 가져오기
+
         if (asm.teacherManualScores && asm.teacherManualScores[myEmail]) {
             const mySaved = asm.teacherManualScores[myEmail];
             document.getElementById('manual-a').value = mySaved.A;
@@ -6619,15 +6633,24 @@ async function loadManualAssessmentWorkspace() {
             document.getElementById('manual-d').value = mySaved.D;
             document.getElementById('manual-e').value = mySaved.E;
             lockManualInputs(true);
-            document.getElementById('btn-save-manual').innerHTML = "✅ 저장 완료";
-            document.getElementById('btn-save-manual').style.background = "#10b981";
+            
+            // 🌟 [버그 수정 3] 이미 저장된 상태라면 확실하게 버튼 비활성화
+            if (saveBtn) {
+                saveBtn.innerHTML = "✅ 저장 완료";
+                saveBtn.style.background = "#10b981";
+                saveBtn.disabled = true; 
+            }
         } else {
             lockManualInputs(false);
-            document.getElementById('btn-save-manual').innerHTML = "💾 결과 저장하기";
-            document.getElementById('btn-save-manual').style.background = "#ea580c";
+            
+            // 🌟 [버그 수정 4] 아직 저장 전이라면 확실하게 버튼 활성화
+            if (saveBtn) {
+                saveBtn.innerHTML = "💾 결과 저장하기";
+                saveBtn.style.background = "#ea580c";
+                saveBtn.disabled = false; 
+            }
         }
 
-        // [2단계] 상대방이 저장할 때마다 좌측 하단 현황판과 우측 데이터를 '실시간'으로 업데이트합니다.
         if (manualWorkspaceUnsubscribe) {
             manualWorkspaceUnsubscribe(); // 기존 CCTV 끄기
         }
@@ -6637,7 +6660,6 @@ async function loadManualAssessmentWorkspace() {
             const rtData = snap.data();
             const rtAsm = rtData.assessments[currentEditingAssessmentIndex];
             
-            // 실시간으로 변하는 데이터를 화면에 즉시 렌더링!
             renderPartnerManualData(rtAsm, rtData);
             updateManualTableStatus(rtAsm, rtData);
         });
@@ -6764,7 +6786,6 @@ async function toggleManualCompareMode() {
     }
 }
 
-// 5. 결과 저장 (최종 반영비율 계산 포함)
 // 5. 결과 저장 (선생님의 하위요소 수집 + 협업 블라인드 로직 완벽 결합)
 async function saveManualAssessmentToProject() {
     // 1. 기본 정보 수집
@@ -6796,7 +6817,10 @@ async function saveManualAssessmentToProject() {
     });
 
     const saveBtn = document.getElementById('btn-save-manual');
-    saveBtn.innerHTML = "⏳ 저장 중..."; saveBtn.disabled = true;
+    if (saveBtn) {
+        saveBtn.innerHTML = "⏳ 저장 중..."; 
+        saveBtn.disabled = true;
+    }
 
     try {
         const docRef = db.collection('user_projects').doc(currentProjectId);
@@ -6807,10 +6831,8 @@ async function saveManualAssessmentToProject() {
             let assessments = projectData.assessments || [];
             const currentUserEmail = auth.currentUser.email;
 
-            // 3. 신규 생성(push)인지 기존 항목 수정인지 판별
-            let targetIndex = (typeof currentEditingManualIndex !== 'undefined' && currentEditingManualIndex !== -1) 
-                              ? currentEditingManualIndex 
-                              : currentEditingAssessmentIndex;
+            // 🌟 [버그 수정] 다른 인덱스를 참조하지 않고, 오직 수행평가 고유 인덱스만 신뢰하도록 수정
+            let targetIndex = currentEditingManualIndex;
             
             let asm;
             if (targetIndex !== -1 && assessments[targetIndex]) {
@@ -6822,8 +6844,8 @@ async function saveManualAssessmentToProject() {
                 assessments.push(asm);
                 
                 // 전역 변수 동기화
-                if (typeof currentEditingManualIndex !== 'undefined') currentEditingManualIndex = targetIndex;
-                if (typeof currentEditingAssessmentIndex !== 'undefined') currentEditingAssessmentIndex = targetIndex;
+                currentEditingManualIndex = targetIndex;
+                currentEditingAssessmentIndex = targetIndex;
             }
 
             // 기본 정보 갱신
@@ -6893,8 +6915,10 @@ async function saveManualAssessmentToProject() {
         }
     } catch(e) {
         alert("수행평가 저장 실패: " + e.message);
-        saveBtn.innerHTML = "💾 최종 저장하기"; 
-        saveBtn.disabled = false;
+        if (saveBtn) {
+            saveBtn.innerHTML = "💾 결과 저장하기"; 
+            saveBtn.disabled = false;
+        }
     }
 }
 // 6. 수정하기
