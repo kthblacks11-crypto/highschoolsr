@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.0.11"; 
+const CURRENT_VERSION = "1.0.12"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -71,6 +71,9 @@ function startAppVersionCheck() {
       .then(doc => {
           if (doc.exists) {
               const serverVersion = doc.data().latest_version;
+
+              // 💡 [여기에 추가!] 이미 새로고침을 시도한 버전이라면, 무한루프에 빠지지 않게 여기서 즉시 멈춤!
+              if (sessionStorage.getItem('update_tried_for_' + serverVersion)) return;
               
               if (serverVersion && CURRENT_VERSION !== serverVersion) {
                   const currentHour = new Date().getHours();
@@ -3206,8 +3209,8 @@ function renderGroupedCutScoreTable(mergedData) {
                 borderStyle = 'border: 2px solid #eab308;'; 
             }
             
-            return `<input type="number" class="pct-${lvl} pct-input" value="${isEmpty ? '' : val}" ${disabledAttr} oninput="markAsModified(this); calculateTotalCutScores()" style="width: 60px; padding: 4px; text-align: center; border-radius: 4px; font-weight: bold; color: #1e293b; ${bgStyle} ${borderStyle} transition: 0.2s;">`;
-        };
+            return `<input type="number" class="pct-${lvl} pct-input" value="" ${disabledAttr} oninput="markAsModified(this); calculateTotalCutScores()" style="width: 60px; padding: 4px; text-align: center; border-radius: 4px; font-weight: bold; color: #1e293b; ${bgStyle} ${borderStyle} transition: 0.2s;">`;
+        };  
 
         html += `
         <tr style="${rowStyle}" class="cut-score-row" data-score="${g.scoreSum}" data-count="1">
@@ -3295,70 +3298,6 @@ function renderFinalScoreBoxes(A, B, C, D, E, totalScore) {
 
     const aiLoading = document.getElementById('final-ai-loading');
     if(aiLoading) aiLoading.style.display = 'none';
-}
-
-
-
-// 길 2 전용: AI 분석 데이터를 M자 방식(배점+수준)으로 묶어서 렌더링
-function renderFinalCutScoreTable(aiResults) {
-    document.getElementById('final-result-container').style.display = 'block';
-    document.getElementById('final-ai-loading').style.display = 'none';
-    
-    // 테이블 헤더를 M자 방식에 맞게 동적 변경
-    const tableHead = document.querySelector('#cut-score-result-table').previousElementSibling;
-    if (tableHead) {
-        tableHead.innerHTML = `<tr><th>해당 문항 (개수)</th><th>배점</th><th>AI 판정 수준</th><th>A (%)</th><th>B (%)</th><th>C (%)</th><th>D (%)</th><th>E (%)</th></tr>`;
-        tableHead.parentElement.style.display = 'block'; // 길 1에서 숨겨졌을 수 있으므로 다시 표시
-    }
-
-    const tbody = document.getElementById('cut-score-result-table');
-    
-    // 배점(score)과 성취수준(level)을 기준으로 문항 그룹화 (M자 방식 핵심)
-    const groups = {};
-    
-    finalExamQuestions.forEach(q => {
-        const scoreObj = parsedScores.find(s => s.num === q.num) || { score: 0 };
-        const ai = aiResults.find(a => a.num === q.num) || { level: 'C', pct_A: 90, pct_B: 70, pct_C: 50, pct_D: 30, pct_E: 10 };
-        
-        const key = `${scoreObj.score}_${ai.level}`;
-        if (!groups[key]) {
-            groups[key] = {
-                score: scoreObj.score,
-                level: ai.level,
-                count: 0,
-                qNums: [],
-                basePct: { A: ai.pct_A, B: ai.pct_B, C: ai.pct_C, D: ai.pct_D, E: ai.pct_E }
-            };
-        }
-        groups[key].count++;
-        groups[key].qNums.push(q.num);
-    });
-
-    let html = '';
-    // 배점 내림차순, 성취수준 오름차순으로 정렬하여 표시
-    Object.values(groups).sort((a,b) => b.score - a.score || a.level.localeCompare(b.level)).forEach(g => {
-        const levelColor = g.level === 'A' || g.level === 'B' ? '#ef4444' : g.level === 'C' ? '#eab308' : '#22c55e';
-        html += `
-        <tr style="border-bottom: 1px solid #e2e8f0;" class="cut-score-row" data-score="${g.score}" data-count="${g.count}">
-            <td style="text-align: left;">
-                <div style="font-size:0.8rem; color:#64748b; margin-bottom: 4px; word-break: keep-all;">${g.qNums.join(', ')}번</div>
-                <strong style="color: var(--primary);">총 ${g.count}문항</strong>
-            </td>
-            <td style="color: #ea580c; font-weight: bold; font-size: 1.1rem;">${g.score}</td>
-            <td>
-                <span style="background:${levelColor}; color:white; padding: 4px 10px; border-radius: 4px; font-weight: bold;">${g.level}</span>
-            </td>
-            <td><input type="number" class="pct-A score-input" value="${g.basePct.A}" oninput="markAsModified(this); calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-B score-input" value="${g.basePct.B}" oninput="markAsModified(this); calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-C score-input" value="${g.basePct.C}" oninput="markAsModified(this); calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-D score-input" value="${g.basePct.D}" oninput="markAsModified(this); calculateTotalCutScores()"></td>
-            <td><input type="number" class="pct-E score-input" value="${g.basePct.E}" oninput="markAsModified(this); calculateTotalCutScores()"></td>
-        </tr>
-        `;
-    });
-
-    tbody.innerHTML = html;
-    calculateTotalCutScores();
 }
 
 
@@ -4776,11 +4715,20 @@ async function resetMCutScores() {
     document.querySelectorAll('.pct-input').forEach(input => {
         input.value = ''; 
         input.style.backgroundImage = 'none'; 
-        input.style.border = '1px solid #cbd5e1'; 
         input.disabled = false; 
-        input.style.background = "white";
+
+        // 🌟 [핵심 수정] 기존의 배경색이 노란색(fef08a 계열)인지 확인하고, 노란색이 아닐 때만 흰색으로 바꿉니다!
+        const currentColor = input.style.backgroundColor;
+        if (currentColor === 'rgb(254, 240, 138)' || currentColor.includes('#fef08a')) {
+            // 노란색 칸은 뼈대이므로 배경색과 테두리를 유지합니다.
+            input.style.border = '2px solid #eab308'; 
+        } else {
+            // 일반 칸들만 다시 흰색으로 깔끔하게 지웁니다.
+            input.style.background = "white";
+            input.style.border = '1px solid #cbd5e1'; 
+        }
     });
-    calculateTotalCutScores(); 
+    calculateTotalCutScores();
     
     // 2. 결과 저장하기 버튼을 다시 '빨간색' 기본 상태로 복귀
     const saveBtn = document.getElementById('btn-save-m');
@@ -5233,7 +5181,6 @@ async function renderSavedAssessments() {
                         <div style="font-size: 0.8rem; color: #64748b; margin-top: 4px; padding-left: 45px;">${date}</div>
                     </div>
                     <div style="display:flex; gap:6px;">
-                        <button onclick="loadSingleAssessment('${doc.id}')" style="background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; padding:6px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">열기</button>
                         <button onclick="deleteAssessment('${doc.id}')" style="background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; padding:6px 12px; border-radius:4px; cursor:pointer;">삭제</button>
                     </div>
                 </li>
@@ -5326,20 +5273,99 @@ async function inviteCollaborator(projectId, event) {
         alert("초대 중 오류가 발생했습니다: " + e.message);
     }
 }
-// 🚫 잘못 초대된 팀원 삭제 함수 (팝업 간소화)
+// 🚫 [수정됨] 팀원 강퇴 시 즉각적인 점수 재계산 및 유령 데이터 청소 기능 추가
 async function kickFromProject(projectId, targetEmail, event) {
     event.stopPropagation(); 
     
-    // 이메일을 직접 칠 필요 없이, 클릭한 X 버튼의 대상 멤버를 재차 묻기만 합니다.
-    if (!confirm(`[${targetEmail.split('@')[0]}] 선생님을 이 프로젝트에서 정말로 제외하시겠습니까?`)) return;
+    if (!confirm(`[${targetEmail.split('@')[0]}] 선생님을 이 프로젝트에서 정말로 제외하시겠습니까?\n제외 즉시 남은 인원 기준으로 최종 점수가 자동 재계산됩니다.`)) return;
 
     try {
-        await db.collection('user_projects').doc(projectId).update({
-            collaborators: firebase.firestore.FieldValue.arrayRemove(targetEmail)
+        const docRef = db.collection('user_projects').doc(projectId);
+        
+        // 🔒 마법의 자물쇠(트랜잭션)를 걸어 DB를 안전하게 통째로 수술합니다.
+        await db.runTransaction(async (transaction) => {
+            const doc = await transaction.get(docRef);
+            if (!doc.exists) throw new Error("프로젝트를 찾을 수 없습니다.");
+            
+            let projectData = doc.data();
+            let collabs = projectData.collaborators || [];
+            
+            // 1. 팀원 목록에서 해당 이메일 삭제
+            collabs = collabs.filter(email => email !== targetEmail);
+            
+            let assessments = projectData.assessments || [];
+            let ownerEmail = projectData.ownerEmail;
+            
+            // 2. 남은 '진짜' 유효 멤버 명단 만들기 (방장 + 남은 팀원)
+            let activeMembers = [...collabs];
+            if (ownerEmail && !activeMembers.includes(ownerEmail)) activeMembers.unshift(ownerEmail);
+            const uniqueMembers = [...new Set(activeMembers)];
+
+            // 3. 지필/수행평가 폴더를 싹 다 뒤지면서 점수 재계산 및 찌꺼기 청소
+            assessments = assessments.map(asm => {
+                
+                // 🧹 [청소] 쫓겨난 팀원이 입력해둔 찌꺼기 점수와 판정 내역을 완전히 삭제합니다.
+                if (asm.teacherCutScores && asm.teacherCutScores[targetEmail]) delete asm.teacherCutScores[targetEmail];
+                if (asm.teacherMTable && asm.teacherMTable[targetEmail]) delete asm.teacherMTable[targetEmail];
+                if (asm.teacherInputs && asm.teacherInputs[targetEmail]) delete asm.teacherInputs[targetEmail];
+                if (asm.readyStatus && asm.readyStatus[targetEmail]) delete asm.readyStatus[targetEmail];
+                if (asm.teacherManualScores && asm.teacherManualScores[targetEmail]) delete asm.teacherManualScores[targetEmail];
+                if (asm.teacherManualStructures && asm.teacherManualStructures[targetEmail]) delete asm.teacherManualStructures[targetEmail];
+
+                // 🔍 [검사] 남은 사람들이 모두 산출을 '완료'했는지 확인
+                let missing = [];
+                uniqueMembers.forEach(email => {
+                    if (asm.type === 'written') {
+                        if (!asm.teacherCutScores || !asm.teacherCutScores[email]) missing.push(email);
+                    } else { // 수행평가일 때
+                        if (!asm.teacherManualScores || !asm.teacherManualScores[email]) missing.push(email);
+                    }
+                });
+
+                // ✨ [핵심: 점수 복구] 남은 인원이 모두 완료 상태라면 최종 점수 즉시 부활!
+                if (missing.length === 0 && uniqueMembers.length > 0) {
+                    let avg = { A: 0, B: 0, C: 0, D: 0, E: 0 };
+                    let cnt = uniqueMembers.length;
+                    let weight = asm.weight || 0;
+
+                    // 남은 사람들의 점수만 모아서 더하기
+                    uniqueMembers.forEach(email => {
+                        let scoresObj = asm.type === 'written' ? asm.teacherCutScores[email] : asm.teacherManualScores[email];
+                        if (scoresObj) {
+                            avg.A += scoresObj.A; avg.B += scoresObj.B;
+                            avg.C += scoresObj.C; avg.D += scoresObj.D; avg.E += scoresObj.E;
+                        }
+                    });
+
+                    // 평균을 내서 비율을 곱한 진짜 최종 점수를 asm.scores에 꽂아 넣음!
+                    asm.scores = {
+                        A: (avg.A / cnt) * (weight / 100),
+                        B: (avg.B / cnt) * (weight / 100),
+                        C: (avg.C / cnt) * (weight / 100),
+                        D: (avg.D / cnt) * (weight / 100),
+                        E: (avg.E / cnt) * (weight / 100)
+                    };
+                } else {
+                    // 남은 사람 중에도 아직 완료를 안 한 사람이 있다면 여전히 가려둡니다.
+                    if (asm.scores) delete asm.scores;
+                }
+
+                return asm;
+            });
+
+            // 4. DB에 완벽히 정제된 데이터를 덮어쓰기
+            transaction.update(docRef, {
+                collaborators: collabs,
+                assessments: assessments
+            });
         });
-        loadProjects(); // 화면 바로 새로고침
+        
+        // 5. 완료 알림 및 대시보드 갱신
+        alert("팀원이 제외되었으며, 최종 컷오프 점수가 남은 인원에 맞춰 완벽하게 재계산되었습니다.");
+        loadProjects(); // 화면 1초 만에 새로고침!
+        
     } catch (error) {
-        alert("삭제에 실패했습니다: " + error.message);
+        alert("팀원 제외 및 점수 재계산에 실패했습니다: " + error.message);
     }
 }
 
