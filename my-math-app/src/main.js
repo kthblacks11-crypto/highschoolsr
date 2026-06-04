@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.0.12"; 
+const CURRENT_VERSION = "1.0.13"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -5296,14 +5296,29 @@ async function kickFromProject(projectId, targetEmail, event) {
             let assessments = projectData.assessments || [];
             let ownerEmail = projectData.ownerEmail;
             
-            // 2. 남은 '진짜' 유효 멤버 명단 만들기 (방장 + 남은 팀원)
+            // 2. 남은 '진짜' 유효 멤버 명단 만들기 (방장 + 남은 팀원) + 👻 유령 멤버 완벽 차단!
             let activeMembers = [...collabs];
             if (ownerEmail && !activeMembers.includes(ownerEmail)) activeMembers.unshift(ownerEmail);
-            const uniqueMembers = [...new Set(activeMembers)];
+            const uniqueMembers = [...new Set(activeMembers)].filter(Boolean); // 👈 빈 값(undefined) 완벽 차단
 
             // 3. 지필/수행평가 폴더를 싹 다 뒤지면서 점수 재계산 및 찌꺼기 청소
             assessments = assessments.map(asm => {
                 
+                // 🌟 [핵심 복구] 과거에 만들어진 수행평가 점수(레거시 데이터)가 날아가지 않도록 안전하게 마이그레이션
+                if (asm.type === 'manual' && asm.scores && (!asm.teacherManualScores || Object.keys(asm.teacherManualScores).length === 0)) {
+                    if (!asm.teacherManualScores) asm.teacherManualScores = {};
+                    let ratio = asm.weight ? (asm.weight / 100) : 1;
+                    // 과거 폴더를 만든 주인의 이메일로 점수 이관 (방장 이메일이 없으면 현재 사용자)
+                    let targetHost = ownerEmail || auth.currentUser.email;
+                    asm.teacherManualScores[targetHost] = {
+                        A: Math.round(asm.scores.A / ratio),
+                        B: Math.round(asm.scores.B / ratio),
+                        C: Math.round(asm.scores.C / ratio),
+                        D: Math.round(asm.scores.D / ratio),
+                        E: Math.round(asm.scores.E / ratio)
+                    };
+                }
+
                 // 🧹 [청소] 쫓겨난 팀원이 입력해둔 찌꺼기 점수와 판정 내역을 완전히 삭제합니다.
                 if (asm.teacherCutScores && asm.teacherCutScores[targetEmail]) delete asm.teacherCutScores[targetEmail];
                 if (asm.teacherMTable && asm.teacherMTable[targetEmail]) delete asm.teacherMTable[targetEmail];
@@ -6820,11 +6835,11 @@ async function saveManualAssessmentToProject() {
             if (!asm.teacherManualScores) asm.teacherManualScores = {};
             asm.teacherManualScores[currentUserEmail] = { A:valA, B:valB, C:valC, D:valD, E:valE };
 
-            // 프로젝트 참여자 목록 정리
+            // 프로젝트 참여자 목록 정리 및 👻 유령 멤버 완벽 차단!
             let allMembers = projectData.collaborators || [];
             if (projectData.ownerEmail && !allMembers.includes(projectData.ownerEmail)) allMembers.unshift(projectData.ownerEmail);
             if (!allMembers.includes(currentUserEmail)) allMembers.push(currentUserEmail);
-            const collaborators = [...new Set(allMembers)];
+            const collaborators = [...new Set(allMembers)].filter(Boolean); // 👈 핵심 버그 픽스 구역
 
             // 모두 완료했는지 검사
             let missingTeachers = [];
@@ -6882,7 +6897,6 @@ async function saveManualAssessmentToProject() {
         saveBtn.disabled = false;
     }
 }
-
 // 6. 수정하기
 function enableManualEditMode() {
     lockManualInputs(false);
