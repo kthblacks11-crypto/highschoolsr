@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.0.16"; 
+const CURRENT_VERSION = "1.1.1"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -4027,16 +4027,33 @@ async function loadProjects() {
             projects.forEach(data => {
                 const dateStr = data.createdAt ? data.createdAt.toDate().toLocaleDateString() : "방금 전";
                 
-                // 💡 1. 평가명 길이에 따라 폰트 크기를 동적으로 줄이는 로직 (말줄임 제거, 한 줄 유지)
+                // 💡 1. 평가 상태 및 팀원별 (아이디:완료/대기) 텍스트 생성 로직
+                let allMembers = data.collaborators || [];
+                if (data.ownerEmail && !allMembers.includes(data.ownerEmail)) allMembers.unshift(data.ownerEmail);
+                const collaborators = [...new Set(allMembers)];
+
                 let badges = data.assessments && data.assessments.length > 0 
                     ? [...data.assessments].sort((a,b)=> (a.type==='written'&&b.type!=='written')?-1:1).map(a => {
                         
-                        // 글자 수 확인 후 크기 조절 (길어질수록 작아짐)
-                        let nameLen = a.name.length;
-                        let fontSize = nameLen > 12 ? '0.6rem' : (nameLen > 8 ? '0.65rem' : '0.75rem');
-                        let padding = nameLen > 8 ? '3px 5px' : '4px 8px';
+                        // 팀원별로 지필/수행 구분에 따라 완료 여부 체크
+                        let statusArr = collaborators.map(email => {
+                            let id = email.split('@')[0]; // 이메일에서 아이디 추출
+                            let isDone = false;
+                            if (a.type === 'written') {
+                                isDone = a.teacherCutScores && a.teacherCutScores[email];
+                            } else {
+                                isDone = a.teacherManualScores && a.teacherManualScores[email];
+                            }
+                            return `${id}:${isDone ? '완료' : '대기'}`;
+                        });
                         
-                        return `<span style="display:inline-block; white-space:nowrap; background:${a.type === 'written' ? '#3b82f6' : '#10b981'}; color:white; padding:${padding}; border-radius:4px; font-size:${fontSize}; font-weight:bold; margin:2px; letter-spacing:-0.5px;">${a.name}</span>`;
+                        // 결과: "thkim:완료, test:대기"
+                        let statusText = statusArr.join(', ');
+                        
+                        // 목록이 세로로 스크롤되며 쭉 나오도록 div 요소로 변경 (폭 100%)
+                        return `<div style="background:${a.type === 'written' ? '#3b82f6' : '#10b981'}; color:white; padding:4px 8px; border-radius:4px; font-size:0.7rem; font-weight:bold; margin-bottom:4px; width:100%; box-sizing:border-box; word-break:keep-all; line-height:1.4;">
+                            ${a.name} <span style="font-weight:normal; opacity:0.9; font-size:0.65rem;">(${statusText})</span>
+                        </div>`;
                     }).join('') 
                     : '<span style="font-size: 0.8rem; color: #94a3b8;">평가 내역 없음</span>';
         
@@ -6899,19 +6916,46 @@ async function saveManualAssessmentToProject() {
     }
 }
 
+
 // 6. 수정하기
-function enableManualEditMode() {
+async function enableManualEditMode() {
+    if (!currentProjectId || currentEditingAssessmentIndex === -1) return;
+
+    // 기존 기능 유지 (화면 잠금 해제 및 버튼 원래대로)
     lockManualInputs(false);
     const saveBtn = document.getElementById('btn-save-manual');
     saveBtn.innerHTML = "💾 결과 저장하기";
     saveBtn.style.background = "#ea580c";
     saveBtn.disabled = false;
+    saveBtn.style.cursor = "pointer";
+
+    // ✨ [추가된 부분] DB에서 내 완료 기록을 임시 삭제하여 '대기' 상태로 전환
+    try {
+        const docRef = db.collection('user_projects').doc(currentProjectId);
+        const doc = await docRef.get();
+        if (doc.exists) {
+            let projectData = doc.data();
+            let asm = projectData.assessments[currentEditingAssessmentIndex];
+            const myEmail = auth.currentUser.email;
+
+            // 내 완료 기록 삭제 및 누군가 수정중이므로 최종 점수(scores) 블라인드 처리
+            if (asm.teacherManualScores) delete asm.teacherManualScores[myEmail];
+            if (asm.scores) delete asm.scores; 
+
+            await docRef.update({ assessments: projectData.assessments });
+            
+            // 현황판 즉시 '대기'로 새로고침
+            updateManualTableStatus(asm, projectData);
+            if (typeof loadProjectDetails === 'function') loadProjectDetails();
+        }
+    } catch(e) { console.error("수정 모드 에러:", e); }
 }
 
 // 7. 초기화하기
 async function resetManualScores() {
-    if(!confirm("저장된 내 수행평가 결과를 삭제하시겠습니까?")) return;
+    if(!confirm("저장된 내 수행평가 결과를 완전히 초기화하시겠습니까?")) return;
     if(!currentProjectId || currentEditingAssessmentIndex === -1) return;
+
     try {
         const docRef = db.collection('user_projects').doc(currentProjectId);
         const doc = await docRef.get();
@@ -6920,14 +6964,31 @@ async function resetManualScores() {
             let asm = projectData.assessments[currentEditingAssessmentIndex];
             const myEmail = auth.currentUser.email;
 
+            // 기존 로직 유지 (DB 내용 완전 삭제)
             if(asm.teacherManualScores) delete asm.teacherManualScores[myEmail];
             if(asm.teacherManualStructures) delete asm.teacherManualStructures[myEmail];
-            if(asm.scores) delete asm.scores; // 누군가 초기화하면 목록 반영 점수도 삭제
+            if(asm.scores) delete asm.scores;
 
             await docRef.update({ assessments: projectData.assessments });
             
-            document.querySelectorAll('.my-manual-score-input').forEach(i => i.value = '');
-            alert("🗑️ 초기화 완료");
+            // ✨ [보강된 부분] 화면의 모든 입력칸을 깔끔하게 비우고 버튼 되돌리기
+            document.querySelectorAll('.my-manual-score-input').forEach(i => {
+                i.value = ''; 
+            });
+            lockManualInputs(false); // 잠금 해제
+            document.getElementById('sub-factors-list').innerHTML = ''; // 하위 요소 줄 비우기
+            
+            const saveBtn = document.getElementById('btn-save-manual');
+            saveBtn.innerHTML = "💾 결과 저장하기";
+            saveBtn.style.background = "#ea580c";
+            saveBtn.disabled = false;
+            saveBtn.style.cursor = "pointer";
+
+            alert("🗑️ 초기화 완료! 다시 입력해주세요.");
+            
+            // 현황판 즉시 새로고침
+            updateManualTableStatus(asm, projectData);
+            if (typeof loadProjectDetails === 'function') loadProjectDetails();
             loadManualAssessmentWorkspace();
         }
     } catch(e) { alert("초기화 실패: "+e.message); }
