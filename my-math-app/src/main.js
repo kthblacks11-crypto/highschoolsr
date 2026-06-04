@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.1.3"; 
+const CURRENT_VERSION = "1.1.4"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -4049,7 +4049,7 @@ async function loadProjects() {
                                 ? `<span style="color: #ff4d4d; font-weight: 900; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">완료</span>`
                                 : `<span style="color: #cbd5e1; opacity: 0.6; font-weight: normal;">대기</span>`;
                                 
-                            return `${id}:${statusHtml}`;
+                            return `${id}(${statusHtml})`;
                         });
                         
                         // 결과: "thkim:완료, test:대기"
@@ -4057,7 +4057,8 @@ async function loadProjects() {
                         
                         // 목록이 세로로 스크롤되며 쭉 나오도록 div 요소로 변경 (폭 100%)
                         return `<div style="background:${a.type === 'written' ? '#3b82f6' : '#10b981'}; color:white; padding:4px 8px; border-radius:4px; font-size:0.7rem; font-weight:bold; margin-bottom:4px; width:100%; box-sizing:border-box; word-break:keep-all; line-height:1.4;">
-                            ${a.name} <span style="font-weight:normal; opacity:0.9; font-size:0.65rem;">(${statusText})</span>
+                            ${a.name} <br>
+                            <span style="font-weight:normal; opacity:0.9; font-size:0.65rem;">(${statusText})</span>
                         </div>`;
                     }).join('') 
                     : '<span style="font-size: 0.8rem; color: #94a3b8;">평가 내역 없음</span>';
