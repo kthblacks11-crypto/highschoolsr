@@ -65,7 +65,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.1.9"; 
+const CURRENT_VERSION = "1.1.10"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -5308,6 +5308,17 @@ async function sendAiResultsToTable(isFromSaveBank = false) {
 
     if (extractedQuestionsArray.length === 0) { alert("분석된 문항이 없습니다."); return; }
 
+    // 💡 [핵심 해결] 루프 돌기 전, 화면의 모든 input 값을 데이터 배열에 강제로 덮어씌웁니다!
+    extractedQuestionsArray.forEach((q, idx) => {
+        // 문항 번호 입력창에서 값 가져오기
+        const numInput = document.querySelector(`input[oninput*="extractedQuestionsArray[${idx}].num"]`);
+        if (numInput) q.num = numInput.value;
+
+        // 문항 내용 텍스트상자에서 값 가져오기
+        const textInput = document.querySelectorAll('.q-edit-area')[idx];
+        if (textInput) q.text = textInput.value;
+    });
+
     try {
         const docRef = db.collection('user_projects').doc(currentProjectId);
         
@@ -5320,28 +5331,27 @@ async function sendAiResultsToTable(isFromSaveBank = false) {
             let baseScores = asm.parsedScores || []; 
 
             extractedQuestionsArray.forEach((q) => {
-                // 💡 더 이상 텍스트창(q.text)에서 [수준]과 [이유]를 정규식으로 찾지 않습니다!
-                // 이미 뒷주머니(q.level, q.reason)에 안전하게 보관되어 있습니다.
                 let diffSelect = document.getElementById(`ai-diff-${extractedQuestionsArray.indexOf(q)}`);
                 let diff = (diffSelect && diffSelect.value !== "") ? diffSelect.value : "";
                 let isShort = String(q.num).includes('서') || String(q.num).startsWith('서');
 
+                // 💡 이제 q.num은 위에서 강제로 업데이트된 최신 번호를 들고 있습니다.
                 let existingIdx = baseScores.findIndex(s => String(s.num).trim() === String(q.num).trim());
 
                 if (existingIdx !== -1) {
                     baseScores[existingIdx].score = parseFloat(q.score) || 0;
                     if(diff !== "") baseScores[existingIdx].difficulty = diff;
                     baseScores[existingIdx].isShortAnswer = isShort; 
-                    baseScores[existingIdx].level = q.level || "판정필요"; // 보관된 수준 사용
-                    baseScores[existingIdx].reason = q.reason || "";       // 보관된 이유 사용
+                    baseScores[existingIdx].level = q.level || "판정필요";
+                    baseScores[existingIdx].reason = q.reason || "";
                 } else {
                     baseScores.push({ 
                         num: String(q.num).trim(), 
                         score: parseFloat(q.score) || 0, 
                         difficulty: diff || "", 
-                        level: q.level || "판정필요", // 보관된 수준 사용
+                        level: q.level || "판정필요",
                         isShortAnswer: isShort,
-                        reason: q.reason || ""        // 보관된 이유 사용
+                        reason: q.reason || ""
                     });
                 }
             });
@@ -5358,7 +5368,6 @@ async function sendAiResultsToTable(isFromSaveBank = false) {
             });
 
             assessments[currentEditingAssessmentIndex].parsedScores = baseScores;
-            
             if (currentUploadedImageUrl) {
                 assessments[currentEditingAssessmentIndex].imageUrl = currentUploadedImageUrl; 
             }
@@ -5366,7 +5375,7 @@ async function sendAiResultsToTable(isFromSaveBank = false) {
             transaction.update(docRef, { assessments: assessments });
         });
         
-        alert("✅ 표 반영 성공! (판정 이유도 DB에 안전하게 저장되었습니다)");
+        alert("✅ 표 반영 성공! (수정하신 문항 번호와 내용이 정확히 반영되었습니다)");
 
         extractedQuestionsArray = []; 
         renderQuestionCards(); 
@@ -8348,6 +8357,232 @@ function hideSystemLoading() {
     const loader = document.getElementById('system-update-loader');
     if (loader) loader.style.display = 'none';
 }
+
+// =========================================================================
+// 🚨 [필독] 이 코드를 main.js 파일의 **가장 맨 아래 (마지막 줄)**에 붙여넣으세요! 🚨
+// 기존 코드를 찾아서 지울 필요 없습니다. 맨 밑에 추가만 하시면 무조건 이 코드가 우선 실행됩니다.
+// =========================================================================
+
+// 1️⃣ 시험지 지우기 + 버튼 초기화 완벽 제어
+window.clearExamFile = async function() {
+    if(!confirm("업로드된 시험지와 추출된 문항을 모두 초기화하시겠습니까?")) return;
+
+    // 파일 첨부칸 이름표(exam-file) 정확히 비우기
+    const fileInput = document.getElementById('exam-file');
+    if (fileInput) fileInput.value = '';
+    
+    const imgEl = document.getElementById('exam-img-display');
+    const pdfEl = document.getElementById('exam-pdf-display');
+    if (imgEl) { imgEl.src = ''; imgEl.style.display = 'none'; }
+    if (pdfEl) { pdfEl.src = ''; pdfEl.style.display = 'none'; }
+    
+    const wrapper = document.getElementById('exam-inspector-wrapper');
+    if (wrapper) wrapper.style.display = 'none';
+
+    extractedQuestionsArray = [];
+    const listContainer = document.getElementById('extracted-questions-list');
+    if (listContainer) listContainer.innerHTML = '<p style="text-align:center; color:#94a3b8; margin-top:20px;">시험지를 초기화했습니다. 다시 업로드해주세요.</p>';
+    
+    tempExamBase64 = null;
+    examImages = [];
+
+    currentUploadedImageUrl = null; 
+    if (window.localExamUrl) {
+        URL.revokeObjectURL(window.localExamUrl);
+        window.localExamUrl = null;
+    }
+    
+    // 파일이 지워졌으니 분석 버튼 숨기기 (새로 올리면 다시 나타남)
+    const startBtn = document.getElementById('start-analysis-btn');
+    if (startBtn) startBtn.style.display = 'none';
+
+    // DB 데이터 완전 삭제
+    if (typeof currentProjectId !== 'undefined' && currentEditingAssessmentIndex !== -1 && currentProjectId) {
+        try {
+            const docRef = db.collection('user_projects').doc(currentProjectId);
+            await db.runTransaction(async (transaction) => {
+                const doc = await transaction.get(docRef);
+                if(doc.exists) {
+                    let assessments = doc.data().assessments;
+                    if(assessments[currentEditingAssessmentIndex]) {
+                        assessments[currentEditingAssessmentIndex].imageUrl = null; 
+                        transaction.update(docRef, { assessments: assessments });
+                    }
+                }
+            });
+        } catch(e) { console.error("DB 이미지 초기화 실패:", e); }
+    }
+    
+    alert('업로드된 시험지가 완벽하게 삭제되었습니다.');
+};
+
+// 2️⃣ 파일 업로드 꼬임 방지 및 분석 버튼 복구
+window.previewExamFile = function(event) {
+    const file = event.target.files[0];
+    const startBtn = document.getElementById('start-analysis-btn');
+    
+    if (!file) {
+        if (startBtn) startBtn.style.display = 'none';
+        return;
+    }
+    
+    if (window.localExamUrl) {
+        URL.revokeObjectURL(window.localExamUrl);
+    }
+    window.localExamUrl = URL.createObjectURL(file);
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        tempExamBase64 = e.target.result;
+        examImages = [tempExamBase64]; 
+        if (startBtn) startBtn.style.display = 'inline-block'; // 정상 업로드 시 분석 버튼 뿅!
+    };
+    reader.readAsDataURL(file);
+
+    const uploadProjectId = currentProjectId;
+    const uploadAsmIndex = currentEditingAssessmentIndex;
+
+    try {
+        const fileRef = storage.ref().child(`exam_images/${Date.now()}_${file.name}`);
+        fileRef.put(file).then(snapshot => {
+            snapshot.ref.getDownloadURL().then(async url => {
+                if (currentProjectId === uploadProjectId && currentEditingAssessmentIndex === uploadAsmIndex) {
+                    currentUploadedImageUrl = url;
+                }
+                if (uploadProjectId && uploadAsmIndex !== -1) {
+                    const docRef = db.collection('user_projects').doc(uploadProjectId);
+                    try {
+                        await db.runTransaction(async (transaction) => {
+                            const doc = await transaction.get(docRef);
+                            if(doc.exists) {
+                                let assessments = doc.data().assessments;
+                                if(assessments[uploadAsmIndex]) {
+                                    assessments[uploadAsmIndex].imageUrl = url;
+                                    transaction.update(docRef, { assessments: assessments });
+                                }
+                            }
+                        });
+                    } catch (e) {}
+                }
+            });
+        }).catch(err => {});
+    } catch(error) {}
+};
+
+// 3️⃣ 폴더 이동 시 모든 찌꺼기 완벽 차단 및 도우미 창 닫기
+window.startEditAssessment = function(index) {
+    currentEditingAssessmentIndex = index;
+    history.pushState({ section: 'cut-score', sub: 'step2' }, "", "#cut-score/step2");
+
+    // 폴더 이동 시 기존 파일 이름표 지우기
+    const fileInput = document.getElementById('exam-file');
+    if (fileInput) fileInput.value = ''; 
+    
+    extractedQuestionsArray = []; 
+    const listContainer = document.getElementById('extracted-questions-list');
+    if (listContainer) listContainer.innerHTML = ''; 
+
+    tempExamBase64 = null;
+    examImages = [];
+    currentUploadedImageUrl = null;
+    if (window.localExamUrl) {
+        URL.revokeObjectURL(window.localExamUrl);
+        window.localExamUrl = null;
+    }
+
+    const imgEl = document.getElementById('exam-img-display');
+    const pdfEl = document.getElementById('exam-pdf-display');
+    if (imgEl) { imgEl.src = ''; imgEl.style.display = 'none'; }
+    if (pdfEl) { pdfEl.src = ''; pdfEl.style.display = 'none'; }
+    
+    const wrapper = document.getElementById('exam-inspector-wrapper');
+    if (wrapper) wrapper.style.display = 'none';
+
+    // 폴더 이동했으니 새로운 파일 올리기 전까지 분석 버튼 숨김
+    const startBtn = document.getElementById('start-analysis-btn');
+    if (startBtn) startBtn.style.display = 'none';
+
+    const applyBtnContainer = document.getElementById('external-apply-btn-zone');
+    if (applyBtnContainer) applyBtnContainer.style.display = 'none';
+
+    // 💡 AI 도우미 창 강제 닫기 (해결 완료)
+    const helperZone = document.getElementById('ai-helper-zone');
+    if (helperZone) helperZone.style.display = 'none';
+
+    document.getElementById('project-detail-view').style.display = 'none';
+    document.getElementById('cut-score-step2').style.display = 'block';
+    
+    if (typeof projectDetailsUnsubscribe !== 'undefined' && projectDetailsUnsubscribe) {
+        projectDetailsUnsubscribe();
+        projectDetailsUnsubscribe = null;
+    }
+
+    if (typeof unsubscribeProject !== 'undefined' && unsubscribeProject) unsubscribeProject();
+
+    unsubscribeProject = db.collection('user_projects').doc(currentProjectId).onSnapshot(doc => {
+        if(doc.exists) {
+            const projectData = doc.data();
+            const asm = projectData.assessments[index];
+            if (typeof currentActiveStep !== 'undefined' && currentActiveStep !== 4) {
+                document.getElementById('current-assessment-info').innerText = `📌 ${asm.name} (반영 비율: ${asm.weight}%)`;
+            } else if (typeof updateMTableStatus === 'function') {
+                updateMTableStatus(asm, projectData);
+            }
+            const parsedScores = asm.parsedScores || [];
+            if (parsedScores.length > 0) {
+                let cCount = 0, sCount = 0;
+                parsedScores.forEach(q => {
+                    if(q.isShortAnswer || String(q.num).includes('서')) sCount++;
+                    else cCount++;
+                });
+                document.getElementById('choice-count').value = cCount;
+                document.getElementById('short-count').value = sCount;
+            } else {
+                document.getElementById('choice-count').value = 20;
+                document.getElementById('short-count').value = 5;
+            }
+            
+            cachedProjectData = projectData;
+            cachedAsmData = asm;
+
+            if (typeof renderCollaborativeTable === 'function') {
+                renderCollaborativeTable(projectData, asm);
+            }
+
+            if (asm.imageUrl) {
+                const imgEl2 = document.getElementById('exam-img-display');
+                const pdfEl2 = document.getElementById('exam-pdf-display');
+                if (asm.imageUrl.toLowerCase().includes("pdf")) {
+                    if(imgEl2) imgEl2.style.display = 'none';
+                    if(pdfEl2) { pdfEl2.src = asm.imageUrl; pdfEl2.style.display = 'block'; }
+                } else {
+                    if(pdfEl2) pdfEl2.style.display = 'none';
+                    if(imgEl2) { imgEl2.src = asm.imageUrl; imgEl2.style.display = 'block'; }
+                }
+                currentUploadedImageUrl = asm.imageUrl;
+
+                const wrapper2 = document.getElementById('exam-inspector-wrapper');
+                const toggleBtn = document.getElementById('exam-viewer-toggle-btn');
+                if (wrapper2) {
+                    wrapper2.style.display = 'flex'; 
+                    if (toggleBtn) toggleBtn.innerText = "📄 시험지 닫기 🔼";
+                }
+            } else {
+                // 이미지가 없는 폴더면 화면을 완벽 차단!
+                const imgEl3 = document.getElementById('exam-img-display');
+                const pdfEl3 = document.getElementById('exam-pdf-display');
+                if (imgEl3) { imgEl3.src = ''; imgEl3.style.display = 'none'; }
+                if (pdfEl3) { pdfEl3.src = ''; pdfEl3.style.display = 'none'; }
+                
+                const wrapper3 = document.getElementById('exam-inspector-wrapper');
+                if (wrapper3) wrapper3.style.display = 'none';
+                
+                currentUploadedImageUrl = null;
+            }
+        }
+    });
+};
+
 
 // ==========================================
 // 🌟 [최종 업데이트] Vite 모듈 환경에서 HTML 버튼들이 함수를 찾을 수 있도록 외부(window)로 연결해주는 마법의 다리
