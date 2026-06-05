@@ -65,7 +65,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.1.8"; 
+const CURRENT_VERSION = "1.1.9"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -4315,6 +4315,7 @@ async function loadProjectDetails() {
     });
 }
 
+// 👇 아래 코드로 통째로 교체해주세요!
 function renderProjectAssessments(assessments) {
     const listEl = document.getElementById('project-assessment-list');
     const finalBoxes = document.getElementById('project-final-cut-scores');
@@ -4327,14 +4328,22 @@ function renderProjectAssessments(assessments) {
         return;
     }
 
-    // 👉 핵심 포인트 1: 우측 상단 '일괄 수정' 버튼이 여기에 들어갑니다.
     let html = `
     <div style="text-align: right; margin-bottom: 10px;">
         <button id="global-edit-btn" onclick="toggleGlobalEditMode()" style="background:#f59e0b; color:white; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: 0.2s;">✏️ 평가명/비율 일괄 수정</button>
     </div>
     <table class="score-table">
         <thead style="background: #f1f5f9;">
-            <tr><th>평가명</th><th>반영 비율</th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>관리</th></tr>
+            <tr>
+                <th style="text-align:center;">평가명</th>
+                <th style="text-align:center;">반영 비율<br><span style="font-size:0.75rem; color:#64748b; font-weight:normal;">(100점 기준)</span></th>
+                <th style="text-align:center;">A</th>
+                <th style="text-align:center;">B</th>
+                <th style="text-align:center;">C</th>
+                <th style="text-align:center;">D</th>
+                <th style="text-align:center;">E</th>
+                <th style="text-align:center;">관리</th>
+            </tr>
         </thead>
         <tbody>`;
     
@@ -4350,50 +4359,78 @@ function renderProjectAssessments(assessments) {
 
     sortedWithIndex.forEach((asm) => {
         const idx = asm.originalIndex; 
-        totalWeight += asm.weight;
-        totals.A += (asm.scores?.A || 0);
-        totals.B += (asm.scores?.B || 0);
-        totals.C += (asm.scores?.C || 0);
-        totals.D += (asm.scores?.D || 0);
-        totals.E += (asm.scores?.E || 0);
+        const w = asm.weight || 0;
+        totalWeight += w;
+
+        // 실제 점수(반영 비율에 따른 점수)
+        const sA = asm.scores?.A || 0;
+        const sB = asm.scores?.B || 0;
+        const sC = asm.scores?.C || 0;
+        const sD = asm.scores?.D || 0;
+        const sE = asm.scores?.E || 0;
+
+        totals.A += sA; totals.B += sB; totals.C += sC; totals.D += sD; totals.E += sE;
+
+        // 💡 100점 만점 환산 점수 계산
+        const cA = w > 0 ? (sA / w) * 100 : 0;
+        const cB = w > 0 ? (sB / w) * 100 : 0;
+        const cC = w > 0 ? (sC / w) * 100 : 0;
+        const cD = w > 0 ? (sD / w) * 100 : 0;
+        const cE = w > 0 ? (sE / w) * 100 : 0;
 
         const nameColor = asm.type === 'written' ? '#1e40af' : '#166534';
         const typeBadge = asm.type === 'written' 
             ? `<span style="background:#3b82f6; color:white; padding:2px 4px; border-radius:4px; font-size:0.7rem; margin-right:5px;">지필</span>`
             : `<span style="background:#10b981; color:white; padding:2px 4px; border-radius:4px; font-size:0.7rem; margin-right:5px;">수행</span>`;
 
-        // 👉 핵심 포인트 2: 쓸데없는 개별 수정 버튼은 빼고 깔끔하게 정리했습니다.
         const editBtn = asm.type === 'written' 
             ? `<button onclick="startEditAssessment(${idx})" style="background:#3b82f6; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; margin-right:5px;">산출/수정</button>` 
             : `<button onclick="editManualAssessment(${idx})" style="background:#8b5cf6; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; margin-right:5px;">수정</button>`;
 
-        // 👉 핵심 포인트 3: 표 내부에 수정용 input 창을 숨겨두었습니다. 일괄 수정 버튼을 누르면 나타납니다!
+        // 💡 실제 점수와 (100점 기준 환산점수)를 두 줄로 표기
         html += `<tr>
             <td style="text-align:left;">
                 ${typeBadge}
                 <strong class="display-name" style="color:${nameColor};">${asm.name}</strong>
                 <input type="text" class="edit-name-input" data-idx="${idx}" value="${asm.name}" style="display:none; width:120px; padding:4px; border:1px solid #cbd5e1; border-radius:4px;">
             </td>
-            <td>
-                <span class="display-weight" style="color: #ea580c; font-weight: bold;">${asm.weight}%</span>
-                <input type="number" class="edit-weight-input" data-idx="${idx}" value="${asm.weight}" style="display:none; width:60px; padding:4px; border:1px solid #cbd5e1; border-radius:4px; text-align:center;">
+            <td style="text-align:center;">
+                <div class="display-weight" style="color: #ea580c; font-weight: bold;">${w}%</div>
+                <div class="display-weight-sub" style="font-size:0.75rem; color:#64748b; margin-top:2px;">(100점)</div>
+                <input type="number" class="edit-weight-input" data-idx="${idx}" value="${w}" style="display:none; width:60px; padding:4px; border:1px solid #cbd5e1; border-radius:4px; text-align:center; margin: 0 auto;">
             </td>
-            <td>${(asm.scores?.A || 0).toFixed(2)}</td>
-            <td>${(asm.scores?.B || 0).toFixed(2)}</td>
-            <td>${(asm.scores?.C || 0).toFixed(2)}</td>
-            <td>${(asm.scores?.D || 0).toFixed(2)}</td>
-            <td>${(asm.scores?.E || 0).toFixed(2)}</td>
-            <td>
+            <td style="text-align:center;">
+                <div style="font-weight:bold; color:#1e293b;">${sA.toFixed(2)}</div>
+                <div style="font-size:0.75rem; color:#64748b; margin-top:2px;">(${Number(cA.toFixed(2))})</div>
+            </td>
+            <td style="text-align:center;">
+                <div style="font-weight:bold; color:#1e293b;">${sB.toFixed(2)}</div>
+                <div style="font-size:0.75rem; color:#64748b; margin-top:2px;">(${Number(cB.toFixed(2))})</div>
+            </td>
+            <td style="text-align:center;">
+                <div style="font-weight:bold; color:#1e293b;">${sC.toFixed(2)}</div>
+                <div style="font-size:0.75rem; color:#64748b; margin-top:2px;">(${Number(cC.toFixed(2))})</div>
+            </td>
+            <td style="text-align:center;">
+                <div style="font-weight:bold; color:#1e293b;">${sD.toFixed(2)}</div>
+                <div style="font-size:0.75rem; color:#64748b; margin-top:2px;">(${Number(cD.toFixed(2))})</div>
+            </td>
+            <td style="text-align:center;">
+                <div style="font-weight:bold; color:#1e293b;">${sE.toFixed(2)}</div>
+                <div style="font-size:0.75rem; color:#64748b; margin-top:2px;">(${Number(cE.toFixed(2))})</div>
+            </td>
+            <td style="text-align:center;">
                 ${editBtn}
                 <button onclick="deleteAssessment(${idx})" style="background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">삭제</button>
             </td>
         </tr>`;
     });
+    
     html += `</tbody>
         <tfoot style="background:#fffbeb; font-weight:bold;">
             <tr>
-                <td style="text-align:center;">합계</td>
-                <td style="color:${totalWeight === 100 ? '#10b981' : '#ef4444'}">${totalWeight}%</td>
+                <td style="text-align:center;">비율 합계</td>
+                <td style="text-align:center; color:${totalWeight === 100 ? '#10b981' : '#ef4444'}">${totalWeight}%</td>
                 <td colspan="6"></td>
             </tr>
         </tfoot>
@@ -4945,47 +4982,104 @@ function toggleAiVisibility() {
     }
 }
 
-function clearExamFile() {
-    // 1. 첨부파일 비우기
-    const fileInput = document.getElementById('exam-file-upload');
+// 1️⃣ [완벽 교체] DB 링크 삭제 및 '첨부파일 이름표 불일치' 수정 완료!
+async function clearExamFile() {
+    if(!confirm("업로드된 시험지와 추출된 문항을 모두 초기화하시겠습니까?")) return;
+
+    // 💡 [핵심 해결] 'exam-file-upload'가 아니라 'exam-file'이 맞습니다!
+    const fileInput = document.getElementById('exam-file');
     if (fileInput) fileInput.value = '';
     
-    // 2. 화면에 떠있는 이미지 숨기기
     const imgEl = document.getElementById('exam-img-display');
     const pdfEl = document.getElementById('exam-pdf-display');
     if (imgEl) { imgEl.src = ''; imgEl.style.display = 'none'; }
     if (pdfEl) { pdfEl.src = ''; pdfEl.style.display = 'none'; }
     
-    // 3. 추출된 문항 리스트 비우기
+    const wrapper = document.getElementById('exam-inspector-wrapper');
+    if (wrapper) wrapper.style.display = 'none';
+
     extractedQuestionsArray = [];
     const listContainer = document.getElementById('extracted-questions-list');
     if (listContainer) listContainer.innerHTML = '<p style="text-align:center; color:#94a3b8; margin-top:20px;">시험지를 초기화했습니다. 다시 업로드해주세요.</p>';
     
-    // 4. [핵심] 백그라운드에 물고 있는 메모리 파일과 버튼 숨기기 완벽 연동
     tempExamBase64 = null;
     examImages = [];
+
+    // 💡 임시 메모리 주소 완벽하게 찢어버리기
+    currentUploadedImageUrl = null; 
+    if (window.localExamUrl) {
+        URL.revokeObjectURL(window.localExamUrl);
+        window.localExamUrl = null;
+    }
     
+    // 💡 시험지가 지워졌으므로 분석 버튼도 깔끔하게 숨김 처리!
     const startBtn = document.getElementById('start-analysis-btn');
     if (startBtn) startBtn.style.display = 'none';
+
+    // 💡 파이어베이스 DB에서 이미지 주소(imageUrl) 필드를 완전히 폭파시킵니다!
+    if (typeof currentProjectId !== 'undefined' && currentEditingAssessmentIndex !== -1 && currentProjectId) {
+        try {
+            const docRef = db.collection('user_projects').doc(currentProjectId);
+            await db.runTransaction(async (transaction) => {
+                const doc = await transaction.get(docRef);
+                if(doc.exists) {
+                    let assessments = doc.data().assessments;
+                    if(assessments[currentEditingAssessmentIndex]) {
+                        delete assessments[currentEditingAssessmentIndex].imageUrl; 
+                        transaction.update(docRef, { assessments: assessments });
+                    }
+                }
+            });
+        } catch(e) {
+            console.error("DB 이미지 초기화 실패:", e);
+        }
+    }
     
-    alert('업로드된 시험지 데이터와 화면이 완벽하게 초기화되었습니다.');
+    alert('업로드된 시험지가 완벽하게 삭제되었습니다.');
 }
 
+// 3️⃣ [완벽 교체] 다른 폴더 이동 시 AI 도우미 창까지 100% 닫아주는 입장 함수
 function startEditAssessment(index) {
     currentEditingAssessmentIndex = index;
     history.pushState({ section: 'cut-score', sub: 'step2' }, "", "#cut-score/step2");
 
-    // 💡 [기존 로직 보존] 다른 회차로 이동할 때, 이전 회차의 파일과 추출 내역을 화면에서 비워줍니다.
-    const fileInput = document.getElementById('exam-file-upload');
+    // 💡 화면/메모리 지우기 시작
+    const fileInput = document.getElementById('exam-file');
     if (fileInput) fileInput.value = ''; 
+    
     extractedQuestionsArray = []; 
     const listContainer = document.getElementById('extracted-questions-list');
     if (listContainer) listContainer.innerHTML = ''; 
 
+    tempExamBase64 = null;
+    examImages = [];
+    currentUploadedImageUrl = null;
+    if (window.localExamUrl) {
+        URL.revokeObjectURL(window.localExamUrl);
+        window.localExamUrl = null;
+    }
+
+    const imgEl = document.getElementById('exam-img-display');
+    const pdfEl = document.getElementById('exam-pdf-display');
+    if (imgEl) { imgEl.src = ''; imgEl.style.display = 'none'; }
+    if (pdfEl) { pdfEl.src = ''; pdfEl.style.display = 'none'; }
+    
+    const wrapper = document.getElementById('exam-inspector-wrapper');
+    if (wrapper) wrapper.style.display = 'none';
+
+    const startBtn = document.getElementById('start-analysis-btn');
+    if (startBtn) startBtn.style.display = 'none';
+
+    const applyBtnContainer = document.getElementById('external-apply-btn-zone');
+    if (applyBtnContainer) applyBtnContainer.style.display = 'none';
+
+    // 💡 [핵심 추가] 폴더 이동 시 켜져 있던 AI 도우미 창을 강제로 닫습니다!
+    const helperZone = document.getElementById('ai-helper-zone');
+    if (helperZone) helperZone.style.display = 'none';
+
     document.getElementById('project-detail-view').style.display = 'none';
     document.getElementById('cut-score-step2').style.display = 'block';
     
-    // 💡 [CCTV 최적화 핵심 스위치 추가] 지필평가 창에 진입했으므로 바깥쪽 메인 폴더 감시를 끕니다. (이중 과금 방지)
     if (typeof projectDetailsUnsubscribe !== 'undefined' && projectDetailsUnsubscribe) {
         projectDetailsUnsubscribe();
         projectDetailsUnsubscribe = null;
@@ -5000,7 +5094,7 @@ function startEditAssessment(index) {
             if (currentActiveStep !== 4) {
                 document.getElementById('current-assessment-info').innerText = `📌 ${asm.name} (반영 비율: ${asm.weight}%)`;
             } else if (typeof updateMTableStatus === 'function') {
-                updateMTableStatus(asm, projectData); // 실시간 상태 즉시 갱신
+                updateMTableStatus(asm, projectData);
             }
             const parsedScores = asm.parsedScores || [];
             if (parsedScores.length > 0) {
@@ -5012,12 +5106,10 @@ function startEditAssessment(index) {
                 document.getElementById('choice-count').value = cCount;
                 document.getElementById('short-count').value = sCount;
             } else {
-                // 저장된 게 없다면 기본값 20 / 5 유지
                 document.getElementById('choice-count').value = 20;
                 document.getElementById('short-count').value = 5;
             }
             
-            // 🟢 [기존 로직 보존] 토글 버튼 작동 시 실시간 연동을 위한 데이터 캐싱 백업
             cachedProjectData = projectData;
             cachedAsmData = asm;
 
@@ -5052,6 +5144,16 @@ function startEditAssessment(index) {
                             <p style="font-size: 0.95rem; line-height: 1.6;">방장 선생님이 이미 문항을 표에 반영했습니다.<br>왼쪽 시험지를 보고 위의 <strong>[표]</strong>에서 채점을 진행해 주세요.</p>
                         </div>`;
                 }
+            } else {
+                const imgEl = document.getElementById('exam-img-display');
+                const pdfEl = document.getElementById('exam-pdf-display');
+                if (imgEl) { imgEl.src = ''; imgEl.style.display = 'none'; }
+                if (pdfEl) { pdfEl.src = ''; pdfEl.style.display = 'none'; }
+                
+                const wrapper = document.getElementById('exam-inspector-wrapper');
+                if (wrapper) wrapper.style.display = 'none';
+                
+                currentUploadedImageUrl = null;
             }
         }
     });
@@ -5925,19 +6027,18 @@ async function updateBaseDifficulty(qIdx, diffValue) {
         }
     } catch(e) { console.error("난이도 갱신 실패", e); }
 }
+
+// 👇 아래 코드로 통째로 교체해주세요!
 function toggleExamViewer() {
     const wrapper = document.getElementById('exam-inspector-wrapper');
     const toggleBtn = document.getElementById('exam-viewer-toggle-btn');
     
     if (!wrapper) return;
 
-    // 💡 시험지 영역을 표 아래로 억지로 이동시키던 코드를 완전히 삭제했습니다!
-    // 이제 시험지 화면은 원래 있던 위쪽 자리에서 얌전하게 열리고 닫힙니다.
-
-    if (wrapper.style.display === 'none') {
+    // 💡 [수정됨] 처음 로딩되어 display 값이 비어있는('') 경우도 '닫혀있음'으로 간주!
+    if (wrapper.style.display === 'none' || wrapper.style.display === '') {
         wrapper.style.display = 'flex';
         if(toggleBtn) toggleBtn.innerText = "📄 시험지 닫기 🔼";
-        // 부드럽게 화면을 버튼 위치로 이동
         toggleBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } else {
         wrapper.style.display = 'none';
@@ -7808,14 +7909,19 @@ function toggleExamRangeInputs() {
 // 2. 임시로 이미지를 보관해둘 변수
 let tempExamBase64 = null;
 
-// [수정 완료] 4. 파일 업로드 시 분석 버튼 즉각 활성화
+// 1️⃣ [완벽 교체] 업로드 도중 폴더를 이동해도 꼬이지 않게 자물쇠를 채운 업로드 함수
 function previewExamFile(event) {
     const file = event.target.files[0];
+    const startBtn = document.getElementById('start-analysis-btn');
+    
     if (!file) {
-        document.getElementById('start-analysis-btn').style.display = 'none';
+        if (startBtn) startBtn.style.display = 'none';
         return;
     }
     
+    if (window.localExamUrl) {
+        URL.revokeObjectURL(window.localExamUrl);
+    }
     window.localExamUrl = URL.createObjectURL(file);
     
     const reader = new FileReader();
@@ -7824,26 +7930,33 @@ function previewExamFile(event) {
         examImages = [tempExamBase64]; 
         
         // 💡 파일이 준비되면 분석 시작 버튼을 확실하게 띄움
-        const btn = document.getElementById('start-analysis-btn');
-        if (btn) btn.style.display = 'inline-block';
+        if (startBtn) startBtn.style.display = 'inline-block';
     };
     reader.readAsDataURL(file);
 
-    // 스토리지 백그라운드 업로드 로직 (유지)
+    // 💡 [핵심 해결] 업로드 버튼을 누른 순간의 폴더 방 번호를 자물쇠로 꽉 잠가둡니다!
+    const uploadProjectId = currentProjectId;
+    const uploadAsmIndex = currentEditingAssessmentIndex;
+
     try {
         const fileRef = storage.ref().child(`exam_images/${Date.now()}_${file.name}`);
         fileRef.put(file).then(snapshot => {
             snapshot.ref.getDownloadURL().then(async url => {
-                currentUploadedImageUrl = url;
-                if (currentProjectId && currentEditingAssessmentIndex !== -1) {
-                    const docRef = db.collection('user_projects').doc(currentProjectId);
+                // 업로드 도중에 선생님이 다른 폴더로 나갔다면, 현재 화면에는 덮어쓰지 않음
+                if (currentProjectId === uploadProjectId && currentEditingAssessmentIndex === uploadAsmIndex) {
+                    currentUploadedImageUrl = url;
+                }
+
+                // 💡 [귀신 현상 차단] 무조건 "업로드 버튼을 눌렀던 최초의 폴더" DB에만 정확히 저장합니다.
+                if (uploadProjectId && uploadAsmIndex !== -1) {
+                    const docRef = db.collection('user_projects').doc(uploadProjectId);
                     try {
                         await db.runTransaction(async (transaction) => {
                             const doc = await transaction.get(docRef);
                             if(doc.exists) {
                                 let assessments = doc.data().assessments;
-                                if(assessments[currentEditingAssessmentIndex]) {
-                                    assessments[currentEditingAssessmentIndex].imageUrl = url;
+                                if(assessments[uploadAsmIndex]) {
+                                    assessments[uploadAsmIndex].imageUrl = url;
                                     transaction.update(docRef, { assessments: assessments });
                                 }
                             }
@@ -8021,6 +8134,19 @@ async function startExamAiAnalysis(base64Data) {
         if (inspectorWrapper) inspectorWrapper.style.display = 'flex';
         
         renderQuestionCards(); 
+
+        // 💡 [여기 추가] 추출된 문항이 0개일 때 직관적인 '다시 분석하기' 버튼 표시
+        if (extractedQuestionsArray.length === 0) {
+            const listContainer = document.getElementById('extracted-questions-list');
+            if (listContainer) {
+                listContainer.innerHTML = `
+                <div style="text-align:center; background:#fee2e2; padding:2rem; border-radius:8px; margin-top:20px; border: 1px solid #f87171;">
+                    <p style="color:#dc2626; font-size:1.1rem; font-weight:bold; margin-bottom:15px;">⚠️ AI가 조건에 맞는 문항을 추출하지 못했습니다.</p>
+                    <p style="color:#7f1d1d; margin-bottom:20px;">지문 범위를 좁히거나, 다른 조건을 선택하여 다시 시도해 보세요.</p>
+                    <button onclick="executeExamAnalysis()" style="background:#ef4444; color:white; border:none; padding:10px 20px; border-radius:6px; cursor:pointer; font-weight:bold; font-size:1rem; box-shadow:0 2px 4px rgba(0,0,0,0.1); transition:0.2s;">🔄 다른 조건으로 다시 분석하기</button>
+                </div>`;
+            }
+        }
 
     } catch (error) {
         alert("분석 중 오류가 발생했습니다.\n" + error.message);
