@@ -3968,18 +3968,33 @@ async function updateQuestionInDB() {
     }
 }
 
-// 문항 삭제
-async function deleteQuestionFromDB() {
-    const qDocId = document.getElementById('admin-manage-q-list').value;
-    if (!qDocId) return;
-
-    if (confirm("🚨 이 문항을 영구 삭제하시겠습니까?")) {
-        try {
-            await db.collection('transformed_bank').doc(qDocId).delete();
-            alert("🗑️ 문항이 삭제되었습니다.");
-            loadQuestionsForEdit(); // 목록 새로고침
-        } catch(e) { alert("삭제 실패: " + e.message); }
+// [방법 1 완벽 구현] 추출 화면에서 삭제 시: 뒤에 있는 문항들의 번호가 자연스럽게 앞당겨짐
+function deleteQuestion(idx) {
+    if (!confirm("이 문항을 삭제하시겠습니까?\n(삭제 시 아래에 있는 문항들의 번호가 하나씩 앞당겨집니다.)")) return;
+    
+    // 1. 지워질 문항이 객관식인지 서답형인지 기억해둡니다.
+    const deletedItem = extractedQuestionsArray[idx];
+    const wasShort = String(deletedItem.num).includes('서') || String(deletedItem.num).startsWith('서');
+    
+    // 2. 문항 삭제!
+    extractedQuestionsArray.splice(idx, 1);
+    
+    // 3. 💡 스마트 당기기 로직: 지워진 위치 '이후'의 문항들만 번호를 1씩 뺍니다.
+    for (let i = idx; i < extractedQuestionsArray.length; i++) {
+        let q = extractedQuestionsArray[i];
+        let isShort = String(q.num).includes('서') || String(q.num).startsWith('서');
+        
+        // 지워진 문항과 같은 유형(객관식은 객관식끼리, 서답형은 서답형끼리)일 때만 당김
+        if (wasShort === isShort) {
+            let numPart = parseInt(String(q.num).replace(/[^0-9]/g, ''));
+            if (!isNaN(numPart) && numPart > 1) {
+                // 15번이었으면 14번으로, 서6이었으면 서5로 변신
+                q.num = isShort ? "서" + (numPart - 1) : String(numPart - 1);
+            }
+        }
     }
+    
+    renderQuestionCards();
 }
 
 // ==========================================
@@ -5011,6 +5026,64 @@ function startEditAssessment(index) {
     });
 }
 
+// [추가 기능] 수기 작업 중 실수로 지운 문항을 수동으로 복구/추가하는 함수
+async function addManualTableQuestion() {
+    const qNumRaw = prompt("수동으로 추가할 문항 번호를 입력하세요.\n(객관식은 숫자만, 서답형은 '서'와 숫자를 입력. 예: 3 또는 서1)");
+    if (!qNumRaw) return;
+
+    const qNum = qNumRaw.trim();
+    const isShort = qNum.includes('서') || qNum.startsWith('서');
+
+    try {
+        const docRef = db.collection('user_projects').doc(currentProjectId);
+        
+        await db.runTransaction(async (transaction) => {
+            const doc = await transaction.get(docRef);
+            if (!doc.exists) throw new Error("문서를 찾을 수 없습니다.");
+            
+            let assessments = doc.data().assessments;
+            let asm = assessments[currentEditingAssessmentIndex];
+            let baseScores = asm.parsedScores || [];
+            
+            // 💡 1. 중복 번호 검사 (이미 있는 번호면 차단)
+            if (baseScores.some(q => String(q.num).trim() === qNum)) {
+                throw new Error("이미 표에 존재하는 문항 번호입니다.");
+            }
+
+            // 💡 2. 새 문항 추가 (빈 껍데기로 생성)
+            baseScores.push({
+                num: qNum,
+                score: 0, // 기본 점수 0
+                difficulty: "",
+                level: "판정필요",
+                isShortAnswer: isShort,
+                reason: "수동으로 추가된 문항입니다."
+            });
+
+            // 💡 3. 추가된 문항이 자기 자리를 찾아가도록 번호순 정렬
+            baseScores.sort((a, b) => {
+                const aIsShort = String(a.num).startsWith('서');
+                const bIsShort = String(b.num).startsWith('서');
+                if (aIsShort && !bIsShort) return 1;
+                if (!aIsShort && bIsShort) return -1;
+
+                let aNum = parseInt(String(a.num).replace(/[^0-9]/g, '')) || 0;
+                let bNum = parseInt(String(b.num).replace(/[^0-9]/g, '')) || 0;
+                return aNum - bNum;
+            });
+
+            asm.parsedScores = baseScores;
+            transaction.update(docRef, { assessments: assessments });
+        });
+
+        // 완료 시 알림 (onSnapshot이 켜져 있으므로 표는 자동으로 갱신됩니다!)
+        alert(`✅ ${qNum}번 문항 칸이 성공적으로 생성되었습니다!`);
+
+    } catch(e) {
+        alert("문항 추가 실패: " + e.message);
+    }
+}
+
 // ✨ [신규 추가] 저장된 데이터를 기반으로 표를 다시 그려주는 함수
 function restoreScoreTable(savedScores) {
     const container = document.getElementById('score-table-container');
@@ -5114,15 +5187,11 @@ async function sendAiResultsToTable(isFromSaveBank = false) {
             let baseScores = asm.parsedScores || []; 
 
             extractedQuestionsArray.forEach((q) => {
-                let levelMatch = q.text.match(/\[수준\]\s*(A\+|[A-E])/);
-                let reasonMatch = q.text.match(/\[이유\]\s*([\s\S]*?)(?=\[|$)/); 
-                
+                // 💡 더 이상 텍스트창(q.text)에서 [수준]과 [이유]를 정규식으로 찾지 않습니다!
+                // 이미 뒷주머니(q.level, q.reason)에 안전하게 보관되어 있습니다.
                 let diffSelect = document.getElementById(`ai-diff-${extractedQuestionsArray.indexOf(q)}`);
                 let diff = (diffSelect && diffSelect.value !== "") ? diffSelect.value : "";
                 let isShort = String(q.num).includes('서') || String(q.num).startsWith('서');
-
-                let finalLevel = levelMatch ? levelMatch[1] : "판정필요";
-                let finalReason = reasonMatch ? reasonMatch[1].trim() : "AI 판정 이유가 분석되지 않았습니다.";
 
                 let existingIdx = baseScores.findIndex(s => String(s.num).trim() === String(q.num).trim());
 
@@ -5130,17 +5199,16 @@ async function sendAiResultsToTable(isFromSaveBank = false) {
                     baseScores[existingIdx].score = parseFloat(q.score) || 0;
                     if(diff !== "") baseScores[existingIdx].difficulty = diff;
                     baseScores[existingIdx].isShortAnswer = isShort; 
-                    baseScores[existingIdx].level = finalLevel; 
-                    baseScores[existingIdx].reason = finalReason; 
+                    baseScores[existingIdx].level = q.level || "판정필요"; // 보관된 수준 사용
+                    baseScores[existingIdx].reason = q.reason || "";       // 보관된 이유 사용
                 } else {
                     baseScores.push({ 
                         num: String(q.num).trim(), 
                         score: parseFloat(q.score) || 0, 
-                        // 💡 [핵심] 기존 'diff || "중"' 에서 "중"을 삭제하여 기본값이 빈칸(선택)이 되도록 수정
                         difficulty: diff || "", 
-                        level: finalLevel, 
+                        level: q.level || "판정필요", // 보관된 수준 사용
                         isShortAnswer: isShort,
-                        reason: finalReason
+                        reason: q.reason || ""        // 보관된 이유 사용
                     });
                 }
             });
@@ -5165,7 +5233,7 @@ async function sendAiResultsToTable(isFromSaveBank = false) {
             transaction.update(docRef, { assessments: assessments });
         });
         
-        alert("✅ 분할 분석된 문항들이 기존 표의 번호 위치에 맞게 안전하게 병합되었습니다!");
+        alert("✅ 표 반영 성공! (판정 이유도 DB에 안전하게 저장되었습니다)");
 
         extractedQuestionsArray = []; 
         renderQuestionCards(); 
@@ -5511,7 +5579,10 @@ function renderCollaborativeTable(projectData, asm) {
         if (email !== currentUserEmail) html += `<th>${email.split('@')[0]} 선생님</th>`;
     });
     
-    html += `<th style="min-width:90px; text-align:center;">문항 관리</th></tr></thead><tbody>`;
+    html += `<th style="min-width:90px; text-align:center;">
+                문항 관리<br>
+                <button onclick="addManualTableQuestion()" style="margin-top:4px; background:#10b981; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:0.75rem; font-weight:bold; cursor:pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">➕ 수동추가</button>
+             </th></tr></thead><tbody>`;
 
     const levelToNum = { 'A+': 6, 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'E': 1 };
 
@@ -7859,43 +7930,50 @@ async function startExamAiAnalysis(base64Data) {
         const blocks = fullText.split('---').map(b => b.trim()).filter(b => b.length > 0);
         
         blocks.forEach((block, idx) => {
-            // 💡 [수정] 특수기호나 마크다운(**)이 섞여도 완벽하게 문항 번호만 잡아냅니다!
             let numMatch = block.match(/\[번호\]\s*([^|]+)/) 
                         || block.match(/\[([가-힣a-zA-Z\s]*\d+[가-힣a-zA-Z\s]*)\]/) 
                         || block.match(/(?:문항)?\s*([가-힣a-zA-Z\s]*\d+)\s*번?/);
-                        
             let scoreMatch = block.match(/\[배점\][^0-9]*([\d.]+)/);
             
-            // AI가 뱉은 마크다운 별표(*)를 제거하고 순수 번호만 추출. 못 찾으면 "수동입력(확인요망)"으로 띄움.
+            // 💡 [핵심 추가] AI가 준 답변에서 [수준], [이유], [문항내용]을 각각 독립적으로 발라냅니다!
+            let levelMatch = block.match(/\[수준\]\s*(A\+|[A-E])/);
+            let reasonMatch = block.match(/\[이유\]\s*([^|]+)/);
+            let contentMatch = block.match(/\[문항내용\]\s*([\s\S]*)/);
+
             let qNumRaw = numMatch ? numMatch[1].replace(/\*/g, '').trim() : "수동입력(확인요망)";
-            
             let qNum = qNumRaw;
             if (qNumRaw.includes('서답') || qNumRaw.includes('서술') || qNumRaw.includes('서')) {
                 let numPart = qNumRaw.replace(/[^0-9]/g, '');
                 qNum = numPart ? "서" + numPart : qNumRaw;
             } else {
                 let numPart = qNumRaw.replace(/[^0-9]/g, '');
-                // 💡 [핵심] 번호를 1, 2, 3으로 강제로 매기던 (idx+1) 로직 완전 삭제!
                 qNum = numPart ? numPart : qNumRaw; 
             }
 
             let score = scoreMatch ? scoreMatch[1] : "0";
+            let level = levelMatch ? levelMatch[1].trim() : "C";
+            let reason = reasonMatch ? reasonMatch[1].trim() : "AI 판정 이유가 분석되지 않았습니다.";
+            
+            // [문항내용] 태그 뒤에 있는 순수한 문제 내용만 텍스트로 빼냅니다.
+            let pureText = contentMatch ? contentMatch[1].trim() : block;
             
             let pRange = "";
             let pText = "";
-            let cleanText = block;
+            let cleanText = pureText;
             
-            const pMatch = block.match(/\[공통지문:\s*(.+?)\]([\s\S]*?)\[지문끝\]/);
+            const pMatch = pureText.match(/\[공통지문:\s*(.+?)\]([\s\S]*?)\[지문끝\]/);
             if(pMatch) {
                 pRange = pMatch[1].trim();
                 pText = pMatch[2].trim();
-                cleanText = block.replace(pMatch[0], '').trim();
+                cleanText = pureText.replace(pMatch[0], '').trim();
             }
             
             extractedQuestionsArray.push({ 
                 num: qNum, 
-                text: cleanText,  
+                text: cleanText,  // 텍스트 창에는 순수 문제만!
                 score: score, 
+                level: level,     // 수준은 뒷주머니에 보관!
+                reason: reason,   // 판정이유도 뒷주머니에 보관!
                 image: null,
                 passageRange: pRange,   
                 passageContent: pText   
@@ -8160,7 +8238,7 @@ const exposeToWindow = {
     openCompareModal, resetMCutScores, enableMEditMode,
 
     loadManualAssessmentWorkspace, toggleManualCompareMode, saveManualAssessmentToProject, enableManualEditMode,
-    resetManualScores, syncManualStructureFromDB
+    resetManualScores, syncManualStructureFromDB, addManualTableQuestion
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
