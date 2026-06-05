@@ -3968,34 +3968,6 @@ async function updateQuestionInDB() {
     }
 }
 
-// [방법 1 완벽 구현] 추출 화면에서 삭제 시: 뒤에 있는 문항들의 번호가 자연스럽게 앞당겨짐
-function deleteQuestion(idx) {
-    if (!confirm("이 문항을 삭제하시겠습니까?\n(삭제 시 아래에 있는 문항들의 번호가 하나씩 앞당겨집니다.)")) return;
-    
-    // 1. 지워질 문항이 객관식인지 서답형인지 기억해둡니다.
-    const deletedItem = extractedQuestionsArray[idx];
-    const wasShort = String(deletedItem.num).includes('서') || String(deletedItem.num).startsWith('서');
-    
-    // 2. 문항 삭제!
-    extractedQuestionsArray.splice(idx, 1);
-    
-    // 3. 💡 스마트 당기기 로직: 지워진 위치 '이후'의 문항들만 번호를 1씩 뺍니다.
-    for (let i = idx; i < extractedQuestionsArray.length; i++) {
-        let q = extractedQuestionsArray[i];
-        let isShort = String(q.num).includes('서') || String(q.num).startsWith('서');
-        
-        // 지워진 문항과 같은 유형(객관식은 객관식끼리, 서답형은 서답형끼리)일 때만 당김
-        if (wasShort === isShort) {
-            let numPart = parseInt(String(q.num).replace(/[^0-9]/g, ''));
-            if (!isNaN(numPart) && numPart > 1) {
-                // 15번이었으면 14번으로, 서6이었으면 서5로 변신
-                q.num = isShort ? "서" + (numPart - 1) : String(numPart - 1);
-            }
-        }
-    }
-    
-    renderQuestionCards();
-}
 
 // ==========================================
 // 📂 사용자 폴더(프로젝트) 관리 시스템 (분할점수 산출용)
@@ -4431,28 +4403,63 @@ async function deleteAssessment(index) {
     } catch(e) { alert("삭제 실패: " + e.message); }
 }
 
-// 🟢 [신규 추가] 문항 삭제 기능 (번호 자동 재정렬 포함)
+// 🟢 [방법 1 완벽 구현] 추출 화면에서 삭제 시: 뒤에 있는 문항들의 번호가 자연스럽게 앞당겨짐
 function deleteQuestion(idx) {
-    if(!confirm("이 문항을 삭제하시겠습니까? 삭제 후 문항 번호가 자동으로 재조정됩니다.")) return;
+    if (!confirm("이 문항을 삭제하시겠습니까?\n(삭제 시 아래에 있는 문항들의 번호가 하나씩 앞당겨집니다.)")) return;
+    
+    // 1. 지워질 문항이 객관식인지 서답형인지 기억해둡니다.
+    const deletedItem = extractedQuestionsArray[idx];
+    const wasShort = String(deletedItem.num).includes('서') || String(deletedItem.num).startsWith('서');
+    
+    // 2. 문항 삭제!
     extractedQuestionsArray.splice(idx, 1);
-    rearrangeQuestionNumbers();
+    
+    // 3. 💡 스마트 당기기 로직: 지워진 위치 '이후'의 문항들만 번호를 1씩 뺍니다.
+    for (let i = idx; i < extractedQuestionsArray.length; i++) {
+        let q = extractedQuestionsArray[i];
+        let isShort = String(q.num).includes('서') || String(q.num).startsWith('서');
+        
+        // 지워진 문항과 같은 유형(객관식은 객관식끼리, 서답형은 서답형끼리)일 때만 당김
+        if (wasShort === isShort) {
+            let numPart = parseInt(String(q.num).replace(/[^0-9]/g, ''));
+            if (!isNaN(numPart) && numPart > 1) {
+                // 15번이었으면 14번으로, 서6이었으면 서5로 변신
+                q.num = isShort ? "서" + (numPart - 1) : String(numPart - 1);
+            }
+        }
+    }
+    
     renderQuestionCards();
 }
 
-// 🟢 [신규 추가] 위 문항과 합치기 기능
+// 🟢 [완벽 수정] 위 문항과 합치기 기능 (합칠 때도 번호가 당겨집니다!)
 function mergeWithPrevious(idx) {
     if (idx <= 0) return;
-    if(!confirm("이 문항의 텍스트를 위 문항과 합치시겠습니까?")) return;
+    if(!confirm("이 문항의 텍스트를 위 문항과 합치시겠습니까?\n(합친 후 아래 문항들의 번호가 앞당겨집니다.)")) return;
     
-    // 텍스트 병합
+    // 1. 텍스트 병합 및 이미지 이관
     extractedQuestionsArray[idx - 1].text += "\n" + extractedQuestionsArray[idx].text;
-    // 이전 문항에 그림이 없고 현재 문항에 있으면 그림도 이전 문항으로 이관
     if (!extractedQuestionsArray[idx - 1].image && extractedQuestionsArray[idx].image) {
         extractedQuestionsArray[idx - 1].image = extractedQuestionsArray[idx].image;
     }
     
+    // 2. 현재 문항의 유형을 기억하고 삭제
+    const wasShort = String(extractedQuestionsArray[idx].num).includes('서') || String(extractedQuestionsArray[idx].num).startsWith('서');
     extractedQuestionsArray.splice(idx, 1);
-    rearrangeQuestionNumbers();
+    
+    // 3. 스마트 당기기 로직 (합쳐져서 한 칸 줄었으므로 아래 번호들을 당겨줍니다)
+    for (let i = idx; i < extractedQuestionsArray.length; i++) {
+        let q = extractedQuestionsArray[i];
+        let isShort = String(q.num).includes('서') || String(q.num).startsWith('서');
+        
+        if (wasShort === isShort) {
+            let numPart = parseInt(String(q.num).replace(/[^0-9]/g, ''));
+            if (!isNaN(numPart) && numPart > 1) {
+                q.num = isShort ? "서" + (numPart - 1) : String(numPart - 1);
+            }
+        }
+    }
+    
     renderQuestionCards();
 }
 
@@ -5767,8 +5774,9 @@ async function resetAiLevels() {
 }
 
 
+// 🟢 [완벽 수정] 표 안에서 문항을 지워도 번호가 당겨지지 않고 원래 번호 유지!
 async function deleteTableQuestion(qIdx) {
-    if(!confirm("이 문항을 전체 협업 표에서 영구 삭제하시겠습니까?\n삭제 후 문항 번호 자동 조정 및 합계 점수가 실시간으로 동기화됩니다.")) return;
+    if(!confirm("이 문항을 전체 협업 표에서 영구 삭제하시겠습니까?\n삭제 시 남은 문항 번호는 원래 번호를 유지하며 합계 점수가 동기화됩니다.")) return;
     
     try {
         const docRef = db.collection('user_projects').doc(currentProjectId);
@@ -5779,22 +5787,14 @@ async function deleteTableQuestion(qIdx) {
         let asm = assessments[currentEditingAssessmentIndex];
         let baseScores = asm.parsedScores || [];
         
+        // 1. 선택한 문항 삭제
         baseScores.splice(qIdx, 1);
         
-        let objIdx = 1;
-        let subIdx = 1;
-        baseScores.forEach(q => {
-            if (String(q.num).includes('서') || String(q.num).startsWith('서')) {
-                q.num = '서' + subIdx;
-                subIdx++;
-            } else if (!isNaN(parseInt(q.num))) {
-                q.num = String(objIdx);
-                objIdx++;
-            }
-        });
+        // 💡 [찌꺼기 제거 완료] 강제로 1번부터 매기던 objIdx, subIdx 로직을 완전 삭제했습니다!
         
         asm.parsedScores = baseScores;
         
+        // 2. 다른 선생님들이 체크해 둔 '내 판정' 점수에서도 해당 줄 삭제 동기화
         if (asm.teacherInputs) {
             Object.keys(asm.teacherInputs).forEach(email => {
                 if (asm.teacherInputs[email] && asm.teacherInputs[email].length > qIdx) {
@@ -5804,7 +5804,6 @@ async function deleteTableQuestion(qIdx) {
         }
 
         await docRef.update({ assessments: assessments });
-        // 💡 두 번째 뜨던 귀찮은 alert 알림창을 삭제하여 바로 반영되도록 했습니다!
         
     } catch(e) {
         alert("문항 삭제 실패: " + e.message);
