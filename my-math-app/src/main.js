@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.1.4"; 
+const CURRENT_VERSION = "1.1.5"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -3514,7 +3514,7 @@ function renderQuestionCards() {
         qCard.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
                 <div style="font-weight: bold; color: #ea580c; display: flex; align-items: center; gap: 5px;">
-                    [문항 <input type="text" value="${q.num || (idx + 1)}" onchange="extractedQuestionsArray[${idx}].num = this.value" style="width: 45px; padding: 2px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; font-weight: bold; color: #ea580c;">]
+                    [문항 <input type="text" value="${q.num || (idx + 1)}" oninput="extractedQuestionsArray[${idx}].num = this.value" style="width: 45px; padding: 2px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; font-weight: bold; color: #ea580c;">]
                 </div>
                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                     <select id="ai-diff-${idx}" style="padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; max-width: 200px;">
@@ -4450,18 +4450,19 @@ function removeQuestionImage(idx) {
     }
 }
 
-// 🟢 [신규 추가] 학교 시험지 특성에 맞춘 스마트 문항 번호 자동 당김 엔진
+// [수정 완료] 3. 악마의 번호 초기화 로직 삭제 (사용자가 입력한 번호 존중)
 function rearrangeQuestionNumbers() {
-    let objIdx = 1;
-    let subIdx = 1;
-    extractedQuestionsArray.forEach((q) => {
-        if (String(q.num).includes('서') || q.num.startsWith('서')) {
-            q.num = '서' + subIdx;
-            subIdx++;
-        } else if (!isNaN(parseInt(q.num))) {
-            q.num = String(objIdx);
-            objIdx++;
-        }
+    // 💡 무조건 1번부터 덮어쓰는 기존 로직을 완전 폐기했습니다!
+    // 대신 배열 내부의 숫자 크기 순서대로 깔끔하게 정렬만 수행합니다.
+    extractedQuestionsArray.sort((a, b) => {
+        const aIsShort = String(a.num).startsWith('서');
+        const bIsShort = String(b.num).startsWith('서');
+        if (aIsShort && !bIsShort) return 1;
+        if (!aIsShort && bIsShort) return -1;
+
+        let aNum = parseInt(a.num.replace(/[^0-9]/g, '')) || 0;
+        let bNum = parseInt(b.num.replace(/[^0-9]/g, '')) || 0;
+        return aNum - bNum;
     });
 }
 
@@ -4915,7 +4916,14 @@ function clearExamFile() {
     const listContainer = document.getElementById('extracted-questions-list');
     if (listContainer) listContainer.innerHTML = '<p style="text-align:center; color:#94a3b8; margin-top:20px;">시험지를 초기화했습니다. 다시 업로드해주세요.</p>';
     
-    alert('화면의 시험지가 초기화되었습니다. (DB에 저장된 데이터는 삭제되지 않습니다.)');
+    // 4. [핵심] 백그라운드에 물고 있는 메모리 파일과 버튼 숨기기 완벽 연동
+    tempExamBase64 = null;
+    examImages = [];
+    
+    const startBtn = document.getElementById('start-analysis-btn');
+    if (startBtn) startBtn.style.display = 'none';
+    
+    alert('업로드된 시험지 데이터와 화면이 완벽하게 초기화되었습니다.');
 }
 
 function startEditAssessment(index) {
@@ -7694,21 +7702,20 @@ async function updateQuestionCount() {
     }
 }
 
-// 1. 라디오 버튼 상태에 따라 부분 추출 설정창을 켜고 끄는 함수
+// [수정] 라디오 버튼 상태에 따라 부분 추출/핀셋 추출 창을 제어합니다.
 function toggleExamRangeInputs() {
     const extractMode = document.querySelector('input[name="extractMode"]:checked')?.value || 'all';
     const partialOptionsDiv = document.getElementById('partial-extract-options');
+    const tweezerOptionsDiv = document.getElementById('tweezer-extract-options'); // 추가됨
     
-    // '부분 추출'이 선택되었을 때만 상세 설정창을 엽니다.
-    if (partialOptionsDiv) {
-        partialOptionsDiv.style.display = (extractMode === 'partial') ? 'flex' : 'none';
-    }
+    if (partialOptionsDiv) partialOptionsDiv.style.display = (extractMode === 'partial') ? 'flex' : 'none';
+    if (tweezerOptionsDiv) tweezerOptionsDiv.style.display = (extractMode === 'tweezer') ? 'block' : 'none';
 }
 
 // 2. 임시로 이미지를 보관해둘 변수
 let tempExamBase64 = null;
 
-// 3. 파일 선택 시 대기하는 함수 (기존 handleExamUpload 완벽 대체, 기능 유실 없음!)
+// [수정 완료] 4. 파일 업로드 시 분석 버튼 즉각 활성화
 function previewExamFile(event) {
     const file = event.target.files[0];
     if (!file) {
@@ -7723,13 +7730,13 @@ function previewExamFile(event) {
         tempExamBase64 = e.target.result;
         examImages = [tempExamBase64]; 
         
-        // 파일이 준비되면 분석 시작 버튼 표시
+        // 💡 파일이 준비되면 분석 시작 버튼을 확실하게 띄움
         const btn = document.getElementById('start-analysis-btn');
         if (btn) btn.style.display = 'inline-block';
     };
     reader.readAsDataURL(file);
 
-    // 스토리지 백그라운드 업로드 (기존 코드 그대로 보존)
+    // 스토리지 백그라운드 업로드 로직 (유지)
     try {
         const fileRef = storage.ref().child(`exam_images/${Date.now()}_${file.name}`);
         fileRef.put(file).then(snapshot => {
@@ -7754,6 +7761,7 @@ function previewExamFile(event) {
         }).catch(err => {});
     } catch(error) {}
 }
+
 
 // 4. "분석 시작하기" 버튼을 눌렀을 때 실행되는 함수
 function executeExamAnalysis() {
@@ -7789,6 +7797,10 @@ async function startExamAiAnalysis(base64Data) {
     const extractMode = document.querySelector('input[name="extractMode"]:checked')?.value || 'all';
     const isExtractAll = (extractMode === 'all');
     
+   // 💡 [추가] 핀셋 모드 변수 수집
+    const isTweezerMode = (extractMode === 'tweezer');
+    const tweezerNums = document.getElementById('exam-tweezer-nums')?.value || "";
+    
     const isChoiceChecked = document.getElementById('exam-check-choice')?.checked || false;
     const isShortChecked = document.getElementById('exam-check-short')?.checked || false;
        
@@ -7816,6 +7828,8 @@ async function startExamAiAnalysis(base64Data) {
                 referenceDBText: referenceDBText,
                 subject: currentSubject,
                 isExtractAll: isExtractAll,
+                isTweezerMode: isTweezerMode, // 💡 추가됨: 서버로 전송
+                tweezerNums: tweezerNums,     // 💡 추가됨: 서버로 전송
                 isChoiceChecked: isChoiceChecked,
                 isShortChecked: isShortChecked,
                 startNum: startNum,
@@ -7846,16 +7860,16 @@ async function startExamAiAnalysis(base64Data) {
         const blocks = fullText.split('---').map(b => b.trim()).filter(b => b.length > 0);
         
         blocks.forEach((block, idx) => {
-            // 💡 [수정2] 11번~20번 문항 번호 인식률을 100%로 끌어올린 무적의 정규식!
-            let numMatch = block.match(/\[번호\]\s*([가-힣a-zA-Z\s\d]+)/) 
-                        || block.match(/\[([가-힣a-zA-Z\s]*\d+[가-힣a-zA-Z\s]*)\]/) 
-                        || block.match(/(?:문항)?\s*([가-힣a-zA-Z\s]*\d+)\s*번?/); 
+            // 💡 [수정] 특수기호나 마크다운(**)이 섞여도 완벽하게 문항 번호만 잡아냅니다!
+            let numMatch = block.match(/\[번호\]\s*([^|]+)/); 
                         
-            let scoreMatch = block.match(/\[배점\]\s*([\d.]+)점?/);
-            let qNumRaw = numMatch ? numMatch[1].trim() : String(extractedQuestionsArray.length + 1);
+            let scoreMatch = block.match(/\[배점\][^0-9]*([\d.]+)/);
+            
+            // AI가 뱉은 마크다운 별표(*)를 제거하고 순수 번호만 추출
+            let qNumRaw = numMatch ? numMatch[1].replace(/\*/g, '').trim() : String(extractedQuestionsArray.length + 1);
             
             let qNum = qNumRaw;
-            if (qNumRaw.includes('서답') || qNumRaw.includes('서술') || qNumRaw.startsWith('서')) {
+            if (qNumRaw.includes('서답') || qNumRaw.includes('서술') || qNumRaw.includes('서')) {
                 let numPart = qNumRaw.replace(/[^0-9]/g, '');
                 qNum = "서" + numPart;
             } else {
@@ -7865,7 +7879,6 @@ async function startExamAiAnalysis(base64Data) {
 
             let score = scoreMatch ? scoreMatch[1] : "0";
             
-            // 💡 [추가] 공통 지문 태그 분리 로직 (기존 정렬 번호 추출 로직은 건드리지 않아 안전합니다)
             let pRange = "";
             let pText = "";
             let cleanText = block;
@@ -7874,16 +7887,16 @@ async function startExamAiAnalysis(base64Data) {
             if(pMatch) {
                 pRange = pMatch[1].trim();
                 pText = pMatch[2].trim();
-                cleanText = block.replace(pMatch[0], '').trim(); // 문항 텍스트에서 지문 부분 분리
+                cleanText = block.replace(pMatch[0], '').trim();
             }
             
             extractedQuestionsArray.push({ 
                 num: qNum, 
-                text: cleanText,  // 텍스트 수정 칸에는 찐 발문만 들어감
+                text: cleanText,  
                 score: score, 
                 image: null,
-                passageRange: pRange,   // 공통 지문 범위 (예: 3번~서답형2번)
-                passageContent: pText   // 공통 지문 내용
+                passageRange: pRange,   
+                passageContent: pText   
             });
         })
 
