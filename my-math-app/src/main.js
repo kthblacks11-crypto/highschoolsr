@@ -63,7 +63,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.1.5"; 
+const CURRENT_VERSION = "1.1.6"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -3492,7 +3492,6 @@ function renderQuestionCards() {
         </div>
     `;
     
-    
     extractedQuestionsArray.forEach((q, idx) => {
         const qCard = document.createElement('div');
         qCard.className = "quiz-container";
@@ -3514,7 +3513,7 @@ function renderQuestionCards() {
         qCard.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
                 <div style="font-weight: bold; color: #ea580c; display: flex; align-items: center; gap: 5px;">
-                    [문항 <input type="text" value="${q.num || (idx + 1)}" oninput="extractedQuestionsArray[${idx}].num = this.value" style="width: 45px; padding: 2px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; font-weight: bold; color: #ea580c;">]
+                    [문항 <input type="text" value="${q.num}" oninput="extractedQuestionsArray[${idx}].num = this.value" style="width: 65px; padding: 2px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; font-weight: bold; color: #ea580c;">]
                 </div>
                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                     <select id="ai-diff-${idx}" style="padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; max-width: 200px;">
@@ -7861,20 +7860,23 @@ async function startExamAiAnalysis(base64Data) {
         
         blocks.forEach((block, idx) => {
             // 💡 [수정] 특수기호나 마크다운(**)이 섞여도 완벽하게 문항 번호만 잡아냅니다!
-            let numMatch = block.match(/\[번호\]\s*([^|]+)/); 
+            let numMatch = block.match(/\[번호\]\s*([^|]+)/) 
+                        || block.match(/\[([가-힣a-zA-Z\s]*\d+[가-힣a-zA-Z\s]*)\]/) 
+                        || block.match(/(?:문항)?\s*([가-힣a-zA-Z\s]*\d+)\s*번?/);
                         
             let scoreMatch = block.match(/\[배점\][^0-9]*([\d.]+)/);
             
-            // AI가 뱉은 마크다운 별표(*)를 제거하고 순수 번호만 추출
-            let qNumRaw = numMatch ? numMatch[1].replace(/\*/g, '').trim() : String(extractedQuestionsArray.length + 1);
+            // AI가 뱉은 마크다운 별표(*)를 제거하고 순수 번호만 추출. 못 찾으면 "수동입력(확인요망)"으로 띄움.
+            let qNumRaw = numMatch ? numMatch[1].replace(/\*/g, '').trim() : "수동입력(확인요망)";
             
             let qNum = qNumRaw;
             if (qNumRaw.includes('서답') || qNumRaw.includes('서술') || qNumRaw.includes('서')) {
                 let numPart = qNumRaw.replace(/[^0-9]/g, '');
-                qNum = "서" + numPart;
+                qNum = numPart ? "서" + numPart : qNumRaw;
             } else {
                 let numPart = qNumRaw.replace(/[^0-9]/g, '');
-                qNum = numPart || String(extractedQuestionsArray.length + 1);
+                // 💡 [핵심] 번호를 1, 2, 3으로 강제로 매기던 (idx+1) 로직 완전 삭제!
+                qNum = numPart ? numPart : qNumRaw; 
             }
 
             let score = scoreMatch ? scoreMatch[1] : "0";
