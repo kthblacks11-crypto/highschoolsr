@@ -46,11 +46,13 @@ document.addEventListener('click', async (e) => {
 
         // 안내창 띄우고 즉시 구글 로그인 연결
         alert("구글로 로그인 후 이용할 수 있습니다.");
-        try {
-            await auth.signInWithPopup(provider);
-        } catch (error) {
-            console.error("로그인 실패 또는 취소:", error);
-        }
+        setTimeout(async () => {
+            try {
+                await auth.signInWithPopup(provider);
+            } catch (error) {
+                console.error("로그인 실패 또는 취소:", error);
+            }
+        }, 10); 
     }
 }, true); // 💡 true (캡처링): HTML의 가장 바깥에서 먼저 이벤트를 낚아채도록 설정!
 
@@ -63,7 +65,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.1.6"; 
+const CURRENT_VERSION = "1.1.8"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -3968,7 +3970,29 @@ async function updateQuestionInDB() {
     }
 }
 
+// 👇 업데이트 중 실수로 삭제된 함수입니다. 이곳에 다시 붙여넣어 주세요! 👇
+async function deleteQuestionFromDB() {
+    const qDocId = document.getElementById('admin-manage-q-list').value;
+    if (!qDocId) {
+        alert("먼저 삭제할 문항을 선택해주세요.");
+        return;
+    }
 
+    if (confirm("🚨 이 문항을 문제은행(DB)에서 영구 삭제하시겠습니까?")) {
+        try {
+            await db.collection('transformed_bank').doc(qDocId).delete();
+            alert("🗑️ 문항이 삭제되었습니다.");
+            
+            // 삭제 후 입력창 숨기기
+            const fields = document.getElementById('question-edit-fields');
+            if(fields) fields.style.display = 'none';
+            
+            loadQuestionsForEdit(); // 목록 새로고침
+        } catch(e) { 
+            alert("삭제 실패: " + e.message); 
+        }
+    }
+}
 // ==========================================
 // 📂 사용자 폴더(프로젝트) 관리 시스템 (분할점수 산출용)
 // ==========================================
