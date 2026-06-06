@@ -65,7 +65,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.1.10"; 
+const CURRENT_VERSION = "1.2.1"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -1108,9 +1108,8 @@ async function processAndSaveBackground(analysisText, apiKey) {
         // (AI가 띄어쓰기를 넣어서 출력할 경우를 대비해 \s 정규식 추가)
         const stdCodes = analysisText.match(/\[\d{2}[가-힣a-zA-Z0-9\s]+-\d{2}-\d{2}\]/g) || ["unknown"];
 
-        const levelMatch = analysisText.match(/성취수준:\s*(A\+|[A-E])/);
-        let extractedLevel = levelMatch ? levelMatch[1] : "C";
-        if (extractedLevel === "A+") { extractedLevel = "A"; }
+        const levelMatch = analysisText.match(/(?:성취수준|수준)[\s:은는]*([A-E]\+?)/) || analysisText.match(/\[수준\]\s*([A-E]\+?)/);
+        let extractedLevel = levelMatch ? levelMatch[1].replace('+', '') : "C";
 
         const reasonMatch = analysisText.match(/판정 이유:\s*([\s\S]*?)(?=\[|$)/);
         let extractedReason = reasonMatch ? reasonMatch[1].trim() : "AI가 교육과정 루브릭을 바탕으로 분석한 문항입니다.";
