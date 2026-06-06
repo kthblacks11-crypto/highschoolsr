@@ -65,7 +65,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.2.1"; 
+const CURRENT_VERSION = "1.2.2"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -8362,7 +8362,7 @@ function hideSystemLoading() {
 // 기존 코드를 찾아서 지울 필요 없습니다. 맨 밑에 추가만 하시면 무조건 이 코드가 우선 실행됩니다.
 // =========================================================================
 
-// 1️⃣ 시험지 지우기 + 버튼 초기화 완벽 제어
+// 1️⃣ 시험지 지우기 + 버튼 및 추출 옵션 초기화 완벽 제어
 window.clearExamFile = async function() {
     if(!confirm("업로드된 시험지와 추출된 문항을 모두 초기화하시겠습니까?")) return;
 
@@ -8377,6 +8377,22 @@ window.clearExamFile = async function() {
     
     const wrapper = document.getElementById('exam-inspector-wrapper');
     if (wrapper) wrapper.style.display = 'none';
+
+    // 💡 [추가된 부분] 추출 옵션(전체/범위/핀셋) 라디오 버튼 및 입력창 완전 초기화
+    const extractAllRadio = document.querySelector('input[name="extractMode"][value="all"]');
+    if (extractAllRadio) extractAllRadio.checked = true; 
+    
+    const rangeInputs = ['exam-start-num', 'exam-end-num', 'exam-short-start', 'exam-short-end', 'exam-tweezer-nums'];
+    rangeInputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    
+    if (document.getElementById('exam-check-choice')) document.getElementById('exam-check-choice').checked = false;
+    if (document.getElementById('exam-check-short')) document.getElementById('exam-check-short').checked = false;
+
+    if (typeof toggleExamRangeInputs === 'function') toggleExamRangeInputs();
+    // 💡 [추가된 부분 끝]
 
     extractedQuestionsArray = [];
     const listContainer = document.getElementById('extracted-questions-list');
@@ -8468,7 +8484,7 @@ window.previewExamFile = function(event) {
     } catch(error) {}
 };
 
-// 3️⃣ 폴더 이동 시 모든 찌꺼기 완벽 차단 및 도우미 창 닫기
+// 3️⃣ 폴더 이동 시 모든 찌꺼기 차단, 추출 옵션 초기화 및 도우미 창 닫기
 window.startEditAssessment = function(index) {
     currentEditingAssessmentIndex = index;
     history.pushState({ section: 'cut-score', sub: 'step2' }, "", "#cut-score/step2");
@@ -8477,6 +8493,22 @@ window.startEditAssessment = function(index) {
     const fileInput = document.getElementById('exam-file');
     if (fileInput) fileInput.value = ''; 
     
+    // 💡 [추가된 부분] 다른 고사로 들어갈 때마다 추출 옵션을 항상 '전체 추출'로 초기화
+    const extractAllRadio = document.querySelector('input[name="extractMode"][value="all"]');
+    if (extractAllRadio) extractAllRadio.checked = true;
+    
+    const rangeInputs = ['exam-start-num', 'exam-end-num', 'exam-short-start', 'exam-short-end', 'exam-tweezer-nums'];
+    rangeInputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    
+    if (document.getElementById('exam-check-choice')) document.getElementById('exam-check-choice').checked = false;
+    if (document.getElementById('exam-check-short')) document.getElementById('exam-check-short').checked = false;
+
+    if (typeof toggleExamRangeInputs === 'function') toggleExamRangeInputs();
+    // 💡 [추가된 부분 끝]
+
     extractedQuestionsArray = []; 
     const listContainer = document.getElementById('extracted-questions-list');
     if (listContainer) listContainer.innerHTML = ''; 
@@ -8504,7 +8536,7 @@ window.startEditAssessment = function(index) {
     const applyBtnContainer = document.getElementById('external-apply-btn-zone');
     if (applyBtnContainer) applyBtnContainer.style.display = 'none';
 
-    // 💡 AI 도우미 창 강제 닫기 (해결 완료)
+    // 💡 AI 도우미 창 강제 닫기
     const helperZone = document.getElementById('ai-helper-zone');
     if (helperZone) helperZone.style.display = 'none';
 
