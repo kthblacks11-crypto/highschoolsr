@@ -65,7 +65,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.2.4"; 
+const CURRENT_VERSION = "1.2.5"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -7819,8 +7819,10 @@ function renderMemos(memos) {
         const readCount = (memo.readBy || []).filter(e => e !== memo.authorEmail).length;
         const readBadge = readCount > 0 ? `<span style="font-size:0.75rem; color:#f59e0b; font-weight:bold; margin: 0 4px;">읽음 ${readCount}</span>` : '';
 
-        // 시간 포맷 (오전 10:30)
-        const timeStr = memo.timestamp ? new Date(memo.timestamp).toLocaleTimeString('ko-KR', {hour: '2-digit', minute:'2-digit'}) : '';
+        const dateObj = memo.timestamp ? new Date(memo.timestamp) : null;
+        const dateTimeStr = dateObj ? 
+            `${dateObj.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })} ${dateObj.toLocaleTimeString('ko-KR', { hour: '2-digit', minute:'2-digit' })}` 
+            : '';
 
         html += `
         <div style="display: flex; flex-direction: column; align-items: ${align}; margin-bottom: 15px;">
