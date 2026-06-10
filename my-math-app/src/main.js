@@ -65,7 +65,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.2.3"; 
+const CURRENT_VERSION = "1.2.4"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
@@ -974,24 +974,24 @@ async function executeAnalysis() {
         if (isSingleMode) {
             renderSophisticatedResult(analysisText, lastAnalyzedSingleImage);
         } else {
-            // 💡 [수정된 부분] 요약 분석(다중 모드) 시 텍스트 위에 자른 이미지들을 표시합니다.
             let rawText = analysisText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
             
-            // 이미지를 가로로 스크롤 할 수 있는 컨테이너 생성
-            let imagesHtml = '<div style="display: flex; gap: 15px; overflow-x: auto; margin-bottom: 1.5rem; padding-bottom: 10px; border-bottom: 2px dashed #cbd5e1;">';
-            
-            // 사용자가 자른 영역(cropBoxes) 개수만큼 반복하며 이미지 태그 렌더링
-            cropBoxes.forEach((box, i) => {
-                imagesHtml += `
-                    <div style="flex: 0 0 auto; text-align: center;">
-                        <span style="display: block; font-size: 0.85rem; font-weight: bold; color: #ef4444; margin-bottom: 5px;">[문항 ${i+1}]</span>
-                        <img src="data:image/jpeg;base64,${getCroppedBase64(box)}" style="height: 120px; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                    </div>`;
+            rawText = rawText.replace(/\[문항\s*(\d+)\]/g, (match, p1) => {
+                const idx = parseInt(p1) - 1; 
+                const imgBase64 = cropBoxes[idx] ? getCroppedBase64(cropBoxes[idx]) : null;
+                let imgHtml = '';
+                
+                if (imgBase64) {
+                    imgHtml = `<div style="margin: 15px 0; text-align: center; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;">
+               <img src="data:image/jpeg;base64,${imgBase64}" style="width: 60%; max-width: 400px; height: auto; border-radius: 6px; box-shadow: 0 3px 6px rgba(0,0,0,0.1);">
+           </div>`;
+                }
+                
+                const borderTop = idx === 0 ? '' : 'border-top: 2px dashed #cbd5e1; margin-top: 2.5rem; padding-top: 1.5rem;';
+                return `<div style="${borderTop}"><strong style="font-size: 1.3rem; color: #ef4444; background: #fee2e2; padding: 4px 12px; border-radius: 20px;">${match}</strong></div>${imgHtml}`;
             });
-            imagesHtml += '</div>';
-            
-            // 이미지와 텍스트를 함께 화면에 출력
-            resultText.innerHTML = `<div style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); line-height: 1.8;">${imagesHtml}${rawText}</div>`;
+
+            resultText.innerHTML = `<div style="background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); line-height: 1.8;">${rawText}</div>`;
         }
 
         const saveZone = document.getElementById('save-analysis-zone');
@@ -1004,10 +1004,15 @@ async function executeAnalysis() {
 
     } catch (error) {
         console.error('API Error:', error);
-        // 💡 [수정된 부분] 오류 발생 시 버튼을 추가하여 함수를 재호출하도록 합니다.
+        let finalMsg = error.message;
+        
+        if (error.name === 'TypeError' && finalMsg.includes('Failed to fetch')) {
+            finalMsg = "인터넷 연결이 불안정하거나 방화벽에 의해 차단되었습니다. 네트워크를 확인해주세요.";
+        }
+        
         resultText.innerHTML = `<div style="padding: 15px; background-color: #fee2e2; border-left: 4px solid #ef4444; border-radius: 4px;">
             <p style="color: #b91c1c; font-weight: bold; margin: 0 0 10px 0;">🚨 분석 실패</p>
-            <p style="margin: 0 0 15px 0; color: #7f1d1d;">${error.message}</p>
+            <p style="margin: 0 0 15px 0; color: #7f1d1d;">${finalMsg}</p>
             <button onclick="executeAnalysis()" style="background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🔄 영역 유지하고 다시 분석하기</button>
         </div>`;
     }
