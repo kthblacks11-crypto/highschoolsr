@@ -5004,240 +5004,237 @@ function toggleAiVisibility() {
     }
 }
 
-// 1️⃣ [완벽 교체] DB 링크 삭제 및 '첨부파일 이름표 불일치' 수정 완료!
-async function clearExamFile() {
-    if(!confirm("업로드된 시험지와 추출된 문항을 모두 초기화하시겠습니까?")) return;
-
-    // 💡 [핵심 해결] 'exam-file-upload'가 아니라 'exam-file'이 맞습니다!
-    const fileInput = document.getElementById('exam-file');
-    if (fileInput) fileInput.value = '';
-    
-    const imgEl = document.getElementById('exam-img-display');
-    const pdfEl = document.getElementById('exam-pdf-display');
-    if (imgEl) { imgEl.src = ''; imgEl.style.display = 'none'; }
-    if (pdfEl) { pdfEl.src = ''; pdfEl.style.display = 'none'; }
-    
-    const wrapper = document.getElementById('exam-inspector-wrapper');
-    if (wrapper) wrapper.style.display = 'none';
-
-    extractedQuestionsArray = [];
-    const listContainer = document.getElementById('extracted-questions-list');
-    if (listContainer) listContainer.innerHTML = '<p style="text-align:center; color:#94a3b8; margin-top:20px;">시험지를 초기화했습니다. 다시 업로드해주세요.</p>';
-    
-    tempExamBase64 = null;
-    examImages = [];
-
-    // 💡 임시 메모리 주소 완벽하게 찢어버리기
-    currentUploadedImageUrl = null; 
-    if (window.localExamUrl) {
-        URL.revokeObjectURL(window.localExamUrl);
-        window.localExamUrl = null;
-    }
-    
-    // 💡 시험지가 지워졌으므로 분석 버튼도 깔끔하게 숨김 처리!
-    const startBtn = document.getElementById('start-analysis-btn');
-    if (startBtn) startBtn.style.display = 'none';
-
-    // 💡 파이어베이스 DB에서 이미지 주소(imageUrl) 필드를 완전히 폭파시킵니다!
-    if (typeof currentProjectId !== 'undefined' && currentEditingAssessmentIndex !== -1 && currentProjectId) {
-        try {
-            const docRef = db.collection('user_projects').doc(currentProjectId);
-            await db.runTransaction(async (transaction) => {
-                const doc = await transaction.get(docRef);
-                if(doc.exists) {
-                    let assessments = doc.data().assessments;
-                    if(assessments[currentEditingAssessmentIndex]) {
-                        delete assessments[currentEditingAssessmentIndex].imageUrl; 
-                        transaction.update(docRef, { assessments: assessments });
-                    }
-                }
-            });
-        } catch(e) {
-            console.error("DB 이미지 초기화 실패:", e);
-        }
-    }
-    
-    alert('업로드된 시험지가 완벽하게 삭제되었습니다.');
-}
-
-// 3️⃣ [완벽 교체] 다른 폴더 이동 시 AI 도우미 창까지 100% 닫아주는 입장 함수
-function startEditAssessment(index) {
-    currentEditingAssessmentIndex = index;
-    history.pushState({ section: 'cut-score', sub: 'step2' }, "", "#cut-score/step2");
-
-    // 💡 화면/메모리 지우기 시작
-    const fileInput = document.getElementById('exam-file');
-    if (fileInput) fileInput.value = ''; 
-    
-    extractedQuestionsArray = []; 
-    const listContainer = document.getElementById('extracted-questions-list');
-    if (listContainer) listContainer.innerHTML = ''; 
-
-    tempExamBase64 = null;
-    examImages = [];
-    currentUploadedImageUrl = null;
-    if (window.localExamUrl) {
-        URL.revokeObjectURL(window.localExamUrl);
-        window.localExamUrl = null;
+// 💡 [완벽 교체] 텍스트 입력창을 하위 메뉴로 숨겨서 가장 심플한 동선을 만든 모달창
+window.addManualTableQuestion = function() {
+    let modal = document.getElementById('manual-q-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'manual-q-modal';
+        modal.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:10000; display:flex; justify-content:center; align-items:center;";
+        document.body.appendChild(modal);
     }
 
-    const imgEl = document.getElementById('exam-img-display');
-    const pdfEl = document.getElementById('exam-pdf-display');
-    if (imgEl) { imgEl.src = ''; imgEl.style.display = 'none'; }
-    if (pdfEl) { pdfEl.src = ''; pdfEl.style.display = 'none'; }
-    
-    const wrapper = document.getElementById('exam-inspector-wrapper');
-    if (wrapper) wrapper.style.display = 'none';
-
-    const startBtn = document.getElementById('start-analysis-btn');
-    if (startBtn) startBtn.style.display = 'none';
-
-    const applyBtnContainer = document.getElementById('external-apply-btn-zone');
-    if (applyBtnContainer) applyBtnContainer.style.display = 'none';
-
-    // 💡 [핵심 추가] 폴더 이동 시 켜져 있던 AI 도우미 창을 강제로 닫습니다!
-    const helperZone = document.getElementById('ai-helper-zone');
-    if (helperZone) helperZone.style.display = 'none';
-
-    document.getElementById('project-detail-view').style.display = 'none';
-    document.getElementById('cut-score-step2').style.display = 'block';
-    
-    if (typeof projectDetailsUnsubscribe !== 'undefined' && projectDetailsUnsubscribe) {
-        projectDetailsUnsubscribe();
-        projectDetailsUnsubscribe = null;
-    }
-
-    if (unsubscribeProject) unsubscribeProject();
-
-    unsubscribeProject = db.collection('user_projects').doc(currentProjectId).onSnapshot(doc => {
-        if(doc.exists) {
-            const projectData = doc.data();
-            const asm = projectData.assessments[index];
-            if (currentActiveStep !== 4) {
-                document.getElementById('current-assessment-info').innerText = `📌 ${asm.name} (반영 비율: ${asm.weight}%)`;
-            } else if (typeof updateMTableStatus === 'function') {
-                updateMTableStatus(asm, projectData);
-            }
-            const parsedScores = asm.parsedScores || [];
-            if (parsedScores.length > 0) {
-                let cCount = 0, sCount = 0;
-                parsedScores.forEach(q => {
-                    if(q.isShortAnswer || String(q.num).includes('서')) sCount++;
-                    else cCount++;
-                });
-                document.getElementById('choice-count').value = cCount;
-                document.getElementById('short-count').value = sCount;
-            } else {
-                document.getElementById('choice-count').value = 20;
-                document.getElementById('short-count').value = 5;
-            }
+    modal.innerHTML = `
+        <div style="background:white; width:90%; max-width:650px; border-radius:10px; padding:25px; box-shadow:0 10px 25px rgba(0,0,0,0.2); max-height:90vh; overflow-y:auto;">
+            <h3 style="margin-top:0; color:#1e3a8a; border-bottom:2px solid #bfdbfe; padding-bottom:10px;">➕ 문항 수동 추가 및 편집</h3>
             
-            cachedProjectData = projectData;
-            cachedAsmData = asm;
-
-            renderCollaborativeTable(projectData, asm);
-
-            if (asm.imageUrl) {
-                const imgEl = document.getElementById('exam-img-display');
-                const pdfEl = document.getElementById('exam-pdf-display');
-                const listContainer = document.getElementById('extracted-questions-list');
-
-                if (asm.imageUrl.toLowerCase().includes("pdf")) {
-                    if(imgEl) imgEl.style.display = 'none';
-                    if(pdfEl) { pdfEl.src = asm.imageUrl; pdfEl.style.display = 'block'; }
-                } else {
-                    if(pdfEl) pdfEl.style.display = 'none';
-                    if(imgEl) { imgEl.src = asm.imageUrl; imgEl.style.display = 'block'; }
-                }
-                currentUploadedImageUrl = asm.imageUrl;
-
-                const wrapper = document.getElementById('exam-inspector-wrapper');
-                const toggleBtn = document.getElementById('exam-viewer-toggle-btn');
-                if (wrapper) {
-                    wrapper.style.display = 'flex'; 
-                    if (toggleBtn) toggleBtn.innerText = "📄 시험지 닫기 🔼";
-                }
-
-                if (extractedQuestionsArray.length === 0 && listContainer) {
-                    listContainer.innerHTML = `
-                        <div style="padding: 3rem 1rem; text-align: center; color: #475569; background: white; border-radius: 8px; border: 1px dashed #cbd5e1;">
-                            <span style="font-size: 3rem;">📄</span>
-                            <p style="font-weight: bold; font-size: 1.1rem; margin-top: 10px; color: #1e3a8a;">시험지가 로드되었습니다.</p>
-                            <p style="font-size: 0.95rem; line-height: 1.6;">방장 선생님이 이미 문항을 표에 반영했습니다.<br>왼쪽 시험지를 보고 위의 <strong>[표]</strong>에서 채점을 진행해 주세요.</p>
-                        </div>`;
-                }
-            } else {
-                const imgEl = document.getElementById('exam-img-display');
-                const pdfEl = document.getElementById('exam-pdf-display');
-                if (imgEl) { imgEl.src = ''; imgEl.style.display = 'none'; }
-                if (pdfEl) { pdfEl.src = ''; pdfEl.style.display = 'none'; }
+            <div style="display:flex; gap:10px; margin-bottom:20px;">
+                <input type="text" id="mq-num" placeholder="문항 번호 (예: 14 또는 서1)" style="flex:1; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:bold;">
+                <input type="number" step="0.1" id="mq-score" placeholder="배점 (예: 4.5)" style="flex:1; padding:10px; border:1px solid #cbd5e1; border-radius:6px;">
+            </div>
+            
+            <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; margin-bottom:20px;">
+                <div onclick="document.getElementById('mq-ai-submenu').style.display = document.getElementById('mq-ai-submenu').style.display === 'none' ? 'block' : 'none';" 
+                     style="padding:15px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; background:#f1f5f9; border-radius:6px;">
+                    <strong style="color:#065f46; font-size:1.05rem;">🤖 상세 내용 입력 및 AI 판정 (선택) 🔽</strong>
+                    <span style="font-size:0.8rem; color:#64748b;">클릭하여 열기/접기</span>
+                </div>
                 
-                const wrapper = document.getElementById('exam-inspector-wrapper');
-                if (wrapper) wrapper.style.display = 'none';
-                
-                currentUploadedImageUrl = null;
+                <div id="mq-ai-submenu" style="display:none; padding:15px; border-top:1px solid #cbd5e1;">
+                    
+                    <div style="text-align:center; margin-bottom:15px; border-bottom:1px dashed #cbd5e1; padding-bottom:15px;">
+                        <p style="margin:0 0 10px 0; font-size:0.85rem; color:#64748b;">💡 화면에서 [Win + Shift + S]로 문항을 캡처하신 후 아래 버튼을 누르세요.</p>
+                        <button onclick="pasteImageToManualModal()" style="background:#fef3c7; color:#92400e; border:1px solid #fde68a; padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:bold; box-shadow:0 2px 4px rgba(0,0,0,0.05);">📋 복사한 그림 붙여넣기 (Ctrl+V)</button>
+                        
+                        <div id="mq-image-preview" style="margin-top:15px; display:none;">
+                            <img id="mq-img" src="" style="max-width:100%; max-height:200px; border:1px solid #cbd5e1; border-radius:6px;">
+                            <button onclick="removeManualImage()" style="display:block; margin:8px auto 0 auto; background:#fee2e2; color:#ef4444; border:none; padding:4px 10px; border-radius:4px; cursor:pointer; font-size:0.8rem; font-weight:bold;">❌ 그림 지우기</button>
+                        </div>
+                    </div>
+
+                    <div style="font-size:0.85rem; font-weight:bold; color:#334155; margin-bottom:5px;">📝 문항 내용 (텍스트)</div>
+                    <textarea id="mq-text" placeholder="직접 타자로 입력하시거나, 아래의 [AI 개별 분석]을 돌리면 자동으로 텍스트가 채워집니다." style="width:100%; height:80px; padding:10px; border:1px solid #cbd5e1; border-radius:6px; margin-bottom:15px; font-family:inherit; box-sizing:border-box; line-height:1.5;"></textarea>
+
+                    <button onclick="runManualSingleAI()" id="mq-ai-btn" style="background:#10b981; color:white; border:none; padding:10px 16px; border-radius:6px; cursor:pointer; font-weight:bold; box-shadow:0 2px 4px rgba(0,0,0,0.1); transition:0.2s; width:100%;">✨ 첨부한 이미지로 개별 분석하기</button>
+
+                    <div id="mq-ai-result-area" style="display:none; margin-top:15px; background:#ecfdf5; padding:15px; border:1px solid #a7f3d0; border-radius:6px;">
+                        <div style="font-size:0.85rem; font-weight:bold; color:#065f46; margin-bottom:8px;">📊 AI 수준 및 판정 이유 (수정 불가)</div>
+                        <div style="display:flex; gap:10px;">
+                            <input type="text" id="mq-level" placeholder="수준" style="width:70px; padding:8px; border:1px solid #cbd5e1; border-radius:6px; text-align:center; font-weight:bold; color:#475569; background:#e2e8f0; cursor:not-allowed;" readonly>
+                            <input type="text" id="mq-reason" placeholder="AI 판정 이유" style="flex:1; padding:8px; border:1px solid #cbd5e1; border-radius:6px; color:#475569; background:#e2e8f0; cursor:not-allowed;" readonly>
+                        </div>
+                        <p style="margin:8px 0 0 0; font-size:0.75rem; color:#047857; text-align:center;">💡 추출된 텍스트는 바로 위 [문항 내용] 칸에 자동 입력되었습니다.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button onclick="document.getElementById('manual-q-modal').style.display='none'" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:10px 20px; border-radius:6px; cursor:pointer; font-weight:bold;">취소</button>
+                <button onclick="saveManualQuestionToDB()" style="background:#2563eb; color:white; border:none; padding:10px 20px; border-radius:6px; cursor:pointer; font-weight:bold; box-shadow:0 4px 6px rgba(0,0,0,0.2);">💾 채점표에 저장하기</button>
+            </div>
+        </div>
+    `;
+    modal.style.display = 'flex';
+};
+
+// 💡 붙여넣기 도우미 함수들
+window.pasteImageToManualModal = async function() {
+    try {
+        const clipboardItems = await navigator.clipboard.read();
+        for (const item of clipboardItems) {
+            const imageTypes = item.types.filter(type => type.startsWith('image/'));
+            if (imageTypes.length > 0) {
+                const blob = await item.getType(imageTypes[0]);
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    document.getElementById('mq-img').src = e.target.result;
+                    document.getElementById('mq-image-preview').style.display = 'block';
+                };
+                reader.readAsDataURL(blob);
+                return;
             }
         }
-    });
-}
+        alert("⚠️ 복사된 그림이 없습니다. 먼저 화면을 캡처(Win+Shift+S)해 주세요!");
+    } catch(err) {
+        alert("🚨 그림 붙여넣기 권한(클립보드 접근)을 허용해 주세요.");
+    }
+};
 
-// [추가 기능] 수기 작업 중 실수로 지운 문항을 수동으로 복구/추가하는 함수
-async function addManualTableQuestion() {
-    const qNumRaw = prompt("수동으로 추가할 문항 번호를 입력하세요.\n(객관식은 숫자만, 서답형은 '서'와 숫자를 입력. 예: 3 또는 서1)");
-    if (!qNumRaw) return;
+window.removeManualImage = function() {
+    document.getElementById('mq-img').src = "";
+    document.getElementById('mq-image-preview').style.display = 'none';
+};
 
-    const qNum = qNumRaw.trim();
-    const isShort = qNum.includes('서') || qNum.startsWith('서');
+// 💡 [핵심] 단 1개의 문제만 핀셋으로 읽어내는 초고속 AI 호출 함수
+window.runManualSingleAI = async function() {
+    const imgSrc = document.getElementById('mq-img').src;
+    if (!imgSrc || !imgSrc.startsWith('data:image')) {
+        alert("💡 AI 판정을 받으려면 먼저 문항 영역을 캡처해서 붙여넣어 주세요!\n(AI가 그림 속의 문제와 도표를 모두 읽어냅니다.)");
+        return;
+    }
+
+    const btn = document.getElementById('mq-ai-btn');
+    const originalText = btn.innerText;
+    btn.innerText = "⏳ AI가 문항을 분석 중입니다..."; btn.disabled = true;
 
     try {
-        const docRef = db.collection('user_projects').doc(currentProjectId);
+        const match = imgSrc.match(/data:(.*?);base64/);
+        const mimeType = match ? match[1] : "image/jpeg";
+        const base64Clean = imgSrc.split(',')[1];
         
+        const referenceDBText = typeof fetchReferenceQuestions === 'function' ? await fetchReferenceQuestions(currentSubject) : "";
+        const workerUrl = "https://script.google.com/macros/s/AKfycbwgx4RgF8FQxxL3jBgEQ5l369llADjhZ1NepulIdF4DdX18kBrB8oRQ4Ft0d5WdKtEF/exec";
+        const userApiKey = localStorage.getItem('gemini_api_key');
+
+        const response = await fetch(workerUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({
+                action: "exam_analysis",
+                mimeType: mimeType,
+                base64Clean: base64Clean,
+                referenceDBText: referenceDBText,
+                subject: typeof currentSubject !== 'undefined' ? currentSubject : "uncategorized",
+                isExtractAll: true, 
+                apiKey: userApiKey
+            })
+        });
+
+        const data = await response.json();
+        if (data.error) throw new Error(data.error.message);
+
+        const fullText = data.candidates[0].content.parts[0].text;
+        
+        // AI 데이터 발라내기
+        let levelMatch = fullText.match(/\[수준\]\s*(A\+|[A-E])/);
+        let reasonMatch = fullText.match(/\[이유\]\s*([^|]+)/);
+        let contentMatch = fullText.match(/\[문항내용\]\s*([\s\S]*)/);
+
+        // 💡 AI 결과를 잠겨있는(readonly) 입력창에 뿌려주고 숨겨진 구역을 짠! 하고 보여줍니다.
+        if (levelMatch) document.getElementById('mq-level').value = levelMatch[1].trim();
+        if (reasonMatch) document.getElementById('mq-reason').value = reasonMatch[1].trim();
+        document.getElementById('mq-ai-result-area').style.display = 'block';
+        
+        // 문항 텍스트 추출 결과는 맨 위쪽 텍스트창에 채워줍니다. (텍스트는 교사가 수정할 수 있게 유지)
+        if (contentMatch && !document.getElementById('mq-text').value) {
+            document.getElementById('mq-text').value = contentMatch[1].trim();
+        }
+
+        alert("✨ AI 분석이 완료되었습니다!\n추출된 결과는 회색 칸에 고정되어 수정할 수 없습니다.");
+
+    } catch(e) {
+        alert("AI 판정 중 오류가 발생했습니다: " + e.message);
+    } finally {
+        btn.innerText = originalText; btn.disabled = false;
+    }
+};
+
+// 💡 채점표와 보조 서랍(이미지)에 동시 저장하는 함수
+window.saveManualQuestionToDB = async function() {
+    const qNum = document.getElementById('mq-num').value.trim();
+    const score = parseFloat(document.getElementById('mq-score').value) || 0;
+    const text = document.getElementById('mq-text').value.trim();
+    const level = document.getElementById('mq-level') ? document.getElementById('mq-level').value.trim() : "판정필요";
+    const reason = document.getElementById('mq-reason') ? document.getElementById('mq-reason').value.trim() : "수동으로 추가/수정된 문항입니다.";
+    const imgSrc = document.getElementById('mq-img') ? document.getElementById('mq-img').src : null;
+    
+    if (!qNum) { alert("문항 번호를 반드시 입력해주세요!"); return; }
+
+    const btn = document.querySelector('#manual-q-modal button[onclick="saveManualQuestionToDB()"]');
+    btn.innerText = "⏳ 저장 중..."; btn.disabled = true;
+
+    try {
+        let finalImageId = null;
+        if (imgSrc && imgSrc.startsWith('data:image')) {
+            let compressedBase64 = await new Promise(resolve => {
+                compressCaptureImage(imgSrc, (compressed) => resolve(compressed));
+            });
+            const imgDocRef = await db.collection('project_images').add({
+                projectId: currentProjectId,
+                assessmentIndex: currentEditingAssessmentIndex,
+                questionNum: qNum,
+                base64Data: compressedBase64,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            finalImageId = imgDocRef.id;
+        }
+
+        const docRef = db.collection('user_projects').doc(currentProjectId);
         await db.runTransaction(async (transaction) => {
             const doc = await transaction.get(docRef);
-            if (!doc.exists) throw new Error("문서를 찾을 수 없습니다.");
-            
             let assessments = doc.data().assessments;
             let asm = assessments[currentEditingAssessmentIndex];
             let baseScores = asm.parsedScores || [];
             
-            // 💡 1. 중복 번호 검사 (이미 있는 번호면 차단)
-            if (baseScores.some(q => String(q.num).trim() === qNum)) {
-                throw new Error("이미 표에 존재하는 문항 번호입니다.");
+            let existingIdx = baseScores.findIndex(q => String(q.num).trim() === qNum);
+            const isShort = qNum.includes('서') || qNum.startsWith('서');
+
+            // level이나 reason이 비어있으면 기본값 세팅
+            const safeLevel = level || "판정필요";
+            const safeReason = reason || "수동으로 추가/수정된 문항입니다.";
+
+            const newQData = {
+                num: qNum, score: score, difficulty: "", level: safeLevel,
+                isShortAnswer: isShort, reason: safeReason, text: text, imageId: finalImageId
+            };
+
+            if (existingIdx !== -1) {
+                baseScores[existingIdx] = { ...baseScores[existingIdx], ...newQData };
+            } else {
+                baseScores.push(newQData);
             }
 
-            // 💡 2. 새 문항 추가 (빈 껍데기로 생성)
-            baseScores.push({
-                num: qNum,
-                score: 0, // 기본 점수 0
-                difficulty: "",
-                level: "판정필요",
-                isShortAnswer: isShort,
-                reason: "수동으로 추가된 문항입니다."
-            });
-
-            // 💡 3. 추가된 문항이 자기 자리를 찾아가도록 번호순 정렬
             baseScores.sort((a, b) => {
                 const aIsShort = String(a.num).startsWith('서');
                 const bIsShort = String(b.num).startsWith('서');
                 if (aIsShort && !bIsShort) return 1;
                 if (!aIsShort && bIsShort) return -1;
-
                 let aNum = parseInt(String(a.num).replace(/[^0-9]/g, '')) || 0;
                 let bNum = parseInt(String(b.num).replace(/[^0-9]/g, '')) || 0;
                 return aNum - bNum;
             });
-
             asm.parsedScores = baseScores;
             transaction.update(docRef, { assessments: assessments });
         });
 
-        // 완료 시 알림 (onSnapshot이 켜져 있으므로 표는 자동으로 갱신됩니다!)
-        alert(`✅ ${qNum}번 문항 칸이 성공적으로 생성되었습니다!`);
-
+        document.getElementById('manual-q-modal').style.display = 'none';
+        alert(`✅ ${qNum}번 문항이 채점표와 뷰어에 완벽하게 반영되었습니다!`);
     } catch(e) {
-        alert("문항 추가 실패: " + e.message);
+        alert("저장 실패: " + e.message);
+    } finally {
+        btn.innerText = "💾 채점표에 저장하기"; btn.disabled = false;
     }
-}
+};
 
 // ✨ [신규 추가] 저장된 데이터를 기반으로 표를 다시 그려주는 함수
 function restoreScoreTable(savedScores) {
@@ -5330,17 +5327,56 @@ async function sendAiResultsToTable(isFromSaveBank = false) {
 
     if (extractedQuestionsArray.length === 0) { alert("분석된 문항이 없습니다."); return; }
 
-    // 💡 [핵심 해결] 루프 돌기 전, 화면의 모든 input 값을 데이터 배열에 강제로 덮어씌웁니다!
+    // 1. 화면의 입력값(번호, 텍스트)을 배열에 최신화
     extractedQuestionsArray.forEach((q, idx) => {
-        // 문항 번호 입력창에서 값 가져오기
         const numInput = document.querySelector(`input[oninput*="extractedQuestionsArray[${idx}].num"]`);
         if (numInput) q.num = numInput.value;
 
-        // 문항 내용 텍스트상자에서 값 가져오기
         const textInput = document.querySelectorAll('.q-edit-area')[idx];
         if (textInput) q.text = textInput.value;
     });
 
+    const btn = document.querySelector('button[onclick="sendAiResultsToTable()"]');
+    const originalBtnText = btn ? btn.innerText : "🗑️ 저장하지 않고 표에만 반영";
+    if(btn) {
+        btn.innerText = "⏳ 표에 반영 중...";
+        btn.disabled = true;
+    }
+
+    // 💡 2. [핵심 로직] 새로운 서랍(project_images)에 이미지만 분리해서 저장
+    const processedQuestions = [];
+    for (let i = 0; i < extractedQuestionsArray.length; i++) {
+        let q = extractedQuestionsArray[i];
+        let finalImageId = null;
+
+        if (q.image) {
+            // 이미지 압축
+            let compressedBase64 = await new Promise(resolve => {
+                compressCaptureImage(q.image, (compressed) => resolve(compressed));
+            });
+
+            // 새로운 보조 서랍(project_images)에 저장하고 '문서 열쇠(ID)' 받기
+            try {
+                const imgDocRef = await db.collection('project_images').add({
+                    projectId: currentProjectId,
+                    assessmentIndex: currentEditingAssessmentIndex,
+                    questionNum: q.num,
+                    base64Data: compressedBase64,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                finalImageId = imgDocRef.id; // 🔑 이미지를 찾을 수 있는 열쇠 획득!
+            } catch (err) {
+                console.error("이미지 분리 저장 실패:", err);
+            }
+        }
+
+        processedQuestions.push({ 
+            ...q, 
+            imageId: finalImageId // 무거운 image 대신 가벼운 imageId만 갖게 됨
+        });
+    }
+
+    // 3. user_projects 문서 업데이트 (텍스트와 이미지 열쇠만 저장)
     try {
         const docRef = db.collection('user_projects').doc(currentProjectId);
         
@@ -5352,12 +5388,11 @@ async function sendAiResultsToTable(isFromSaveBank = false) {
             let asm = assessments[currentEditingAssessmentIndex];
             let baseScores = asm.parsedScores || []; 
 
-            extractedQuestionsArray.forEach((q) => {
-                let diffSelect = document.getElementById(`ai-diff-${extractedQuestionsArray.indexOf(q)}`);
+            processedQuestions.forEach((q, idx) => {
+                let diffSelect = document.getElementById(`ai-diff-${idx}`);
                 let diff = (diffSelect && diffSelect.value !== "") ? diffSelect.value : "";
                 let isShort = String(q.num).includes('서') || String(q.num).startsWith('서');
 
-                // 💡 이제 q.num은 위에서 강제로 업데이트된 최신 번호를 들고 있습니다.
                 let existingIdx = baseScores.findIndex(s => String(s.num).trim() === String(q.num).trim());
 
                 if (existingIdx !== -1) {
@@ -5366,6 +5401,10 @@ async function sendAiResultsToTable(isFromSaveBank = false) {
                     baseScores[existingIdx].isShortAnswer = isShort; 
                     baseScores[existingIdx].level = q.level || "판정필요";
                     baseScores[existingIdx].reason = q.reason || "";
+                    
+                    // 💡 메인 서랍에는 텍스트와 열쇠(imageId)만 저장
+                    baseScores[existingIdx].text = q.text || "";
+                    if (q.imageId) baseScores[existingIdx].imageId = q.imageId; 
                 } else {
                     baseScores.push({ 
                         num: String(q.num).trim(), 
@@ -5373,11 +5412,14 @@ async function sendAiResultsToTable(isFromSaveBank = false) {
                         difficulty: diff || "", 
                         level: q.level || "판정필요",
                         isShortAnswer: isShort,
-                        reason: q.reason || ""
+                        reason: q.reason || "",
+                        text: q.text || "",
+                        imageId: q.imageId || null
                     });
                 }
             });
 
+            // 번호순 정렬
             baseScores.sort((a, b) => {
                 const aIsShort = String(a.num).startsWith('서');
                 const bIsShort = String(b.num).startsWith('서');
@@ -5397,7 +5439,7 @@ async function sendAiResultsToTable(isFromSaveBank = false) {
             transaction.update(docRef, { assessments: assessments });
         });
         
-        alert("✅ 표 반영 성공! (수정하신 문항 번호와 내용이 정확히 반영되었습니다)");
+        alert("✅ 표 반영 성공! ");
 
         extractedQuestionsArray = []; 
         renderQuestionCards(); 
@@ -5414,6 +5456,11 @@ async function sendAiResultsToTable(isFromSaveBank = false) {
         
     } catch(e) { 
         alert("반영 실패: " + e.message); 
+    } finally {
+        if(btn) {
+            btn.innerText = originalBtnText;
+            btn.disabled = false;
+        }
     }
 }
 
@@ -5713,9 +5760,9 @@ function renderCollaborativeTable(projectData, asm) {
                         난이도<br>
                         <div style="font-size:0.75rem; font-weight:normal; margin-top:4px; display:flex; gap:4px; justify-content:center;">
                             <select id="batch-diff-val" style="padding:2px; border-radius:4px;" onchange="lastBatchDiff = this.value">
-                            <option value="상" ${lastBatchDiff === '상' ? 'selected' : ''}>상</option>
-                            <option value="중" ${lastBatchDiff === '중' ? 'selected' : ''}>중</option>
-                            <option value="하" ${lastBatchDiff === '하' ? 'selected' : ''}>하</option>
+                            <option value="상" ${typeof lastBatchDiff !== 'undefined' && lastBatchDiff === '상' ? 'selected' : ''}>상</option>
+                            <option value="중" ${typeof lastBatchDiff !== 'undefined' && lastBatchDiff === '중' ? 'selected' : ''}>중</option>
+                            <option value="하" ${typeof lastBatchDiff !== 'undefined' && lastBatchDiff === '하' ? 'selected' : ''}>하</option>
                         </select>
                             <button onclick="applyBatchDifficulty()" style="background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer;">일괄넣기</button>
                         </div>
@@ -5725,8 +5772,8 @@ function renderCollaborativeTable(projectData, asm) {
                     <th style="background: #f8fafc; min-width: 135px; text-align: center; vertical-align: middle;">
                         🤖 AI 판정<br>
                         <div style="display: flex; justify-content: center; gap: 4px; margin-top: 5px;">
-                            <button onclick="toggleAiVisibility()" style="background:${isAiHidden ? '#10b981' : '#64748b'}; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: 0.2s;">
-                                ${isAiHidden ? '👁️ 보이기' : '🙈 가리기'}
+                            <button onclick="toggleAiVisibility()" style="background:${typeof isAiHidden !== 'undefined' && isAiHidden ? '#10b981' : '#64748b'}; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: 0.2s;">
+                                ${typeof isAiHidden !== 'undefined' && isAiHidden ? '👁️ 보이기' : '🙈 가리기'}
                             </button>
                             <button onclick="resetAiLevels()" style="background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: 0.2s;">
                                 🔄 초기화
@@ -5766,19 +5813,18 @@ function renderCollaborativeTable(projectData, asm) {
             }
         });
 
-        // 💡 줄 전체 배경색은 서답형 색상 구분만 유지하고 투명하게 초기화합니다 (어지러움 방지)
         let trStyle = isShort ? 'background:#fff7ed;' : '';
         let statusIcon = '';
-        let cellColorStyle = ''; // 💡 오직 선생님들의 판정 칸(셀)만 염색하기 위한 변수
+        let cellColorStyle = ''; 
 
         if (minNum !== null && maxNum !== null) {
             const diffLevel = maxNum - minNum;
             if (diffLevel === 0) {
                 statusIcon = ' ✅'; 
-                cellColorStyle = ''; // 판정 일치 시 배경 변화 없음
+                cellColorStyle = ''; 
             } else if (diffLevel === 1) {
                 statusIcon = ' ⚠️'; 
-                cellColorStyle = 'background:#fff1f2; border: 2px solid #fca5a5;'; // 옅은 빨강 전용 셀 스타일
+                cellColorStyle = 'background:#fff1f2; border: 2px solid #fca5a5;'; 
             } else if (diffLevel >= 2) {
                 statusIcon = ' 🚨';
                 cellColorStyle = 'background:#fca5a5; border: 3px solid #b91c1c; color: #7f1d1d; font-weight: 900;'; 
@@ -5788,7 +5834,7 @@ function renderCollaborativeTable(projectData, asm) {
         const diff = q.difficulty || '선택하세요';
 
         let aiCellContentHtml = '';
-        if (isAiHidden) {
+        if (typeof isAiHidden !== 'undefined' && isAiHidden) {
             aiCellContentHtml = `
                 <span style="background:#f1f5f9; color:#94a3b8; padding:4px 8px; border-radius:4px; font-weight:bold; font-size:0.8rem; border:1px dashed #cbd5e1; display:inline-block; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05); cursor:pointer;" onclick="alert('상단의 [👁️ 보이기] 버튼을 누르시면 전체 AI 판정 내역이 공개됩니다!')" title="상단의 보이기 버튼을 누르면 공개됩니다.">🔮 블라인드</span>
                 <br>
@@ -5834,7 +5880,6 @@ function renderCollaborativeTable(projectData, asm) {
         collaborators.forEach(email => {
             if (email !== currentUserEmail) {
                 const theirInput = teacherInputs[email]?.[qIdx]?.level;
-                // 💡 동료 선생님들의 칸에도 지정된 색상을 정확히 대입합니다.
                 html += `<td style="${cellColorStyle} text-align:center; vertical-align:middle;">${theirInput ? "<span style='color:#10b981; font-weight:bold;'>입력완료🔒</span>" : "<span style='color:#cbd5e1;'>대기중</span>"}</td>`;
             }
         });
@@ -5846,14 +5891,26 @@ function renderCollaborativeTable(projectData, asm) {
     html += `</tbody></table>`;
     container.innerHTML = html; 
 
-    // 💡 [수정됨] 하단 2수준 이상 다름 범례 박스 색상도 동일하게 강렬히 맞춤
+    const hasAiData = baseQuestions.some(q => q.text || q.image || q.imageId);
+        // 💡 [변경됨] hasAiData가 참일 때만 뷰어 버튼을 그려줍니다!
+    // 💡 [수정] 뷰어를 숨기지 않고, 클릭 불가능한 흑백(비활성화) 상태로 보여줍니다.
     let externalHtml = `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
         <div style="display: flex; gap: 8px;">
             <div style="background: #fff1f2; border: 2px solid #fca5a5; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; color: #991b1b; font-weight: bold; display: flex; align-items: center; gap: 4px;">⚠️ 1수준 다름</div>
             <div style="background: #fca5a5; border: 2px solid #b91c1c; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; color: #7f1d1d; font-weight: 900; display: flex; align-items: center; gap: 4px;">🚨 2수준 이상 다름</div>
         </div>
-        <button onclick="alert('더 안정적인 서비스 제공을 위해 현재 시스템을 점검 및 업데이트 중입니다. 핵심 기능인 점수 산출은 정상적으로 이용 가능합니다! 🛠️');" style="background: #94a3b8; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">📄 시험지 파일 및 편집 확인 (업데이트 예정) ⏳</button>
+        <button disabled style="background: #94a3b8; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: not-allowed; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); filter: grayscale(100%); opacity: 0.7;">
+            📄 문항 텍스트 및 그림 확인 (업데이트 예정) ⏳
+        </button>
     </div>`;
+    // 표에 반영한 후 문항 텍스트 및 그림 확인 정상작동 로직 나중에 업데이트 예정
+    //let externalHtml = `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+    //    <div style="display: flex; gap: 8px;">
+    //        <div style="background: #fff1f2; border: 2px solid #fca5a5; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; color: #991b1b; font-weight: bold; display: flex; align-items: center; gap: 4px;">⚠️ 1수준 다름</div>
+    //        <div style="background: #fca5a5; border: 2px solid #b91c1c; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; color: #7f1d1d; font-weight: 900; display: flex; align-items: center; gap: 4px;">🚨 2수준 이상 다름</div>
+    //    </div>
+    //    ${hasAiData ? `<button onclick="openReadOnlyExamViewer()" style="background: #2563eb; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.2); transition: 0.2s;">📄 문항 텍스트 및 그림 확인 👁️</button>` : ''}
+    //</div>`;
 
     const readyStatus = asm.readyStatus || {};
     let statusHtml = `<div style="padding: 15px; background: #f8fafc; border-radius: 8px; border: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">`;
@@ -5889,21 +5946,21 @@ function renderCollaborativeTable(projectData, asm) {
     const externalContainer = document.getElementById('table-external-controls');
     if(externalContainer) externalContainer.innerHTML = externalHtml;
 
-    updateStep2Total();
+    if (typeof updateStep2Total === 'function') updateStep2Total();
     
     const nextBtn = document.getElementById('btn-next-to-step3');
     if (nextBtn) {
         nextBtn.style.display = 'inline-block';
         if (amIReady) {
-            nextBtn.style.opacity = '1'; nextBtn.style.cursor = 'pointer'; nextBtn.onclick = handleNextToPath1Result;
+            nextBtn.style.opacity = '1'; nextBtn.style.cursor = 'pointer'; nextBtn.onclick = typeof handleNextToPath1Result !== 'undefined' ? handleNextToPath1Result : null;
             nextBtn.innerHTML = "내 판정으로 분할점수 산출 ➡️"; nextBtn.style.background = "#ea580c";
         } else {
             nextBtn.style.opacity = '0.5'; nextBtn.style.cursor = 'not-allowed';
             nextBtn.innerHTML = "🔒 '내 판정 저장 완료' 시 산출 가능"; nextBtn.style.background = "#64748b";
         }
     }
-    parsedScores = baseQuestions;
-    setTimeout(initDiffShiftClick, 100); 
+    if (typeof parsedScores !== 'undefined') parsedScores = baseQuestions;
+    if (typeof initDiffShiftClick === 'function') setTimeout(initDiffShiftClick, 100); 
 }
 
 // ✨ (추가할 초기화 함수 - 위 함수 바로 아래에 넣어주세요)
@@ -6076,6 +6133,101 @@ function toggleExamViewer() {
         if(toggleBtn) toggleBtn.innerText = "📄 시험지 파일 및 편집 확인 🔽";
     }
 }
+
+// 💡 [신규 추가] 보조 서랍(project_images) 연동 문항 텍스트 & 그림 뷰어
+async function openReadOnlyExamViewer() {
+    const asm = cachedProjectData?.assessments?.[currentEditingAssessmentIndex];
+    if (!asm || !asm.parsedScores || asm.parsedScores.length === 0) {
+        alert("현재 저장된 문항 데이터가 없습니다.\n(먼저 AI 분석 후 표에 반영해 주세요.)");
+        return;
+    }
+
+    const baseScores = asm.parsedScores;
+
+    // 모달(팝업창) 컨테이너 생성 (최초 1회만 생성됨)
+    let viewerModal = document.getElementById('readonly-exam-modal');
+    if (!viewerModal) {
+        viewerModal = document.createElement('div');
+        viewerModal.id = 'readonly-exam-modal';
+        viewerModal.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:9999; display:flex; justify-content:center; align-items:center;";
+        
+        viewerModal.innerHTML = `
+            <div style="background:white; width:95%; max-width:800px; height:85vh; border-radius:12px; display:flex; flex-direction:column; box-shadow:0 10px 25px rgba(0,0,0,0.2);">
+                <div style="padding:15px 20px; background:#1e3a8a; color:white; border-radius:12px 12px 0 0; display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0; font-size:1.2rem;">📄 문항 확인 (읽기 전용)</h3>
+                    <button onclick="document.getElementById('readonly-exam-modal').style.display='none'" style="background:none; border:none; color:white; font-size:1.8rem; cursor:pointer; line-height:1;">&times;</button>
+                </div>
+                <div id="readonly-exam-content" style="padding:20px; overflow-y:auto; flex:1; background:#f8fafc;">
+                </div>
+            </div>
+        `;
+        document.body.appendChild(viewerModal);
+    }
+
+    viewerModal.style.display = 'flex';
+    const contentDiv = document.getElementById('readonly-exam-content');
+    
+    // 로딩 화면 선 표시
+    contentDiv.innerHTML = '<div style="text-align:center; padding:3rem; color:#64748b; font-weight:bold;">⏳ 메인 서랍(텍스트)과 보조 서랍(이미지)을 조합하여 불러오는 중입니다...</div>';
+
+    // 1단계: 메인 서랍에서 가져온 가벼운 텍스트를 즉시 화면에 그리기
+    let html = '';
+    baseScores.forEach(q => {
+        html += `
+            <div style="background:white; border:1px solid #cbd5e1; border-radius:8px; padding:15px; margin-bottom:15px; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+                <div style="font-weight:bold; color:#1e3a8a; border-bottom:2px solid #bfdbfe; padding-bottom:5px; margin-bottom:10px; font-size:1.1rem; display: flex; justify-content: space-between; align-items: center;">
+                    <span>[문항 ${q.num}]</span>
+                    <span style="color: #ea580c; font-size: 0.95rem;">배점: ${q.score || 0}점</span>
+                </div>
+        `;
+        
+        if (q.text) {
+            let safeText = q.text.replace(/\n/g, '<br>');
+            html += `<div style="font-size:0.95rem; color:#334155; line-height:1.6; margin-bottom:10px;">${safeText}</div>`;
+        } else {
+            html += `<div style="font-size:0.9rem; color:#94a3b8; margin-bottom:10px; font-style:italic;">(저장된 문항 텍스트 없음)</div>`;
+        }
+        
+        // 이미지 자리를 미리 만들어두기 (열쇠(imageId)가 있을 경우)
+        if (q.imageId) {
+            html += `<div id="img-container-${q.imageId}" style="text-align:center; padding:15px; background:#f1f5f9; border-radius:6px; font-size:0.85rem; color:#64748b; border: 1px dashed #cbd5e1;">
+                        ⏳ 이미지 열쇠 발견! 보조 DB에서 그림을 꺼내고 있습니다...
+                     </div>`;
+        } else if (q.image) {
+            // (혹시 예전 방식으로 저장된 이미지가 남아있을 경우를 위한 호환성 코드)
+            html += `<div style="text-align:center; margin-top:10px;"><img src="${q.image}" style="max-width:100%; border-radius:4px; border:1px solid #e2e8f0;"></div>`;
+        }
+        
+        html += `</div>`;
+    });
+
+    contentDiv.innerHTML = html;
+
+    // 수식(MathJax)이 포함되어 있다면 변환 실행
+    if (window.MathJax) {
+        MathJax.typesetPromise([contentDiv]).catch(err => console.error(err));
+    }
+
+    // 2단계: 이미지 열쇠(imageId)를 가진 문항들만 'project_images' 보조 서랍에서 병렬로 빠르게 꺼내오기!
+    const imageFetchPromises = baseScores.filter(q => q.imageId).map(async (q) => {
+        try {
+            const imgDoc = await db.collection('project_images').doc(q.imageId).get();
+            const container = document.getElementById(`img-container-${q.imageId}`);
+            if (imgDoc.exists && container) {
+                const data = imgDoc.data();
+                container.innerHTML = `<img src="${data.base64Data}" style="max-width:100%; border-radius:4px; border:1px solid #cbd5e1;">`;
+            } else if (container) {
+                container.innerHTML = "❌ 이미지를 찾을 수 없습니다.";
+            }
+        } catch (e) {
+            const container = document.getElementById(`img-container-${q.imageId}`);
+            if (container) container.innerHTML = "❌ 이미지 로드 중 통신 오류 발생";
+        }
+    });
+
+    // 모든 이미지가 로드될 때까지 기다림
+    await Promise.all(imageFetchPromises);
+};
 
 async function markAsReady() {
     if (!currentProjectId || currentEditingAssessmentIndex === -1) return;
@@ -8662,7 +8814,7 @@ const exposeToWindow = {
     submitSpecificFeedback, acceptFeedback, rejectFeedback, updateMathPreview,
     startPartialCapture, pasteImageToQuestion, saveBankAndApplyTable, sendAiResultsToTable,
     deleteProject, inviteCollaborator, kickFromProject, openProject, toggleGlobalEditMode,
-    startEditAssessment, editManualAssessment, deleteAssessment, updateBaseDifficulty,
+    editManualAssessment, deleteAssessment, updateBaseDifficulty,
     updateBaseScore, saveMyInput, copyAiLevelsToMine, applyBatchDifficulty,
     calculateTotalCutScores, openSpecificFeedbackPanel, updateStep2Total, markAsReady, goToStep, updateQuestionCount,
     
@@ -8674,11 +8826,11 @@ const exposeToWindow = {
     toggleExamRangeInputs, previewExamFile, executeExamAnalysis, resetAiLevels,
     prevLevelQuestion, skipLevelQuestion, saveAndClosePassageTray,   clearAllPassages,
     resetChecklist, openJournalModal, closeJournalModal, saveJournalEntry, deleteJournalEntry, saveUserSubjectGroup,
-    silentSaveChecklist, downloadAllJournalsExcel, cancelSubjectSelection, initDictionaryDrag, clearExamFile, markAsModified,
+    silentSaveChecklist, downloadAllJournalsExcel, cancelSubjectSelection, initDictionaryDrag, markAsModified,
     openCompareModal, resetMCutScores, enableMEditMode,
 
     loadManualAssessmentWorkspace, toggleManualCompareMode, saveManualAssessmentToProject, enableManualEditMode,
-    resetManualScores, syncManualStructureFromDB, addManualTableQuestion
+    resetManualScores, syncManualStructureFromDB, addManualTableQuestion, openReadOnlyExamViewer
 };
 
 for (const [fnName, fn] of Object.entries(exposeToWindow)) {
