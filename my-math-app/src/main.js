@@ -14,12 +14,12 @@ let currentUserGroup = 'math'; // 기본 교과군
 let currentEditingAssessmentIndex = -1;
 
 const firebaseConfig = {
-    apiKey: "AIzaSyDq5c9_BMx-zoYHUAGAp8B3jbvi3tj8HXo",
-    authDomain: "math-asa-project-2026.firebaseapp.com",
-    projectId: "math-asa-project-2026",
-    storageBucket: "math-asa-project-2026.firebasestorage.app",
-    messagingSenderId: "1045151452788",
-    appId: "1:1045151452788:web:bf69cb26e0be84dd8b0b21"
+  apiKey: "AIzaSyD16bomCtDrDppZwDXKvInV9fvfww_qj00",
+  authDomain: "math-secret-app.firebaseapp.com",
+  projectId: "math-secret-app",
+  storageBucket: "math-secret-app.firebasestorage.app",
+  messagingSenderId: "703727718168",
+  appId: "1:703727718168:web:b7a33b02d0cc2ae141d86d"
 };
 
 
@@ -65,7 +65,7 @@ const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 const storage = firebase.storage();
 
-const CURRENT_VERSION = "1.2.5"; 
+const CURRENT_VERSION = "1.2.6"; 
 
 // 읽기 횟수를 절약하는 버전 체크 방식 (onSnapshot 대신 get 사용)
 function startAppVersionCheck() {
